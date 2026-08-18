@@ -1,0 +1,85 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { CATALOGOS } from "@/lib/catalogos/definiciones";
+import { cn } from "@/lib/utils";
+
+type Enlace = { href: string; etiqueta: string; proximamente?: boolean };
+
+const OPERACION: Enlace[] = [
+  { href: "/", etiqueta: "Tablero" },
+  { href: "/movimientos", etiqueta: "Movimientos", proximamente: true },
+  { href: "/existencias", etiqueta: "Existencias", proximamente: true },
+  { href: "/kardex", etiqueta: "Kardex", proximamente: true },
+];
+
+function Seccion({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+  return (
+    <div className="mb-6">
+      <p className="mb-1.5 px-3 text-xs font-semibold tracking-wider text-white/40 uppercase">
+        {titulo}
+      </p>
+      <nav className="flex flex-col gap-0.5">{children}</nav>
+    </div>
+  );
+}
+
+function Item({ enlace, activo }: { enlace: Enlace; activo: boolean }) {
+  if (enlace.proximamente) {
+    return (
+      <span
+        className="flex cursor-not-allowed items-center justify-between rounded-md px-3 py-1.5 text-sm text-white/35"
+        title="Se construye en las siguientes fases"
+      >
+        {enlace.etiqueta}
+        <span className="text-[10px] tracking-wide text-white/25 uppercase">pendiente</span>
+      </span>
+    );
+  }
+
+  return (
+    <Link
+      href={enlace.href}
+      className={cn(
+        "rounded-md px-3 py-1.5 text-sm transition-colors",
+        activo ? "bg-white/15 font-medium text-white" : "text-white/70 hover:bg-white/10",
+      )}
+    >
+      {enlace.etiqueta}
+    </Link>
+  );
+}
+
+export function Navegacion() {
+  const ruta = usePathname();
+
+  return (
+    <aside className="flex w-60 shrink-0 flex-col bg-primary px-3 py-5 text-white">
+      <Link href="/" className="mb-7 block px-3">
+        <span className="block text-lg leading-tight font-semibold">BodeGasosur</span>
+        <span className="block text-xs text-white/50">Control de inventario</span>
+      </Link>
+
+      <Seccion titulo="Operación">
+        {OPERACION.map((e) => (
+          <Item key={e.href} enlace={e} activo={ruta === e.href} />
+        ))}
+      </Seccion>
+
+      <Seccion titulo="Catálogos">
+        {CATALOGOS.map((c) => (
+          <Item
+            key={c.slug}
+            enlace={{ href: `/catalogos/${c.slug}`, etiqueta: c.titulo }}
+            activo={ruta.startsWith(`/catalogos/${c.slug}`)}
+          />
+        ))}
+      </Seccion>
+
+      <p className="mt-auto px-3 text-xs leading-relaxed text-white/35">
+        Demo para levantamiento de requerimientos. Fases 0 y 1: catálogos y datos base.
+      </p>
+    </aside>
+  );
+}

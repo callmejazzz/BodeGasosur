@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+/* Sistema de diseño de BodeGasosur.
+   Herramienta interna: se compromete con un tema claro y lo pinta explícitamente,
+   en lugar de heredar el tema del sistema operativo. */
+:root {
+  --background: #f6f7f9;
+  --surface: #ffffff;
+  --surface-muted: #f1f3f6;
+  --border: #dfe3e9;
+  --border-strong: #c6ccd6;
+  --foreground: #16202e;
+  --muted: #5d6b80;
+  --muted-strong: #3d4a5c;
+
+  --primary: #14507d;
+  --primary-hover: #0f405f;
+  --primary-soft: #e8f0f7;
+
+  --success: #1a7a4c;
+  --success-soft: #e6f4ec;
+  --warning: #9a6206;
+  --warning-soft: #fdf3e2;
+  --danger: #a32a25;
+  --danger-soft: #fbeceb;
+
+  --entrada: #1a7a4c;
+  --salida: #a32a25;
+  --traspaso: #14507d;
+  --ajuste: #9a6206;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-strong: var(--muted-strong);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans), system-ui, sans-serif;
+  }
+
+  /* Los números de cantidades y costos se leen mejor tabulares y alineados. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}

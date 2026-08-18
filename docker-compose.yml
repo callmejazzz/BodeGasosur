@@ -1,0 +1,22 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: bodegasosur-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: bodegasosur
+      POSTGRES_PASSWORD: bodegasosur
+      POSTGRES_DB: bodegasosur
+    # 5433 en el host: el 5432 ya lo ocupa la instalación local de PostgreSQL 18.
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bodegasosur -d bodegasosur"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
