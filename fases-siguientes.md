@@ -12,7 +12,8 @@ ocho catálogos con datos sembrados.
 ## Fase 2 — Cimientos corregidos
 
 Todo lo que el levantamiento invalidó del esquema actual. Va primero porque cada fase
-posterior escribe sobre estas tablas.
+posterior escribe sobre estas tablas. El esquema completo de destino está en
+[`docs/02-modelo-de-datos.md`](docs/02-modelo-de-datos.md).
 
 - Migrar las llaves primarias a **UUIDv7** nativo (`@default(uuid(7)) @db.Uuid`)
 - Rutas por **clave de negocio**: `/estaciones/ES05588`, no por id

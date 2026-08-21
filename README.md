@@ -53,7 +53,7 @@ La aplicación queda en <http://localhost:3000>.
 | Documento | Contenido |
 |---|---|
 | [Arquitectura](docs/01-arquitectura.md) | Stack, principios, capas, estructura y entorno local |
-| [Modelo de datos](docs/02-modelo-de-datos.md) | Entidades, invariantes, costeo y esquema Prisma |
+| [Modelo de datos](docs/02-modelo-de-datos.md) | Esquema de destino: entidades, estados, costeo PEPS y permisos |
 | [Levantamiento de requerimientos](docs/03-levantamiento-de-requerimientos.md) | Cuestionario aplicado a Compras y método de levantamiento |
 | [Plan de la demo](docs/04-plan-demo.md) | Plan original de la demo — referencia histórica |
 | [Hallazgos del levantamiento](docs/05-hallazgos-levantamiento.md) | Respuestas de Compras, veredicto de supuestos y cambios derivados |
