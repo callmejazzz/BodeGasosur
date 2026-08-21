@@ -43,3 +43,10 @@ next-env.d.ts
 
 # ajustes locales de Claude Code (personales, no del proyecto)
 .claude/settings.local.json
+
+# Archivos de bloqueo que Office crea mientras un documento está abierto.
+# Los .docx y .xlsx de docs/ SÍ se versionan: son información base del sistema.
+~$*
+
+# metadatos de Finder
+.DS_Store

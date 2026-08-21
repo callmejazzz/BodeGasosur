@@ -18,8 +18,10 @@ contradigan y completen el modelo. No es todavía el sistema definitivo.
 |---|---|---|
 | Stack | Next.js (App Router) + TypeScript + Prisma + PostgreSQL | Un solo repo, un solo lenguaje, despliegue trivial cuando toque |
 | Modelo de stock | Multi-bodega con existencia por artículo/bodega y traspasos | Requiere bodega origen/destino en cada movimiento |
-| Autenticación | Sin roles por ahora | La autorización se captura como **dato**, no como permiso (ver §4.3) |
+| Autenticación | **Cinco roles: Superadmin, Admin, Compras, Jefe y Gerente** | Revertido tras el levantamiento: *"no permitir salida sin autorización"* es el requisito #1 (§3.3) |
 | Entorno | Local (localhost + Postgres en Docker) | Sin dependencia de nube; el proyecto queda portable |
+| Identificadores | **UUIDv7** nativo como llave primaria | El catálogo de estaciones es global; los ids no pueden chocar entre proyectos (§3.5) |
+| URLs | Por **clave de negocio**, no por id | `/estaciones/ES05588`, no un UUID que nadie puede dictar por teléfono |
 
 ## 3. Principios rectores
 
@@ -40,13 +42,33 @@ movimientos, mantenida en la misma transacción de base de datos por rendimiento
 Siempre debe poder recalcularse desde cero a partir de los movimientos. Eso da una
 herramienta de diagnóstico enorme: si el stock no cuadra, se recalcula y se compara.
 
-### 3.3 La autorización hoy es dato, mañana es permiso
+### 3.3 La autorización es un permiso, y la lista de quién lo tiene es un dato
 
-Aunque la demo no tiene login, el sistema **sí** registra quién solicitó, quién
-autorizó, quién entregó y quién transportó cada movimiento — apuntando al catálogo de
-`Persona`. Cuando llegue la autenticación, `Persona` se vincula a `Usuario` y esos
-mismos campos pasan de ser capturados manualmente a ser validados por permisos.
-El modelo de datos no cambia.
+La demo se construyó sin roles, registrando la autorización como un campo más. **El
+levantamiento revirtió esa decisión.** A la pregunta *"¿qué NO debe hacer el sistema?"*
+Compras contestó lo mismo por escrito y por separado: no permitir salidas sin
+autorización. Un campo de texto no lo garantiza — hacen falta usuarios y permisos.
+
+Lo que no puede quedar en el código es **quién** tiene el permiso. Compras fue explícita
+en que la lista cambia: hoy autorizan el Lic. Hugo, la Lic. Andrea y el área de Compras,
+pero la C.P. Cosumel también está facultada y quedó fuera de la lista inicial por decisión
+del momento. Un sistema que tuviera esos nombres codificados exigiría tocar el programa
+para agregarla.
+
+Por eso la facultad de autorizar es una bandera editable del usuario, administrable desde
+una pantalla. El programa pregunta *"¿este usuario puede autorizar?"*, nunca *"¿este
+usuario se llama Hugo?"*.
+
+Es una bandera y no un rol porque son cosas independientes: un Jefe puede estar facultado
+y un Admin puede no estarlo. Los cinco roles —Superadmin, Admin, Compras, Jefe y Gerente—
+dicen qué puede *ver y editar* cada quien; la bandera dice quién puede *autorizar salidas*.
+La matriz de permisos está en [`fases-siguientes.md`](../fases-siguientes.md), fase 3.
+
+Un caso merece regla propia: **`Empresa` y `Estacion` solo las escribe el Superadmin.**
+Viven en el esquema global del grupo ([06-estaciones.md](06-estaciones.md) §3) y otros
+proyectos de Gasosur las leen, así que
+un cambio ahí sale de BodeGasosur. Restringir la escritura es lo que hace seguro compartir
+el catálogo.
 
 ### 3.4 Nada se captura como texto libre si puede ser catálogo
 
@@ -54,6 +76,46 @@ Estaciones, áreas, artículos, unidades, proveedores y personas son catálogos.
 libre solo vive en `observaciones`. Es lo que permite después preguntarle al sistema
 "cuánto material mandamos a la estación X en el trimestre" sin pelearse con
 "Estacion 4", "est. 4" y "ESTACION IV".
+
+### 3.5 El identificador técnico y la clave de negocio son cosas distintas
+
+Cada registro tiene dos identidades y conviene no mezclarlas.
+
+El **identificador técnico** es un `UUIDv7` guardado como tipo nativo `uuid` de PostgreSQL.
+Es plomería: sirve para las llaves foráneas y no se le enseña a nadie.
+
+```prisma
+model Estacion {
+  id     String @id @default(uuid(7)) @db.Uuid
+  numero String @unique               // ES05588 — esta es la que ve la gente
+}
+```
+
+Por qué UUID y no un entero autoincremental: el catálogo de empresas y estaciones es
+**global para el grupo Gasosur** y otros proyectos lo van a leer y alimentar. Con enteros,
+dos sistemas que den de alta estaciones por separado empiezan ambos en 1 y al juntar los
+datos chocan. Con UUID no chocan nunca, aunque se generen en máquinas distintas y sin
+coordinación. Ese es el argumento que decide; el rendimiento no entra en la discusión a
+esta escala.
+
+Por qué la versión 7 y no la 4: el UUIDv4 es aleatorio, así que cada inserción cae en un
+punto arbitrario del índice y lo fragmenta. El v7 lleva la marca de tiempo al inicio y los
+registros nuevos entran al final del índice, como haría un entero. A esta escala la
+diferencia es inmedible, pero elegir bien no cuesta nada.
+
+Y como tipo nativo `uuid` (16 bytes), no como texto (36 caracteres).
+
+La **clave de negocio** es la que la gente usa y dicta por teléfono: `Estacion.numero`
+(ES05588), `Empresa.rfc`, `Articulo.clave`, `Movimiento.folio`. Va con `@unique` y **es la
+que aparece en las URLs**:
+
+```text
+/estaciones/ES05588        ✅
+/estaciones/0192f3a1-…     ❌
+```
+
+Verificado en Prisma 7.9.1: `@default(uuid(7))` con `@db.Uuid` y `multiSchema` validan sin
+funciones en vista previa.
 
 ## 4. Arquitectura de la aplicación
 

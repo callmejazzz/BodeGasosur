@@ -2,6 +2,11 @@
 
 Guía práctica para pasar de "controlar entradas y salidas" a un alcance definido.
 
+> **Estado: aplicado y contestado** (agosto 2026) por la Lic. Diana Damián Hernández y
+> el Lic. Oscar Bailón Delgado. Las respuestas y su análisis están en
+> [05-hallazgos-levantamiento.md](05-hallazgos-levantamiento.md). Este documento se
+> conserva como referencia del método y del cuestionario aplicado.
+
 ## 1. Estrategia: la demo **es** la herramienta de levantamiento
 
 Preguntar en abstracto ("¿qué necesitan que haga el sistema?") produce respuestas
@@ -31,7 +36,9 @@ datos si se responden distinto a lo supuesto.
 
 1. ¿Cuántas bodegas hay y dónde están? ¿Todas manejan el mismo tipo de material?
 2. 🔴 ¿Se mueve material **entre bodegas**, o cada bodega surte solo a sus estaciones?
-3. ¿Cuántas estaciones surten y cómo las identifican internamente (número, clave, nombre)?
+3. ~~¿Cuántas estaciones surten y cómo las identifican internamente?~~ — retirada del
+   cuestionario aplicado; respondida aparte: **32 estaciones**, las mismas de NextPol,
+   identificadas por nombre, número de estación y RFC.
 4. ¿Una estación tiene su propio almacencito, o lo que sale de bodega ya se considera consumido?
 5. ¿Qué "áreas" existen como destino? (despacho, tienda/OXXO, mantenimiento, administración, limpieza…)
 
@@ -119,10 +126,11 @@ Pide estos documentos antes de la siguiente reunión; valen más que dos horas d
 - [ ] Listado de artículos, aunque esté incompleto
 - [ ] Organigrama del área o lista de quién autoriza qué
 
-## 4. Supuestos vigentes de la demo
+## 4. Supuestos de la demo (ya resueltos)
 
-Estos son los supuestos ya implementados en el modelo de datos. **Cada uno es una
-pregunta disfrazada de decisión**: si Compras lo contradice, se ajusta.
+Estos fueron los supuestos implementados en la demo. **Cada uno era una pregunta
+disfrazada de decisión.** Seis de los diez resultaron falsos; el veredicto de cada uno
+está en [§5 de los hallazgos](05-hallazgos-levantamiento.md#5-veredicto-sobre-los-supuestos).
 
 | # | Supuesto | Riesgo si es falso |
 |---|---|---|

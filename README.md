@@ -7,7 +7,9 @@ qué estación se envía, quién lo transporta, quién autoriza, cuándo, en qu�
 qué costo unitario, a qué área se destina y con qué observaciones.
 
 **Estado:** fases 0 y 1 construidas — cimientos, modelo de datos y los ocho catálogos
-con datos sembrados. Las capturas de movimientos llegan en la fase 2.
+con datos sembrados. El cuestionario de requerimientos ya fue contestado por Compras
+y sus discrepancias quedaron resueltas: cinco de diez supuestos resultaron falsos y el
+modelo está en revisión — ver [hallazgos](docs/05-hallazgos-levantamiento.md).
 
 ## Arranque
 
@@ -52,8 +54,12 @@ La aplicación queda en <http://localhost:3000>.
 |---|---|
 | [Arquitectura](docs/01-arquitectura.md) | Stack, principios, capas, estructura y entorno local |
 | [Modelo de datos](docs/02-modelo-de-datos.md) | Entidades, invariantes, costeo y esquema Prisma |
-| [Levantamiento de requerimientos](docs/03-levantamiento-de-requerimientos.md) | Cuestionario para Compras y supuestos vigentes |
-| [Plan de la demo](docs/04-plan-demo.md) | Fases de construcción con criterios de aceptación |
+| [Levantamiento de requerimientos](docs/03-levantamiento-de-requerimientos.md) | Cuestionario aplicado a Compras y método de levantamiento |
+| [Plan de la demo](docs/04-plan-demo.md) | Plan original de la demo — referencia histórica |
+| [Hallazgos del levantamiento](docs/05-hallazgos-levantamiento.md) | Respuestas de Compras, veredicto de supuestos y cambios derivados |
+| [Empresas y estaciones](docs/06-estaciones.md) | Catálogo global del grupo: 22 empresas, 32 estaciones |
+| [Inventario actual](docs/07-datos-actuales.md) | Análisis del Excel vigente y plan de migración |
+| **[Fases siguientes](fases-siguientes.md)** | **Orden de trabajo vigente** |
 
 ## Stack
 
