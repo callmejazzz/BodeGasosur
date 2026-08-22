@@ -19,7 +19,7 @@ contradigan y completen el modelo. No es todavía el sistema definitivo.
 | Stack | Next.js (App Router) + TypeScript + Prisma + PostgreSQL | Un solo repo, un solo lenguaje, despliegue trivial cuando toque |
 | Modelo de stock | Multi-bodega con existencia por artículo/bodega y traspasos | Requiere bodega origen/destino en cada movimiento |
 | Autenticación | **Cinco roles: Superadmin, Admin, Compras, Jefe y Gerente** | Revertido tras el levantamiento: *"no permitir salida sin autorización"* es el requisito #1 (§3.3) |
-| Entorno | Local (localhost + Postgres en Docker) | Sin dependencia de nube; el proyecto queda portable |
+| Entorno | **Local durante el desarrollo; Vercel + Supabase al aprobarse** | Postgres administrado con pooler para Prisma; la portabilidad se conserva ([08](08-versionado-y-despliegue.md) §8) |
 | Identificadores | **UUIDv7** nativo como llave primaria | El catálogo de estaciones es global; los ids no pueden chocar entre proyectos (§3.5) |
 | URLs | Por **clave de negocio**, no por id | `/estaciones/ES05588`, no un UUID que nadie puede dictar por teléfono |
 
@@ -206,8 +206,10 @@ verifique que lo que se guarda existe.
 
 ## 5. Entorno local
 
-PostgreSQL corre en Docker para no ensuciar la máquina y para que el día que se
-despliegue sea exactamente la misma base de datos.
+**Mientras dure el desarrollo, el sistema es local.** PostgreSQL corre en Docker para no
+ensuciar la máquina y para que el día que se despliegue sea exactamente la misma base de
+datos — la de Supabase también es PostgreSQL, así que el cambio de entorno es de cadena de
+conexión, no de motor.
 
 > **Puerto 5433, no 5432.** Este equipo ya tiene una instalación local de
 > PostgreSQL 18 ocupando el 5432. El contenedor se publica en el 5433 para que
@@ -243,8 +245,11 @@ Comandos útiles:
 
 No se resuelven ahora, pero la arquitectura les deja lugar:
 
-- **Despliegue.** Next.js + Postgres corre igual en Railway, en un VPS o en servidor
-  interno de Gasosur. No hay nada atado a un proveedor.
+- **La fecha del despliegue.** El destino ya está decidido —Vercel Pro + Supabase Pro con
+  connection pooler, ver [08-versionado-y-despliegue.md](08-versionado-y-despliegue.md)
+  §8— pero el sistema se queda en local hasta que Gasosur lo apruebe, en la `v1.0.0`. La
+  elección no ata nada: Supabase es PostgreSQL de verdad y Next.js corre igual en Railway,
+  en un VPS o en un servidor interno del grupo.
 - **Órdenes de compra.** Hoy la entrada apunta a un proveedor y una referencia de
   factura/remisión. Si Compras necesita el ciclo completo (requisición → OC → recepción
   parcial), se agrega como capa **arriba** del movimiento, sin tocar el libro.

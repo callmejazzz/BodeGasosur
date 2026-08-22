@@ -6,10 +6,16 @@ Controla la entrada y salida de material entre bodegas y estaciones, registrando
 qué estación se envía, quién lo transporta, quién autoriza, cuándo, en qué cantidad, a
 qué costo unitario, a qué área se destina y con qué observaciones.
 
+**Versión actual: `v0.1.0`** — ver [CHANGELOG.md](CHANGELOG.md).
+
 **Estado:** fases 0 y 1 construidas — cimientos, modelo de datos y los ocho catálogos
 con datos sembrados. El cuestionario de requerimientos ya fue contestado por Compras
 y sus discrepancias quedaron resueltas: cinco de diez supuestos resultaron falsos y el
 modelo está en revisión — ver [hallazgos](docs/05-hallazgos-levantamiento.md).
+
+**Entorno:** local mientras dure el desarrollo. El despliegue en Vercel + Supabase ocurre
+cuando Gasosur apruebe el sistema, en la `v1.0.0` — ver
+[versionado y despliegue](docs/08-versionado-y-despliegue.md).
 
 ## Arranque
 
@@ -59,6 +65,8 @@ La aplicación queda en <http://localhost:3000>.
 | [Hallazgos del levantamiento](docs/05-hallazgos-levantamiento.md) | Respuestas de Compras, veredicto de supuestos y cambios derivados |
 | [Empresas y estaciones](docs/06-estaciones.md) | Catálogo global del grupo: 22 empresas, 32 estaciones |
 | [Inventario actual](docs/07-datos-actuales.md) | Análisis del Excel vigente y plan de migración |
+| [Versionado y despliegue](docs/08-versionado-y-despliegue.md) | Política de versiones, ramas y el destino en Vercel + Supabase |
+| [Cambios](CHANGELOG.md) | Qué trae cada versión, escrito para quien usa el sistema |
 | **[Fases siguientes](fases-siguientes.md)** | **Orden de trabajo vigente** |
 
 ## Stack
