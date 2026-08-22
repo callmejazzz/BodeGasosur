@@ -133,7 +133,7 @@ flowchart TD
 
 **Regla dura:** ningún componente de UI habla con Prisma directamente para escribir.
 Toda mutación pasa por `lib/services`, que es el único lugar donde viven las reglas de
-inventario (validar existencia, calcular costo promedio, generar folio, actualizar la
+inventario (validar existencia, consumir capas de costo por PEPS, generar folio, actualizar la
 proyección). Así la lógica es testeable sin levantar el navegador y sobrevive si mañana
 se agrega una API REST, un móvil o una importación masiva desde Excel.
 
@@ -183,7 +183,7 @@ BodeGasosur/
 │     │  ├─ definiciones.ts       # Los catálogos, declarados (ver §4.4)
 │     │  ├─ repos.ts              # Acceso a datos por catálogo
 │     │  └─ formulario.ts         # Tipos compartidos del formulario
-│     └─ services/                # Reglas de inventario (a partir de la fase 2)
+│     └─ services/                # Reglas de inventario (a partir de la fase 5)
 ├─ docker-compose.yml             # PostgreSQL local
 └─ .env.example
 ```
@@ -243,14 +243,15 @@ Comandos útiles:
 
 No se resuelven ahora, pero la arquitectura les deja lugar:
 
-- **Autenticación y roles.** Se agrega `Usuario` con relación 1:1 opcional a `Persona`.
-  Los campos `solicitadoPor` / `autorizadoPor` ya existen; solo se blindan con permisos.
 - **Despliegue.** Next.js + Postgres corre igual en Railway, en un VPS o en servidor
   interno de Gasosur. No hay nada atado a un proveedor.
 - **Órdenes de compra.** Hoy la entrada apunta a un proveedor y una referencia de
   factura/remisión. Si Compras necesita el ciclo completo (requisición → OC → recepción
   parcial), se agrega como capa **arriba** del movimiento, sin tocar el libro.
-- **Lotes y caducidades.** Si aparece material con caducidad (lubricantes, químicos),
-  se agrega `Lote` colgando de la partida del movimiento.
+- **Rastreo por serie o lote.** Descartado en el levantamiento: la serie **se anota** en
+  la partida y nada más. Si algún día hiciera falta rastrearla de verdad, es un rediseño
+  del kardex, no un campo — conviene volver a discutirlo, no darlo por hecho.
+- **Alertas por WhatsApp.** Requieren un proveedor de mensajería. Se empieza por pantalla
+  y correo.
 - **Archivos adjuntos.** Foto de la remisión o del vale firmado: campo en el movimiento
   cuando haya dónde almacenarlos.

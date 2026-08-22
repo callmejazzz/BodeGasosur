@@ -97,16 +97,11 @@ Recomendación: un **esquema de PostgreSQL aparte**, `catalogo_gasosur`, en la m
 de datos, con `Empresa` y `Estacion` adentro. Prisma lo soporta con `multiSchema`.
 
 ```prisma
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-  schemas  = ["public", "catalogo_gasosur"]
-}
-
 model Empresa {
-  id          String @id @default(cuid())
+  id          String  @id @default(uuid(7)) @db.Uuid
   razonSocial String
-  rfc         String @unique
+  /// Opcional: 5 de los 137 proveedores no lo traen.
+  rfc         String? @unique
   activa      Boolean @default(true)
 
   estaciones  Estacion[]
@@ -116,10 +111,10 @@ model Empresa {
 }
 
 model Estacion {
-  id        String  @id @default(cuid())
-  numero    String  @unique
-  alias     String
-  empresaId String
+  id        String  @id @default(uuid(7)) @db.Uuid
+  numero    String  @unique              // ES05588
+  alias     String                       // "Magallanes"
+  empresaId String  @db.Uuid
   telefono  String?
   movil     String?
   correo    String?
@@ -127,10 +122,15 @@ model Estacion {
 
   empresa     Empresa      @relation(fields: [empresaId], references: [id])
   movimientos Movimiento[]
+  usuarios    Usuario[]
 
   @@schema("catalogo_gasosur")
 }
 ```
+
+> El esquema completo, con el `datasource` y el resto de las tablas, vive en
+> [02-modelo-de-datos.md](02-modelo-de-datos.md) §7. **Ese es el canónico**; lo de arriba
+> es un extracto para leerlo en contexto.
 
 Por qué un esquema y no otra base de datos: un proyecto futuro puede leer
 `catalogo_gasosur.estacion` con una sola conexión, y BodeGasosur conserva llaves foráneas

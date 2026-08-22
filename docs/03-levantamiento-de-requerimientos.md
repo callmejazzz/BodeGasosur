@@ -129,7 +129,7 @@ Pide estos documentos antes de la siguiente reunión; valen más que dos horas d
 ## 4. Supuestos de la demo (ya resueltos)
 
 Estos fueron los supuestos implementados en la demo. **Cada uno era una pregunta
-disfrazada de decisión.** Seis de los diez resultaron falsos; el veredicto de cada uno
+disfrazada de decisión.** Cuatro de los diez resultaron falsos; el veredicto de cada uno
 está en [§5 de los hallazgos](05-hallazgos-levantamiento.md#5-veredicto-sobre-los-supuestos).
 
 | # | Supuesto | Riesgo si es falso |

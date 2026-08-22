@@ -3,8 +3,12 @@
 Orden pensado para que **en cada fase haya algo que enseñar** a Compras y provocar
 retroalimentación, en lugar de construir tres semanas a ciegas.
 
-> **Estado al 18/ago/2026:** fases 0 y 1 construidas y verificadas en local.
-> La fase 2 es la siguiente.
+> **Documento superado.** Sirvió para construir la demo, cuyas fases 0 y 1 quedaron
+> terminadas. El levantamiento posterior invalidó buena parte de lo que planea de la
+> fase 2 en adelante —el costeo por promedio, los roles, el alcance de cada fase—, así
+> que **el orden de trabajo vigente es [`fases-siguientes.md`](../fases-siguientes.md)**.
+>
+> Se conserva como registro de cómo se llegó hasta aquí. No lo tomes como plan.
 
 ## Fase 0 — Cimientos ✅
 
