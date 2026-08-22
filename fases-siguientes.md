@@ -92,10 +92,9 @@ Nacen completas: agregar dinero después obligaría a recalcular todo lo captura
 - Proveedor, factura o remisión, bodega destino, quién recibe
 - **Moneda (MXN/USD), tipo de cambio e IVA**
 - Capas de costo por entrada, consumidas por **PEPS**
+- Cada costo se guarda sin IVA y con IVA, para valuar el inventario de las dos formas
 - Captura en caja o pieza, convirtiendo a la unidad base
 - Entregas parciales de una misma compra
-
-**Depende de:** confirmar con Compras que PEPS es aceptable.
 
 **Criterio de aceptación:** una entrada en dólares queda valuada en pesos al tipo de cambio
 del día y no cambia después.

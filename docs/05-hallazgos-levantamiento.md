@@ -186,9 +186,12 @@ primero lo que entró primero. Es lo más cercano al *"costo de la factura"* que
 lograr sin identificar pieza por pieza, y como contabilidad no exige método (E2), no hay
 nada que contradiga.
 
-> **A confirmar con Compras** antes de construir la fase de entradas: que PEPS es
-> aceptable. La alternativa es promedio ponderado, más simple pero que deja de responder
-> *"esta pieza costó lo que decía su factura"*.
+**PEPS confirmado.** Compras lo eligió aunque contabilidad no exija método alguno: da
+mejor control, porque cada salida conserva el costo real de la compra de la que salió.
+
+**El inventario se valúa de las dos formas:** subtotal sin IVA y total con IVA. Son dos
+columnas del mismo reporte, no una alternativa entre dos. Por eso cada costo se guarda por
+partida doble en el modelo.
 
 **Y arranca vacío.** Se decidió no capturar a mano el costo de los 225 artículos migrados
 (ver [07-datos-actuales.md](07-datos-actuales.md) §3): cada artículo adquiere costo la
@@ -323,7 +326,6 @@ archivos y de decisiones que aún no se toman:
 
 | Pregunta | Bloquea |
 |---|---|
-| ¿Es aceptable **PEPS** para el costeo, o prefieren promedio ponderado? | Fase de entradas |
 | ¿Qué monto o tipo de pieza obliga a pedir autorización del Lic. Hugo? | Fase de salidas |
 | Cuando se entrega a *"recepción de la estación"*, ¿el área que consume se sabe en ese momento o después? | Fase de salidas |
 | ¿A qué estación exacta se refieren `PORBA` y `SERVI FER` en cada salida del histórico? | Migración del histórico, únicamente |

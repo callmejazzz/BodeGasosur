@@ -89,6 +89,9 @@ hoy vive en conversaciones de WhatsApp.
 8. El folio es consecutivo por tipo y se asigna al confirmar, no al crear el borrador.
 9. `SUM(cantidadRestante)` de las capas de un artículo/bodega es igual a
    `Existencia.cantidad`. Hay un comando que lo verifica.
+10. Las capas se consumen **por orden de `fecha`**, de la más antigua a la más reciente.
+    Una salida solo toca la siguiente capa cuando agotó la anterior.
+11. `costoUnitarioConIva >= costoUnitario` siempre; son iguales solo en bienes a tasa 0.
 
 ## 5. Costeo por capas, consumidas por PEPS
 
@@ -101,14 +104,13 @@ la ficha del artículo y lo lleva a capas:
 - El costo de una salida **se congela**: no cambia aunque después entre material más caro.
 - Un **TRASPASO** mueve la capa de una bodega a otra conservando su costo.
 
-Se eligió PEPS porque al decidirse que la serie **solo se anota y no se rastrea**
-([B5](05-hallazgos-levantamiento.md#6-discrepancias--resueltas)), no hay forma de saber de
-qué factura salió una pieza concreta. PEPS es la aproximación más cercana, y contabilidad
-no exige método.
+**PEPS está confirmado.** Compras lo eligió deliberadamente aunque contabilidad no exija
+método alguno: da mejor control que un promedio, porque cada salida conserva el costo real
+de la compra de la que salió.
 
-> **Pendiente de confirmar con Compras antes de construir las entradas.** La alternativa es
-> promedio ponderado: más simple, pero deja de responder *"esta pieza costó lo que decía su
-> factura"*.
+Encaja además con lo que ya se había decidido: al no rastrearse la serie
+([B5](05-hallazgos-levantamiento.md#6-discrepancias--resueltas)), no hay forma de saber de
+qué factura salió una pieza concreta, y PEPS es la aproximación más cercana.
 
 ### Moneda e impuestos
 
@@ -119,9 +121,23 @@ baile con el dólar de hoy.
 El movimiento conserva `moneda`, `tipoCambio`, `subtotal`, `iva` y `total` como constancia
 de lo que decía la factura.
 
-> **A confirmar:** el inventario se valúa al **subtotal, sin IVA**, que es la práctica
-> contable habitual cuando el IVA es acreditable. Si Compras lo quiere con IVA, es cambiar
-> qué campo alimenta la capa.
+### El inventario se valúa por partida doble: sin IVA y con IVA
+
+Compras quiere ver las dos cifras — **subtotal sin IVA y total con IVA**. No es una
+preferencia entre dos opciones: son dos columnas del mismo reporte.
+
+La consecuencia es que **todo lugar donde se guarda un costo guarda el par**:
+`costoUnitario` (sin IVA) y `costoUnitarioConIva`. Aplica a `MovimientoPartida`,
+`CapaCosto` y `ConsumoCapa`.
+
+Se guardan las dos cifras en vez de calcular una a partir de la otra por dos razones. La
+tasa no siempre es 16 %: hay bienes a tasa 0 y podría haber compras en zona fronteriza al
+8 %, y la tasa vive en la partida de la entrada (`tasaIva`), no en una constante del
+sistema. Y recalcular sobre miles de renglones acumula diferencias de redondeo que hacen
+que el reporte no cuadre contra la factura.
+
+En las salidas ambos costos se heredan de las capas consumidas y se congelan, igual que
+todo lo demás.
 
 ### El inventario migrado arranca sin costo
 
@@ -422,9 +438,12 @@ model MovimientoPartida {
   cantidad     Decimal @db.Decimal(14, 3)
   /// Lo que se capturó: 3 cajas de 12 se guardan como cantidad 36 y aquí "3 CAJA".
   capturaOriginal String?
-  /// ENTRADA: costo de factura en la moneda del movimiento.
-  /// SALIDA: costo real heredado de las capas consumidas.
-  costoUnitario Decimal @db.Decimal(14, 4)
+  /// Sin IVA. ENTRADA: costo de factura. SALIDA: heredado de las capas consumidas.
+  costoUnitario       Decimal  @db.Decimal(14, 4)
+  /// Con IVA. Se guarda, no se recalcula: la tasa varía y el redondeo se acumula.
+  costoUnitarioConIva Decimal  @db.Decimal(14, 4)
+  /// Solo en ENTRADA: 0.1600, 0.0800 o 0 según el bien. Alimenta el par de arriba.
+  tasaIva             Decimal? @db.Decimal(5, 4)
   /// Se anota, no se rastrea.
   numeroSerie   String?
   observaciones String?
@@ -447,8 +466,9 @@ model CapaCosto {
   fecha        DateTime                       // ordena el consumo PEPS
   cantidadInicial  Decimal @db.Decimal(14, 3)
   cantidadRestante Decimal @db.Decimal(14, 3)
-  /// Siempre en pesos, ya convertido al tipo de cambio de la entrada.
-  costoUnitario    Decimal @db.Decimal(14, 4)
+  /// Ambos en pesos, ya convertidos al tipo de cambio de la entrada.
+  costoUnitario       Decimal @db.Decimal(14, 4)   // sin IVA
+  costoUnitarioConIva Decimal @db.Decimal(14, 4)   // con IVA
 
   bodega     Bodega        @relation(fields: [bodegaId],     references: [id])
   articulo   Articulo      @relation(fields: [articuloId],   references: [id])
@@ -465,7 +485,9 @@ model ConsumoCapa {
   partidaId     String  @db.Uuid
   capaId        String  @db.Uuid
   cantidad      Decimal @db.Decimal(14, 3)
-  costoUnitario Decimal @db.Decimal(14, 4)     // congelado al momento de la salida
+  /// Congelados al momento de la salida.
+  costoUnitario       Decimal @db.Decimal(14, 4)   // sin IVA
+  costoUnitarioConIva Decimal @db.Decimal(14, 4)   // con IVA
 
   partida MovimientoPartida @relation(fields: [partidaId], references: [id], onDelete: Cascade)
   capa    CapaCosto         @relation(fields: [capaId],    references: [id])
@@ -503,7 +525,8 @@ model Folio {
 | `UUIDv7` nativo en vez de `cuid()` texto | [01-arquitectura](01-arquitectura.md) §3.5 |
 | `Empresa` y `Estacion` en esquema global; el RFC sale de la estación | [06-estaciones](06-estaciones.md) |
 | `Usuario`, `Rol` y la bandera `puedeAutorizar` | D3 y el requisito #1 |
-| Costeo por capas PEPS en vez de promedio ponderado | E1 |
+| Costeo por capas PEPS en vez de promedio ponderado | E1, confirmado por Compras |
+| Cada costo se guarda por partida doble: sin IVA y con IVA | E3 |
 | `moneda`, `tipoCambio`, `subtotal`, `iva`, `total` | E3 y E4 |
 | `piezasPorCaja` y `capturaOriginal` | B4 |
 | `numeroSerie` como texto, sin rastreo | B5 |
@@ -522,7 +545,7 @@ model Folio {
 | ¿Qué está por debajo del mínimo? | `Existencia.cantidad < Articulo.stockMinimo` |
 | ¿Quién autorizó esta salida y quién se la llevó? | `autorizadoPor` y `entregadoA` |
 | ¿Cuál es el historial de este filtro? | Kardex: partidas del artículo por fecha, con saldo corrido |
-| ¿Cuánto vale el inventario? | `SUM(cantidadRestante × costoUnitario)` de las capas |
+| ¿Cuánto vale el inventario? | Sobre las capas: `SUM(cantidadRestante × costoUnitario)` sin IVA y `SUM(cantidadRestante × costoUnitarioConIva)` con IVA |
 | ¿Qué se gastó por estación este año? | Salidas agrupadas por `estacionId` |
 | ¿Con qué frecuencia se pide esta pieza? | Conteo de partidas del artículo por periodo |
 | ¿Qué salidas siguen sin confirmar recepción? | Salidas en estatus `ENTREGADA` |
