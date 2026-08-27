@@ -53,3 +53,6 @@ next-env.d.ts
 
 # bóveda personal de Obsidian, no del proyecto
 .obsidian/
+
+# Graphify
+/graphify-out
