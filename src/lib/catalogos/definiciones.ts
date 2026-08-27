@@ -8,11 +8,12 @@ import { z } from "zod";
  * es una entrada de configuración y no una pantalla nueva.
  */
 
-export type FuenteOpciones = "unidades" | "categorias";
+export type FuenteOpciones = "unidades" | "categorias" | "empresas";
 
 export type CampoDef = {
   nombre: string;
   etiqueta: string;
+  /** `numero` son piezas enteras: en este sistema no hay medias piezas. */
   tipo: "texto" | "numero" | "booleano" | "select";
   requerido?: boolean;
   placeholder?: string;
@@ -27,6 +28,20 @@ export type CampoDef = {
   alineacion?: "izquierda" | "derecha";
   /** Marca el campo activo/activa, que se dibuja como etiqueta de estado. */
   esEstado?: boolean;
+
+  /**
+   * Lo asigna PostgreSQL, no quien captura. Nunca se envía en el formulario:
+   * en el alta se muestra vacío y en la edición, de solo lectura.
+   */
+  generado?: boolean;
+
+  /**
+   * Clave de negocio: se captura al dar de alta y después no se puede cambiar.
+   * Vive en la URL y en los WhatsApp de Compras, así que cambiarla rompe
+   * enlaces ajenos. Un trigger lo impide también en la base; esto solo evita
+   * que la pantalla ofrezca algo que va a fallar.
+   */
+  inmutable?: boolean;
 };
 
 export type CatalogoDef = {
@@ -37,9 +52,20 @@ export type CatalogoDef = {
   genero: "m" | "f";
   descripcion: string;
   campos: CampoDef[];
-  /** Campos sobre los que aplica el buscador. */
+  /** Campos sobre los que aplica el buscador. Admite rutas: `empresa.razonSocial`. */
   camposBusqueda: string[];
+  /** Campo que encabeza la pantalla de edición. */
+  campoTitulo: string;
 };
+
+/** Si el campo llega o no dentro del FormData, según se esté dando de alta o editando. */
+export function campoSeCaptura(campo: CampoDef, modo: ModoFormulario): boolean {
+  if (campo.generado) return false;
+  if (campo.inmutable && modo === "edicion") return false;
+  return true;
+}
+
+export type ModoFormulario = "alta" | "edicion";
 
 const ESTADO_F: CampoDef = {
   nombre: "activa",
@@ -55,7 +81,44 @@ const ESTADO_M: CampoDef = {
   esEstado: true,
 };
 
+const EMPRESA: CampoDef = {
+  nombre: "empresaId",
+  etiqueta: "Empresa",
+  tipo: "select",
+  requerido: true,
+  fuente: "empresas",
+  rutaTabla: "empresa.razonSocial",
+};
+
 export const CATALOGOS: CatalogoDef[] = [
+  {
+    slug: "empresas",
+    titulo: "Empresas",
+    singular: "empresa",
+    genero: "f",
+    descripcion:
+      "Las razones sociales del grupo. Viven en el catálogo global que otros sistemas de Gasosur leen, y de ellas cuelgan las estaciones y los proveedores.",
+    camposBusqueda: ["razonSocial", "rfc"],
+    campoTitulo: "razonSocial",
+    campos: [
+      {
+        nombre: "razonSocial",
+        etiqueta: "Razón social",
+        tipo: "texto",
+        requerido: true,
+        placeholder: "Combustibles del Pacífico Sur, S.A. de C.V.",
+      },
+      {
+        nombre: "rfc",
+        etiqueta: "RFC",
+        tipo: "texto",
+        placeholder: "CPS980412H23",
+        ayuda: "Se guarda en mayúsculas, sin guiones ni espacios.",
+        sinSalto: true,
+      },
+      ESTADO_F,
+    ],
+  },
   {
     slug: "bodegas",
     titulo: "Bodegas",
@@ -63,16 +126,18 @@ export const CATALOGOS: CatalogoDef[] = [
     genero: "f",
     descripcion: "Almacenes del grupo desde donde sale y hacia donde entra el material.",
     camposBusqueda: ["clave", "nombre", "ubicacion"],
+    campoTitulo: "nombre",
     campos: [
       {
         nombre: "clave",
         etiqueta: "Clave",
         tipo: "texto",
         requerido: true,
-        placeholder: "BOD-04",
+        inmutable: true,
+        placeholder: "MAG",
         sinSalto: true,
       },
-      { nombre: "nombre", etiqueta: "Nombre", tipo: "texto", requerido: true, placeholder: "Bodega Poniente" },
+      { nombre: "nombre", etiqueta: "Nombre", tipo: "texto", requerido: true, placeholder: "Magallanes" },
       { nombre: "ubicacion", etiqueta: "Ubicación", tipo: "texto", placeholder: "Calle y número" },
       ESTADO_F,
     ],
@@ -83,18 +148,23 @@ export const CATALOGOS: CatalogoDef[] = [
     singular: "estación",
     genero: "f",
     descripcion: "Estaciones de servicio que reciben el material que sale de bodega.",
-    camposBusqueda: ["clave", "nombre", "ubicacion"],
+    camposBusqueda: ["numero", "alias", "empresa.razonSocial"],
+    campoTitulo: "alias",
     campos: [
       {
-        nombre: "clave",
-        etiqueta: "Clave",
+        nombre: "numero",
+        etiqueta: "Número",
         tipo: "texto",
         requerido: true,
-        placeholder: "EST-11",
+        inmutable: true,
+        placeholder: "ES05588",
         sinSalto: true,
       },
-      { nombre: "nombre", etiqueta: "Nombre", tipo: "texto", requerido: true, placeholder: "Gasosur Poniente" },
-      { nombre: "ubicacion", etiqueta: "Ubicación", tipo: "texto", placeholder: "Calle y número" },
+      { nombre: "alias", etiqueta: "Alias", tipo: "texto", requerido: true, placeholder: "Magallanes" },
+      EMPRESA,
+      { nombre: "telefono", etiqueta: "Teléfono", tipo: "texto", placeholder: "744 155 4420" },
+      { nombre: "movil", etiqueta: "Móvil", tipo: "texto", ocultarEnTabla: true },
+      { nombre: "correo", etiqueta: "Correo", tipo: "texto", ocultarEnTabla: true },
       ESTADO_F,
     ],
   },
@@ -104,8 +174,9 @@ export const CATALOGOS: CatalogoDef[] = [
     singular: "área",
     genero: "f",
     descripcion:
-      "Área de la estación a la que se destina el material: despacho, tienda, mantenimiento…",
+      "Área de la estación a la que se destina el material: administración, mantenimiento y despacho.",
     camposBusqueda: ["nombre"],
+    campoTitulo: "nombre",
     campos: [
       { nombre: "nombre", etiqueta: "Nombre", tipo: "texto", requerido: true, placeholder: "Mantenimiento" },
       ESTADO_F,
@@ -116,14 +187,17 @@ export const CATALOGOS: CatalogoDef[] = [
     titulo: "Unidades de medida",
     singular: "unidad de medida",
     genero: "f",
-    descripcion: "Cómo se cuenta cada artículo: pieza, litro, caja, kilogramo…",
+    descripcion:
+      "La presentación en la que se cuenta el artículo, no una magnitud: una cubeta de 19 litros es 1 CUB, no 19 LT. La existencia se lleva siempre en piezas enteras.",
     camposBusqueda: ["clave", "nombre"],
+    campoTitulo: "nombre",
     campos: [
       {
         nombre: "clave",
         etiqueta: "Clave",
         tipo: "texto",
         requerido: true,
+        inmutable: true,
         placeholder: "PZA",
         sinSalto: true,
       },
@@ -138,6 +212,7 @@ export const CATALOGOS: CatalogoDef[] = [
     genero: "f",
     descripcion: "Clasificación de los artículos para agrupar consultas y reportes.",
     camposBusqueda: ["nombre"],
+    campoTitulo: "nombre",
     campos: [
       { nombre: "nombre", etiqueta: "Nombre", tipo: "texto", requerido: true, placeholder: "Herramienta" },
       ESTADO_F,
@@ -150,14 +225,15 @@ export const CATALOGOS: CatalogoDef[] = [
     genero: "m",
     descripcion: "El material que se controla. Cada artículo tiene una unidad de medida fija.",
     camposBusqueda: ["clave", "descripcion"],
+    campoTitulo: "descripcion",
     campos: [
       {
         nombre: "clave",
         etiqueta: "Clave",
         tipo: "texto",
-        requerido: true,
-        placeholder: "REF-1009",
+        generado: true,
         sinSalto: true,
+        ayuda: "La asigna el sistema al guardar y no se puede cambiar.",
       },
       {
         nombre: "descripcion",
@@ -182,6 +258,13 @@ export const CATALOGOS: CatalogoDef[] = [
         rutaTabla: "categoria.nombre",
       },
       {
+        nombre: "piezasPorCaja",
+        etiqueta: "Piezas por caja",
+        tipo: "numero",
+        alineacion: "derecha",
+        ayuda: "Para capturar en cajas y guardar en piezas. Déjalo vacío si no aplica.",
+      },
+      {
         nombre: "stockMinimo",
         etiqueta: "Stock mínimo",
         tipo: "numero",
@@ -196,13 +279,23 @@ export const CATALOGOS: CatalogoDef[] = [
     titulo: "Proveedores",
     singular: "proveedor",
     genero: "m",
-    descripcion: "A quién se le compra el material que entra a bodega.",
-    camposBusqueda: ["razonSocial", "rfc", "contacto"],
+    descripcion:
+      "A quién se le compra el material que entra a bodega. La razón social y el RFC viven en la empresa: buena parte de los proveedores son del propio grupo.",
+    camposBusqueda: ["nombreComercial", "contacto", "giro", "empresa.razonSocial"],
+    campoTitulo: "nombreComercial",
     campos: [
-      { nombre: "razonSocial", etiqueta: "Razón social", tipo: "texto", requerido: true },
-      { nombre: "rfc", etiqueta: "RFC", tipo: "texto", placeholder: "XAXX010101000" },
+      {
+        nombre: "nombreComercial",
+        etiqueta: "Nombre comercial",
+        tipo: "texto",
+        requerido: true,
+        placeholder: "Refaccionaria del Golfo",
+      },
+      EMPRESA,
+      { nombre: "giro", etiqueta: "Giro", tipo: "texto", placeholder: "Refacciones" },
       { nombre: "contacto", etiqueta: "Contacto", tipo: "texto" },
       { nombre: "telefono", etiqueta: "Teléfono", tipo: "texto" },
+      { nombre: "correo", etiqueta: "Correo", tipo: "texto", ocultarEnTabla: true },
       ESTADO_M,
     ],
   },
@@ -212,17 +305,12 @@ export const CATALOGOS: CatalogoDef[] = [
     singular: "persona",
     genero: "f",
     descripcion:
-      "Quién solicita, quién autoriza, quién transporta y quién recibe. Hoy se captura; cuando exista autenticación, estas personas se enlazan con usuarios del sistema.",
+      "Quién solicita el material. Puede no tener cuenta en el sistema: el gerente pide por WhatsApp y Compras captura a su nombre. Quien autoriza sí es siempre un usuario.",
     camposBusqueda: ["nombre", "puesto"],
+    campoTitulo: "nombre",
     campos: [
       { nombre: "nombre", etiqueta: "Nombre", tipo: "texto", requerido: true },
       { nombre: "puesto", etiqueta: "Puesto", tipo: "texto", placeholder: "Almacenista" },
-      {
-        nombre: "esTransportista",
-        etiqueta: "Puede transportar material",
-        tipo: "booleano",
-        ayuda: "Aparecerá en la lista de transportistas al capturar una salida o traspaso.",
-      },
       ESTADO_F,
     ],
   },
@@ -244,11 +332,17 @@ export function elLa(def: CatalogoDef): string {
 /**
  * Construye el esquema de validación a partir de la misma definición que dibuja
  * el formulario, para que nunca se separen.
+ *
+ * El modo importa: una clave de negocio se captura al dar de alta y deja de
+ * enviarse al editar, así que exigirla en la edición rechazaría una captura
+ * correcta.
  */
-export function esquemaDe(def: CatalogoDef) {
+export function esquemaDe(def: CatalogoDef, modo: ModoFormulario) {
   const forma: Record<string, z.ZodTypeAny> = {};
 
   for (const campo of def.campos) {
+    if (!campoSeCaptura(campo, modo)) continue;
+
     switch (campo.tipo) {
       case "booleano":
         // Un checkbox no marcado sencillamente no se envía en el FormData.
@@ -258,10 +352,17 @@ export function esquemaDe(def: CatalogoDef) {
         break;
 
       case "numero":
-        forma[campo.nombre] = z.coerce
-          .number({ error: "Debe ser un número" })
-          .min(0, "No puede ser negativo")
-          .default(0);
+        // Enteros: son piezas, y en una bodega no hay medias piezas.
+        forma[campo.nombre] = campo.requerido
+          ? z.coerce
+              .number({ error: "Debe ser un número" })
+              .int("Debe ser un número entero de piezas")
+              .min(0, "No puede ser negativo")
+          : z
+              .union([z.literal(""), z.undefined(), z.null(), z.coerce.number()])
+              .transform((v) => (v === "" || v === undefined || v === null ? null : Number(v)))
+              .refine((v) => v === null || Number.isInteger(v), "Debe ser un número entero de piezas")
+              .refine((v) => v === null || v >= 0, "No puede ser negativo");
         break;
 
       case "select":

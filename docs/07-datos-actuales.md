@@ -46,8 +46,18 @@ en Servi Fer. El mismo artículo, dos códigos.
 
 **Consecuencia:** el código actual no puede migrarse como clave de artículo. En el modelo
 nuevo el artículo es único y su existencia se lleva por bodega, así que hay que **volver a
-numerar** y conservar el código viejo como referencia (`claveAnterior`) para que Compras
-pueda rastrear sus registros históricos.
+numerar**. Las claves nuevas las asigna el sistema: `ART-00001`, `ART-00002`…
+
+> **Los códigos viejos no se guardan en la base.** Se había planeado conservarlos en un
+> campo `claveAnterior`, y se descartó por dos razones. Una columna de texto no alcanzaba:
+> el propio ejemplo de arriba —*«Tramos cortos de 1"»*, que es BM0004 en Magallanes y
+> BM0093 en Servi Fer— necesita **dos** claves anteriores para un solo artículo, y cada
+> fusión que Compras hiciera durante la revisión manual habría destruido una de las dos.
+> Y el valor era bajo: la normalización de las descripciones se hace a mano de todos modos.
+>
+> Lo que sí tiene que existir es el **mapeo** `codigo_viejo,bodega,clave_nueva` como archivo
+> versionado en `prisma/migracion-datos/`, producto de esa misma revisión. Sin él, la tarea
+> del histórico de movimientos deja de ser posible.
 
 Son **225 renglones** de artículo entre las dos hojas y **224 descripciones distintas**:
 en la práctica, casi todo el catálogo es específico de una bodega. Solo un artículo está
@@ -69,14 +79,23 @@ Ausencias que definen hasta dónde llega la migración:
 | **Moneda y tipo de cambio** | No aplica: no hay costos |
 
 Esto tiene una consecuencia directa y hay que decirla claro: **el inventario migra con
-cantidades, sin valor**. El costo promedio, el valor del inventario y el gasto por estación
-empiezan a construirse desde la primera entrada capturada en el sistema nuevo. No hay forma
-de reconstruirlos hacia atrás con este archivo.
+cantidades, sin valor**. El valor del inventario y el gasto por estación empiezan a
+construirse desde la primera entrada capturada en el sistema nuevo. No hay forma de
+reconstruirlos hacia atrás con este archivo.
 
 **Decisión tomada:** no se capturan los 225 costos a mano. El valor del inventario se
 construye con las compras nuevas: cada artículo adquiere costo la primera vez que se
 registra una entrada suya. Hasta entonces figura sin valuar, y así se le explicará a
 Compras.
+
+**Cómo entra ese inventario sin costo** quedó decidido después, y no es un detalle: entra
+como `AJUSTE` **con capa de costo, y con el costo nulo** — no sin capa, como se había
+planteado. Nulo no es cero: *«no sé cuánto costó»* y *«costó nada»* son afirmaciones
+distintas. Si entrara sin capa, la primera salida de un artículo no valuado encontraría
+existencia 40 y capas 0, y el sistema tendría que elegir entre bloquear una salida que sí
+tiene existencia —contra lo que Compras pidió por escrito— o descontar existencia sin
+consumir capa y dejar que las dos cifras divergieran en silencio. Ver **A1** de la
+[auditoría](09-auditoria.md).
 
 Lo mismo aplica al proveedor, el área destino y la moneda de las entradas históricas:
 reconstruirlos sería trabajo manual de semanas. Las facturas y remisiones de ese periodo

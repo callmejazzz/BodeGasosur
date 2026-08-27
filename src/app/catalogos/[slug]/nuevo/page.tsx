@@ -3,7 +3,7 @@ import { guardarCatalogo } from "../actions";
 import { FormularioCatalogo } from "@/components/catalogos/formulario-catalogo";
 import type { ValoresFormulario } from "@/lib/catalogos/formulario";
 import { Card, CardHeader, EncabezadoPagina } from "@/components/ui/superficies";
-import { catalogoPorSlug, elLa } from "@/lib/catalogos/definiciones";
+import { catalogoPorSlug } from "@/lib/catalogos/definiciones";
 import { cargarOpciones, REPOS } from "@/lib/catalogos/repos";
 
 export default async function PaginaNuevo({ params }: PageProps<"/catalogos/[slug]/nuevo">) {
@@ -25,10 +25,11 @@ export default async function PaginaNuevo({ params }: PageProps<"/catalogos/[slu
       <Card className="max-w-3xl">
         <CardHeader
           titulo={`Datos ${def.genero === "f" ? "de la" : "del"} ${def.singular}`}
-          descripcion={`Se agregará a ${elLa(def)} lista de ${def.titulo.toLowerCase()}.`}
+          descripcion={`Se agregará a la lista de ${def.titulo.toLowerCase()}.`}
         />
         <FormularioCatalogo
           def={def}
+          modo="alta"
           opciones={opciones}
           valores={valores}
           accion={guardarCatalogo.bind(null, slug, null)}

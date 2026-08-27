@@ -28,6 +28,11 @@ function celda(registro: { id: string }, campo: CampoDef, def: CatalogoDef) {
   }
 
   if (campo.tipo === "numero") {
+    // Nulo no es cero: «sin piezas por caja» significa que no aplica, y
+    // enseñarlo como 0 le diría a Compras que la caja viene vacía.
+    if (valor === null || valor === undefined || valor === "") {
+      return <span className="text-muted">—</span>;
+    }
     return <span className="tabular">{cantidad(valor)}</span>;
   }
 

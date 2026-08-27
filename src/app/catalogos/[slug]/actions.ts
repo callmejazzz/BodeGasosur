@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { catalogoPorSlug, esquemaDe } from "@/lib/catalogos/definiciones";
+import { campoSeCaptura, catalogoPorSlug, esquemaDe } from "@/lib/catalogos/definiciones";
 import type { EstadoFormulario, ValoresFormulario } from "@/lib/catalogos/formulario";
 import { REPOS } from "@/lib/catalogos/repos";
 
@@ -11,7 +11,7 @@ function mensajeDeError(error: unknown, singular: string): string {
   if (error && typeof error === "object" && "code" in error) {
     const codigo = (error as { code?: string }).code;
     if (codigo === "P2002") {
-      return `Ya existe ${singular === "área" ? "un" : "otro"} registro con ese valor único (clave, nombre o RFC repetido).`;
+      return `Ya existe ${singular === "área" ? "un" : "otro"} registro con ese valor único (clave, número, nombre o RFC repetido).`;
     }
     if (codigo === "P2003") {
       return "El registro hace referencia a un dato que ya no existe.";
@@ -33,12 +33,16 @@ export async function guardarCatalogo(
     return { errores: {}, mensaje: "Catálogo desconocido." };
   }
 
+  const modo = id ? "edicion" : "alta";
   const crudo = Object.fromEntries(formData.entries());
-  const resultado = esquemaDe(def).safeParse(crudo);
+  const resultado = esquemaDe(def, modo).safeParse(crudo);
 
-  // Se conserva la captura para poder devolverla si algo falla.
+  // Se conserva la captura para poder devolverla si algo falla. Los campos que
+  // no se capturan —clave generada, clave de negocio ya dada de alta— no vienen
+  // en el FormData y los repuebla la página desde la base.
   const enviados: ValoresFormulario = {};
   for (const campo of def.campos) {
+    if (!campoSeCaptura(campo, modo)) continue;
     enviados[campo.nombre] =
       campo.tipo === "booleano" ? crudo[campo.nombre] === "on" : String(crudo[campo.nombre] ?? "");
   }

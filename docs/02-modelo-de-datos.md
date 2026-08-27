@@ -1,13 +1,15 @@
 # BodeGasosur — Modelo de datos
 
-Versión posterior al levantamiento. Recoge lo acordado con Compras en
-[05-hallazgos](05-hallazgos-levantamiento.md), el catálogo global de
-[06-estaciones](06-estaciones.md) y el análisis del Excel vigente en
-[07-datos-actuales](07-datos-actuales.md).
+Recoge lo acordado con Compras en [05-hallazgos](05-hallazgos-levantamiento.md), el
+catálogo global de [06-estaciones](06-estaciones.md), el análisis del Excel vigente en
+[07-datos-actuales](07-datos-actuales.md) y las correcciones de la
+[auditoría de arquitectura](09-auditoria.md).
 
-> **Este documento describe el destino, no el estado actual del código.** El esquema en
-> `prisma/schema.prisma` todavía es el de la demo. La migración es la fase 2 de
-> [`fases-siguientes.md`](../fases-siguientes.md).
+> **Este documento ya describe el código, no un destino.** El esquema vive en
+> [`prisma/schema.prisma`](../prisma/schema.prisma) y los invariantes que la base hace
+> cumplir en [`prisma/sql/`](../prisma/sql/). Ambos se implementaron en la fase 2
+> (`v0.2.0`). Lo que sigue explica **por qué** está así; la fuente de verdad de **cómo**
+> está es el esquema.
 
 ## 1. Panorama
 
@@ -15,6 +17,9 @@ Versión posterior al levantamiento. Recoge lo acordado con Compras en
 erDiagram
     EMPRESA     ||--o{ ESTACION  : "opera"
     EMPRESA     ||--o{ PROVEEDOR : "identifica fiscalmente"
+
+    USUARIO     }o--o| PERSONA   : "es"
+    USUARIO     ||--o{ BITACORA  : "escribe"
 
     BODEGA      ||--o{ EXISTENCIA : "almacena"
     ARTICULO    ||--o{ EXISTENCIA : "se cuenta en"
@@ -24,6 +29,7 @@ erDiagram
     PARTIDA     }o--|| ARTICULO   : "mueve"
     PARTIDA     ||--o{ CONSUMO    : "toma de"
     CAPA_COSTO  ||--o{ CONSUMO    : "aporta"
+    CAPA_COSTO  }o--o| CAPA_COSTO : "se parte de"
     CAPA_COSTO  }o--|| BODEGA     : "vive en"
 
     MOVIMIENTO  }o--o| BODEGA    : "origen"
@@ -32,17 +38,16 @@ erDiagram
     MOVIMIENTO  }o--o| ESTACION  : "salida hacia"
     MOVIMIENTO  }o--o| AREA      : "para el área"
     MOVIMIENTO  }o--o| PERSONA   : "solicita"
-    MOVIMIENTO  }o--o| PERSONA   : "autoriza"
-
-    USUARIO     }o--o| PERSONA   : "es"
-    USUARIO     }o--o| ESTACION  : "pertenece a"
+    MOVIMIENTO  }o--o| USUARIO   : "autoriza"
 ```
 
 Dos esquemas de PostgreSQL:
 
-- **`catalogo_gasosur`** — `Empresa` y `Estacion`. Global para el grupo, lo leen otros
-  proyectos. Nada de aquí apunta hacia `public`.
+- **`catalogo_gasosur`** — `Empresa` y `Estacion`. Global para el grupo. Otros proyectos
+  no leen estas tablas: leen **vistas versionadas** (§7).
 - **`public`** — todo lo demás, propio de BodeGasosur.
+
+Diecinueve modelos en total: dos en `catalogo_gasosur` y diecisiete en `public`.
 
 ## 2. Los cinco tipos de movimiento
 
@@ -50,9 +55,14 @@ Dos esquemas de PostgreSQL:
 |---|---|---|---|---|
 | **ENTRADA** | — | Bodega | Proveedor + factura o remisión | `+` en destino, **crea capa de costo** |
 | **SALIDA** | Bodega | — | Estación + área | `−` en origen, **consume capas** |
-| **TRASPASO** | Bodega | Bodega | — | `−` origen, `+` destino, al mismo costo |
+| **TRASPASO** | Bodega | Bodega | — | `−` origen, `+` destino, partiendo la capa |
 | **DEVOLUCIÓN** | — | Bodega | Estación | `+` en destino; puede referenciar la salida original |
-| **AJUSTE** | Bodega | — | Motivo (conteo, merma, daño) | `+` o `−` |
+| **AJUSTE** | Bodega *o* — | — *o* Bodega | Motivo (conteo, merma, daño) | `+` o `−` |
+
+**El signo del ajuste vive en la bodega, no en la cantidad.** Un ajuste que suma lleva
+`bodegaDestinoId`; uno que resta lleva `bodegaOrigenId`, igual que una entrada y una
+salida. Así la cantidad es siempre positiva y el invariante 3 no tiene excepciones. Antes
+esto estaba sin decidir, y la tabla de tipos y el invariante 3 se contradecían.
 
 Los **préstamos** no son un tipo aparte: son una `SALIDA` con la bandera `esPrestamo`, que
 queda abierta hasta que una `DEVOLUCIÓN` la cierra. Es el compresor que Diana menciona.
@@ -67,50 +77,124 @@ Las **entregas parciales** tampoco necesitan tabla: varias `ENTRADA` comparten l
 | ENTRADA, TRASPASO, DEVOLUCIÓN, AJUSTE | `BORRADOR → CONFIRMADO`, o `CANCELADO` |
 | SALIDA | `SOLICITADA → AUTORIZADA → ENTREGADA → RECIBIDA`, con `RECHAZADA` y `CANCELADO` |
 
+Son **dos máquinas de estados en un solo enum**, y la base sabe cuál corresponde a cada
+tipo: un `CHECK` sobre `(tipo, estatus)` impide un `ENTRADA` en estatus `AUTORIZADA`. Qué
+transición es legal —y no solo qué combinación existe— lo decide una tabla de transiciones
+en la capa de servicios, para que una transición ilegal sea un error de tipos y no una
+convención que se respeta mientras alguien se acuerde.
+
+`estatus` **no tiene valor por omisión**: el inicial depende del tipo —una salida nace
+`SOLICITADA`, todo lo demás nace `BORRADOR`— y una columna no puede tener un `DEFAULT` que
+dependa de otra columna.
+
 **La existencia se descuenta al pasar a `ENTREGADA`**, no al autorizar. Autorizar es un
 permiso; entregar es el hecho físico. Entre uno y otro el material sigue en la bodega.
 
-`RECIBIDA` es lo que Diana llama *"cerrar el pendiente"*: confirma que la estación recibió.
+`RECIBIDA` es lo que Diana llama *«cerrar el pendiente»*: confirma que la estación recibió.
 No mueve existencia, solo cierra el ciclo. La bandeja de entregas sin confirmar es lo que
 hoy vive en conversaciones de WhatsApp.
 
+**Cada transición deja su actor y su marca de tiempo**: `creadoPorId`, `confirmadoPorId` /
+`confirmadoEn`, `autorizadoPorId` / `autorizadoEn`, `rechazadoPorId` / `rechazadoEn`,
+`entregadoPorId` / `entregadoEn`, `recibidoPorId` / `recibidoEn`, `canceladoPorId` /
+`canceladoEn`. Un `CHECK` por cada par impide que exista uno sin el otro.
+
 ## 4. Invariantes
 
-1. Un movimiento confirmado **no se edita ni se borra**. Corregir = cancelar y recapturar;
-   la cancelación genera el asiento inverso y guarda `motivoCancelacion`.
-2. Solo afectan existencias los movimientos `CONFIRMADO` (o `ENTREGADA` en salidas).
-3. Todo movimiento tiene al menos una partida, con `cantidad > 0`.
-4. Un artículo no se repite dentro del mismo movimiento.
-5. Origen y destino de un traspaso son bodegas distintas.
-6. **La existencia nunca queda negativa.** Confirmado por ambos: *"no dar salida si no hay
-   existencia"*.
-7. **Ninguna salida pasa de `SOLICITADA` sin un usuario con `puedeAutorizar`.** Es el
-   requisito #1 del sistema.
-8. El folio es consecutivo por tipo y se asigna al confirmar, no al crear el borrador.
-9. `SUM(cantidadRestante)` de las capas de un artículo/bodega es igual a
-   `Existencia.cantidad`. Hay un comando que lo verifica.
-10. Las capas se consumen **por orden de `fecha`**, de la más antigua a la más reciente.
-    Una salida solo toca la siguiente capa cuando agotó la anterior.
-11. `costoUnitarioConIva >= costoUnitario` siempre; son iguales solo en bienes a tasa 0.
+Los once del levantamiento, más lo que hizo falta escribir para que fueran verificables.
+La columna de la derecha dice **quién los hace cumplir** — que es la diferencia entre un
+invariante y un buen propósito.
+
+| | Invariante | Quién lo impone |
+|---|---|---|
+| 1 | Un movimiento confirmado no se edita ni se borra; corregir = cancelar y recapturar | Servicios |
+| 2 | Solo afectan existencias los movimientos `CONFIRMADO` (o `ENTREGADA` en salidas) | Servicios |
+| 3 | Todo movimiento tiene al menos una partida, con `cantidad > 0` | `CHECK` |
+| 4 | Un artículo no se repite dentro del mismo movimiento | `@@unique` |
+| 5 | Origen y destino de un traspaso son bodegas distintas | `CHECK` |
+| 6 | **La existencia nunca queda negativa** | `CHECK` + bloqueo `FOR UPDATE` |
+| 7 | **Ninguna salida pasa de `SOLICITADA` sin un usuario con `puedeAutorizar`** | **Trigger** |
+| 8 | El folio es consecutivo por tipo y se asigna al confirmar, no al crear el borrador | `CHECK` + `UPDATE … RETURNING` |
+| 9 | `SUM(cantidadRestante)` de las capas de un artículo/bodega = `Existencia.cantidad` | `CHECK` parcial + prueba de integración |
+| 10 | Las capas se consumen por orden de `(fechaOriginal, id)` — PEPS | Servicios |
+| 11 | `costoUnitarioConIva >= costoUnitario` siempre | `CHECK` |
+
+Y tres que la auditoría obligó a agregar:
+
+| | Invariante | Quién lo impone |
+|---|---|---|
+| 12 | El par de costos se conoce junto o se desconoce junto | `CHECK` |
+| 13 | El dinero existe solo en `ENTRADA`; el tipo de cambio, solo en dólares | `CHECK` |
+| 14 | Una clave de negocio no cambia después del alta | **Trigger** |
+
+**El invariante 9 se verifica por igualdad exacta**, sin tolerancia, porque las cantidades
+son enteras. Con decimales, el consumo PEPS acabaría dejando residuos de milésimas y la
+prueba habría necesitado un *«iguales dentro de 0.001»* — una tolerancia en una prueba de
+invariantes es una puerta por donde se cuela el error que la prueba existía para atrapar.
 
 ## 5. Costeo por capas, consumidas por PEPS
 
 Compras pidió **el costo de la factura**, no un promedio del almacén. Eso saca el costo de
 la ficha del artículo y lo lleva a capas:
 
-- Cada **ENTRADA** crea una `CapaCosto` con su costo unitario y su cantidad.
-- Cada **SALIDA** consume capas por orden de antigüedad —**PEPS**— y registra en
-  `ConsumoCapa` de dónde salió cada pieza y a qué costo.
+- **Toda cantidad que entra crea capa, siempre.** Entrada, traspaso, devolución y el ajuste
+  del inventario inicial.
+- Cada **SALIDA** consume capas por antigüedad —**PEPS**— y registra en `ConsumoCapa` de
+  dónde salió cada pieza y a qué costo.
 - El costo de una salida **se congela**: no cambia aunque después entre material más caro.
-- Un **TRASPASO** mueve la capa de una bodega a otra conservando su costo.
 
 **PEPS está confirmado.** Compras lo eligió deliberadamente aunque contabilidad no exija
 método alguno: da mejor control que un promedio, porque cada salida conserva el costo real
-de la compra de la que salió.
-
-Encaja además con lo que ya se había decidido: al no rastrearse la serie
+de la compra de la que salió. Encaja además con lo ya decidido: al no rastrearse la serie
 ([B5](05-hallazgos-levantamiento.md#6-discrepancias--resueltas)), no hay forma de saber de
 qué factura salió una pieza concreta, y PEPS es la aproximación más cercana.
+
+### El inventario migrado entra con capa y sin costo
+
+Ésta fue la corrección más importante de la auditoría (**A1**), y conviene entender qué
+evita.
+
+El Excel no tiene ningún dato de dinero, y se decidió no capturar a mano los 225 costos. La
+versión anterior de este documento resolvía eso metiendo las existencias iniciales como un
+`AJUSTE` **sin capa**. La consecuencia aparecía después: la primera salida de un artículo
+no valuado encontraría existencia 40 y capas 0, y solo había dos desenlaces, los dos malos
+— bloquear una salida que sí tiene existencia, contra lo que Compras pidió por escrito, o
+descontar existencia sin consumir capa y dejar que las dos cifras divergieran en silencio
+para siempre.
+
+La corrección es que **la capa siempre existe** y lo que falta es el costo:
+
+```prisma
+/// Nulo = no se conoce el costo (inventario migrado). Distinto de cero.
+costoUnitario       Decimal? @db.Decimal(14, 4)
+costoUnitarioConIva Decimal? @db.Decimal(14, 4)
+```
+
+Nulo no es cero: *«no sé cuánto costó»* y *«costó nada»* son afirmaciones distintas, y el
+reporte de valuación tiene que poder decir *«1,240 piezas sin valuar»* en vez de mentir con
+un total. Cada artículo adquiere costo la primera vez que se registre una entrada suya.
+
+### Qué fecha ordena PEPS
+
+Una capa tiene dos fechas y solo una ordena:
+
+- `fecha` — cuándo apareció la capa **en esa bodega**. Informativa.
+- `fechaOriginal` — la de la **`ENTRADA` original**. Es la que ordena, junto con el `id`.
+
+La distinción existe por el traspaso. Un traspaso parte una capa: consume N piezas en el
+origen y crea una capa nueva en el destino, con `origenId` apuntando a la capa de la que
+salió y **conservando la fecha de la entrada original**. Si llevara la fecha del traspaso,
+el material viejo se iría al final de la fila PEPS en el destino y el costeo mentiría.
+
+La **devolución** funciona igual, y así queda escrito lo que antes no lo estaba: crea una
+capa nueva por cada capa que consumió la salida original, con `origenId` a la capa
+consumida y su `fechaOriginal` heredada. No reabre la capa original — eso borraría el
+rastro de que hubo devolución. Cuando la devolución no referencia ninguna salida, el costo
+es nulo, que es el caso que **A1** ya sabe representar.
+
+El desempate es `id`, y no es arbitrario: los UUIDv7 están ordenados por tiempo de
+creación, así que `ORDER BY fechaOriginal, id` significa *«por día del hecho, y dentro del
+día por orden de captura»*.
 
 ### Moneda e impuestos
 
@@ -119,7 +203,9 @@ convertidos al tipo de cambio del día de la entrada, para que el valor del inve
 baile con el dólar de hoy.
 
 El movimiento conserva `moneda`, `tipoCambio`, `subtotal`, `iva` y `total` como constancia
-de lo que decía la factura.
+de lo que decía la factura. Tres `CHECK` cierran el bloque: el dinero solo existe en
+`ENTRADA`, en dólares el tipo de cambio es obligatorio —sin él la capa no se puede valuar
+en pesos— y en pesos está prohibido, porque no significa nada.
 
 ### El inventario se valúa por partida doble: sin IVA y con IVA
 
@@ -127,427 +213,145 @@ Compras quiere ver las dos cifras — **subtotal sin IVA y total con IVA**. No e
 preferencia entre dos opciones: son dos columnas del mismo reporte.
 
 La consecuencia es que **todo lugar donde se guarda un costo guarda el par**:
-`costoUnitario` (sin IVA) y `costoUnitarioConIva`. Aplica a `MovimientoPartida`,
-`CapaCosto` y `ConsumoCapa`.
+`costoUnitario` y `costoUnitarioConIva`, en `MovimientoPartida`, `CapaCosto` y
+`ConsumoCapa`. Se guardan las dos cifras en vez de calcular una a partir de la otra por dos
+razones. La tasa no siempre es 16 %: hay bienes a tasa 0 y podría haber compras en zona
+fronteriza al 8 %, y la tasa vive en la partida de la entrada (`tasaIva`), no en una
+constante del sistema. Y recalcular sobre miles de renglones acumula diferencias de
+redondeo que hacen que el reporte no cuadre contra la factura.
 
-Se guardan las dos cifras en vez de calcular una a partir de la otra por dos razones. La
-tasa no siempre es 16 %: hay bienes a tasa 0 y podría haber compras en zona fronteriza al
-8 %, y la tasa vive en la partida de la entrada (`tasaIva`), no en una constante del
-sistema. Y recalcular sobre miles de renglones acumula diferencias de redondeo que hacen
-que el reporte no cuadre contra la factura.
+### La regla de redondeo
 
-En las salidas ambos costos se heredan de las capas consumidas y se congelan, igual que
-todo lo demás.
+Faltaba y ya está escrita:
 
-### El inventario migrado arranca sin costo
+> **Se redondea a dos decimales por renglón, medio hacia arriba, y después se suman los
+> renglones.** Nunca al revés. Y **el redondeo ocurre en PostgreSQL, no en JavaScript**.
 
-El Excel actual no tiene ningún dato de dinero, y se decidió no capturar a mano los 225
-costos. Cada artículo adquiere costo la primera vez que se registre una entrada suya; hasta
-entonces figura sin valuar. Las existencias iniciales entran como `AJUSTE` sin capa.
+`ROUND(x, 2)` sobre `numeric` es exacto y su comportamiento está definido; el mismo cálculo
+en JavaScript pasa por punto flotante. Es la diferencia entre cuadrar contra la factura y
+no cuadrar por tres centavos.
 
-## 6. Usuarios y permisos
+El **costo unitario se guarda con cuatro decimales**, no con dos, y no es un descuido: mil
+tornillos que la factura cobra en $456.70 salen a $0.4567 cada uno. Con dos decimales serían
+$0.46, y mil piezas darían $460.00 — $3.30 de más, con el error creciendo justo donde vive
+el material barato de bodega. Los cuatro decimales no son un importe: son la constancia de
+a cuánto salió la pieza. Los importes —`subtotal`, `iva`, `total`— sí van a dos.
 
-Cinco roles y una bandera independiente:
+## 6. Cantidades enteras
 
-| Rol | Empresas y Estaciones | Resto de tablas | Movimientos |
-|---|---|---|---|
-| `SUPERADMIN` | CRUD | CRUD | Todo |
-| `ADMIN` | **Solo lectura** | CRUD | Todo |
-| `COMPRAS` | Lectura | Catálogos operativos | Registra entradas, salidas y traspasos |
-| `JEFE` | Lectura | Lectura | Consulta |
-| `GERENTE` | Lectura | Lectura | Solicita para su estación |
+`cantidad`, `cantidadInicial`, `cantidadRestante` y `stockMinimo` son `Int`. No hay medias
+piezas en una bodega, el Excel vigente no tiene columna de unidad y todo se maneja por
+pieza ([07 §3](07-datos-actuales.md)).
+
+De ahí se sigue que **`UnidadMedida` describe la presentación, no una magnitud**: una
+cubeta de 19 litros es *1 CUB*, no *19 LT*. Las unidades divisibles —litro, galón,
+kilogramo, metro— salieron del catálogo, porque conservarlas dejaba una trampa para el día
+que alguien intentara capturar aceite a granel. Para el material que se compra por caja y
+se cuenta por pieza está `Articulo.piezasPorCaja`, que convierte la captura: *3 CAJA* de 12
+se guardan como cantidad 36 y `capturaOriginal = "3 CAJA"`.
+
+## 7. Usuarios, permisos y el catálogo compartido
+
+**Clerk autentica; PostgreSQL autoriza.** El razonamiento completo está en
+[01 §3.6](01-arquitectura.md). Aquí, lo que eso significa para el modelo:
+
+`Usuario` no guarda contraseñas ni sesiones. Guarda el enlace con Clerk (`clerkUserId`), una
+copia del correo sincronizada por webhook, el rol, la bandera `puedeAutorizar` y el enlace
+opcional con una `Persona`.
+
+**Tres roles**, no cinco:
+
+| Rol          | Empresas y Estaciones | Resto de tablas      | Movimientos                                          |
+| ------------ | --------------------- | -------------------- | ---------------------------------------------------- |
+| `SUPERADMIN` | CRUD                  | CRUD                 | Todo                                                 |
+| `COMPRAS`    | Lectura               | Catálogos operativos | Registra entradas, salidas, traspasos y devoluciones |
+| `JEFE`       | Lectura               | Lectura              | Consulta                                             |
 
 `puedeAutorizar` es una **bandera del usuario, no un rol**: un Jefe puede tenerla y un
-Admin puede no tenerla. La lista de facultados cambia —el Lic. Hugo, la Lic. Andrea, el
-área de Compras y la C.P. Cosumel— y por eso no puede vivir en el código.
+usuario de Compras puede no tenerla. La lista de facultados cambia —el Lic. Hugo, la Lic.
+Andrea, el área de Compras y la C.P. Cosumel— y por eso no puede vivir en el código.
 
 Solo el `SUPERADMIN` escribe `Empresa` y `Estacion` porque viven en el esquema global que
 otros proyectos leen: un cambio ahí sale de BodeGasosur.
 
-## 7. Esquema Prisma
-
-```prisma
-// prisma/schema.prisma
-generator client {
-  provider = "prisma-client-js"
-}
-
-datasource db {
-  provider = "postgresql"
-  schemas  = ["public", "catalogo_gasosur"]
-}
-
-enum TipoMovimiento {
-  ENTRADA
-  SALIDA
-  TRASPASO
-  DEVOLUCION
-  AJUSTE
-
-  @@schema("public")
-}
-
-enum EstatusMovimiento {
-  BORRADOR
-  CONFIRMADO
-  SOLICITADA
-  AUTORIZADA
-  RECHAZADA
-  ENTREGADA
-  RECIBIDA
-  CANCELADO
-
-  @@schema("public")
-}
-
-enum Moneda {
-  MXN
-  USD
-
-  @@schema("public")
-}
-
-enum Rol {
-  SUPERADMIN
-  ADMIN
-  COMPRAS
-  JEFE
-  GERENTE
-
-  @@schema("public")
-}
-
-// ─────────── Catálogo global del grupo ───────────
-
-model Empresa {
-  id          String  @id @default(uuid(7)) @db.Uuid
-  razonSocial String
-  /// Normalizado: mayúsculas, sin guiones ni espacios.
-  rfc         String? @unique
-  activa      Boolean @default(true)
-
-  estaciones  Estacion[]
-  proveedores Proveedor[]
-
-  @@schema("catalogo_gasosur")
-}
-
-model Estacion {
-  id        String  @id @default(uuid(7)) @db.Uuid
-  numero    String  @unique              // ES05588
-  alias     String                       // "Magallanes"
-  empresaId String  @db.Uuid
-  telefono  String?
-  movil     String?
-  correo    String?
-  activa    Boolean @default(true)
-
-  empresa     Empresa      @relation(fields: [empresaId], references: [id])
-  movimientos Movimiento[]
-  usuarios    Usuario[]
-
-  @@schema("catalogo_gasosur")
-}
-
-// ─────────── Acceso ───────────
-
-model Usuario {
-  id             String  @id @default(uuid(7)) @db.Uuid
-  correo         String  @unique
-  hash           String
-  rol            Rol
-  /// Independiente del rol: quién puede autorizar salidas.
-  puedeAutorizar Boolean @default(false)
-  personaId      String? @unique @db.Uuid
-  /// Solo para el rol GERENTE.
-  estacionId     String? @db.Uuid
-  activo         Boolean @default(true)
-
-  persona  Persona?  @relation(fields: [personaId],  references: [id])
-  estacion Estacion? @relation(fields: [estacionId], references: [id])
-
-  @@schema("public")
-}
-
-// ─────────── Catálogos operativos ───────────
-
-model Bodega {
-  id        String  @id @default(uuid(7)) @db.Uuid
-  clave     String  @unique
-  nombre    String
-  ubicacion String?
-  activa    Boolean @default(true)
-
-  existencias        Existencia[]
-  capas              CapaCosto[]
-  movimientosOrigen  Movimiento[] @relation("BodegaOrigen")
-  movimientosDestino Movimiento[] @relation("BodegaDestino")
-
-  @@schema("public")
-}
-
-/// Administración, mantenimiento y despacho.
-model Area {
-  id     String  @id @default(uuid(7)) @db.Uuid
-  nombre String  @unique
-  activa Boolean @default(true)
-
-  movimientos Movimiento[]
-
-  @@schema("public")
-}
-
-model UnidadMedida {
-  id     String @id @default(uuid(7)) @db.Uuid
-  clave  String @unique              // PZA, CAJA, LT
-  nombre String
-
-  articulos Articulo[]
-
-  @@schema("public")
-}
-
-model CategoriaArticulo {
-  id     String @id @default(uuid(7)) @db.Uuid
-  nombre String @unique
-
-  articulos Articulo[]
-
-  @@schema("public")
-}
-
-model Articulo {
-  id          String  @id @default(uuid(7)) @db.Uuid
-  clave       String  @unique
-  /// Código del Excel anterior. Se conserva para que Compras rastree su histórico.
-  claveAnterior String?
-  descripcion String
-  unidadId    String  @db.Uuid
-  categoriaId String? @db.Uuid
-  /// Piezas que trae una caja. La existencia se lleva siempre en piezas.
-  piezasPorCaja Int?
-  stockMinimo Decimal @default(0) @db.Decimal(14, 3)
-  activo      Boolean @default(true)
-
-  unidad      UnidadMedida        @relation(fields: [unidadId],    references: [id])
-  categoria   CategoriaArticulo?  @relation(fields: [categoriaId], references: [id])
-  existencias Existencia[]
-  capas       CapaCosto[]
-  partidas    MovimientoPartida[]
-
-  @@index([descripcion])
-  @@schema("public")
-}
-
-model Proveedor {
-  id              String  @id @default(uuid(7)) @db.Uuid
-  /// Razón social y RFC viven en Empresa: 33 de los 137 proveedores son del propio grupo.
-  empresaId       String  @db.Uuid
-  nombreComercial String
-  contacto        String?
-  telefono        String?
-  correo          String?
-  giro            String?          // "Refacciones", "Papelería"…
-  activo          Boolean @default(true)
-
-  empresa     Empresa      @relation(fields: [empresaId], references: [id])
-  movimientos Movimiento[]
-
-  @@schema("public")
-}
-
-/// Quien solicita y quien autoriza. Se enlaza con Usuario cuando tiene acceso al sistema.
-model Persona {
-  id     String  @id @default(uuid(7)) @db.Uuid
-  nombre String
-  puesto String?
-  activa Boolean @default(true)
-
-  usuario     Usuario?
-  solicitados Movimiento[] @relation("Solicitante")
-  autorizados Movimiento[] @relation("Autorizador")
-
-  @@schema("public")
-}
-
-// ─────────── Operación ───────────
-
-model Movimiento {
-  id      String            @id @default(uuid(7)) @db.Uuid
-  folio   String?           @unique
-  tipo    TipoMovimiento
-  estatus EstatusMovimiento @default(BORRADOR)
-  fecha   DateTime                              // fecha real del hecho
-
-  bodegaOrigenId  String? @db.Uuid
-  bodegaDestinoId String? @db.Uuid
-  proveedorId     String? @db.Uuid              // ENTRADA
-  estacionId      String? @db.Uuid              // SALIDA y DEVOLUCION
-  areaId          String? @db.Uuid              // SALIDA
-  referencia      String?                       // factura o remisión
-  motivo          String?                       // AJUSTE
-
-  // Dinero: solo en ENTRADA.
-  moneda     Moneda?  @default(MXN)
-  tipoCambio Decimal? @db.Decimal(14, 6)
-  subtotal   Decimal? @db.Decimal(14, 2)
-  iva        Decimal? @db.Decimal(14, 2)
-  total      Decimal? @db.Decimal(14, 2)
-
-  solicitadoPorId String? @db.Uuid
-  autorizadoPorId String? @db.Uuid
-  /// Texto libre: puede ser un ingeniero, un gerente, una paquetería o "Recep. Magallanes".
-  entregadoA      String?
-
-  /// SALIDA que espera retorno del material.
-  esPrestamo Boolean @default(false)
-  /// DEVOLUCION que cierra una salida previa.
-  devuelveAId String? @db.Uuid
-
-  observaciones     String?
-  motivoCancelacion String?
-  cancelaAId        String? @unique @db.Uuid
-
-  createdAt DateTime @default(now())            // fecha de captura
-  updatedAt DateTime @updatedAt
-
-  partidas      MovimientoPartida[]
-  capas         CapaCosto[]
-  bodegaOrigen  Bodega?     @relation("BodegaOrigen",  fields: [bodegaOrigenId],  references: [id])
-  bodegaDestino Bodega?     @relation("BodegaDestino", fields: [bodegaDestinoId], references: [id])
-  proveedor     Proveedor?  @relation(fields: [proveedorId], references: [id])
-  estacion      Estacion?   @relation(fields: [estacionId],  references: [id])
-  area          Area?       @relation(fields: [areaId],      references: [id])
-  solicitadoPor Persona?    @relation("Solicitante", fields: [solicitadoPorId], references: [id])
-  autorizadoPor Persona?    @relation("Autorizador", fields: [autorizadoPorId], references: [id])
-  devuelveA     Movimiento? @relation("Devolucion",  fields: [devuelveAId], references: [id])
-  devoluciones  Movimiento[] @relation("Devolucion")
-  cancelaA      Movimiento? @relation("Cancelacion", fields: [cancelaAId],  references: [id])
-  canceladoPor  Movimiento? @relation("Cancelacion")
-
-  @@index([tipo, estatus, fecha])
-  @@index([estacionId, fecha])
-  @@schema("public")
-}
-
-model MovimientoPartida {
-  id           String  @id @default(uuid(7)) @db.Uuid
-  movimientoId String  @db.Uuid
-  articuloId   String  @db.Uuid
-  /// Siempre en la unidad base (pieza).
-  cantidad     Decimal @db.Decimal(14, 3)
-  /// Lo que se capturó: 3 cajas de 12 se guardan como cantidad 36 y aquí "3 CAJA".
-  capturaOriginal String?
-  /// Sin IVA. ENTRADA: costo de factura. SALIDA: heredado de las capas consumidas.
-  costoUnitario       Decimal  @db.Decimal(14, 4)
-  /// Con IVA. Se guarda, no se recalcula: la tasa varía y el redondeo se acumula.
-  costoUnitarioConIva Decimal  @db.Decimal(14, 4)
-  /// Solo en ENTRADA: 0.1600, 0.0800 o 0 según el bien. Alimenta el par de arriba.
-  tasaIva             Decimal? @db.Decimal(5, 4)
-  /// Se anota, no se rastrea.
-  numeroSerie   String?
-  observaciones String?
-
-  movimiento Movimiento    @relation(fields: [movimientoId], references: [id], onDelete: Cascade)
-  articulo   Articulo      @relation(fields: [articuloId],   references: [id])
-  consumos   ConsumoCapa[]
-
-  @@unique([movimientoId, articuloId])
-  @@index([articuloId])
-  @@schema("public")
-}
-
-/// Una compra concreta con su costo. Es la unidad del costeo PEPS.
-model CapaCosto {
-  id           String   @id @default(uuid(7)) @db.Uuid
-  bodegaId     String   @db.Uuid
-  articuloId   String   @db.Uuid
-  movimientoId String   @db.Uuid              // la ENTRADA que la creó
-  fecha        DateTime                       // ordena el consumo PEPS
-  cantidadInicial  Decimal @db.Decimal(14, 3)
-  cantidadRestante Decimal @db.Decimal(14, 3)
-  /// Ambos en pesos, ya convertidos al tipo de cambio de la entrada.
-  costoUnitario       Decimal @db.Decimal(14, 4)   // sin IVA
-  costoUnitarioConIva Decimal @db.Decimal(14, 4)   // con IVA
-
-  bodega     Bodega        @relation(fields: [bodegaId],     references: [id])
-  articulo   Articulo      @relation(fields: [articuloId],   references: [id])
-  movimiento Movimiento    @relation(fields: [movimientoId], references: [id])
-  consumos   ConsumoCapa[]
-
-  @@index([bodegaId, articuloId, fecha])
-  @@schema("public")
-}
-
-/// De qué capa salió cada pieza de una salida. Una partida puede tocar varias capas.
-model ConsumoCapa {
-  id            String  @id @default(uuid(7)) @db.Uuid
-  partidaId     String  @db.Uuid
-  capaId        String  @db.Uuid
-  cantidad      Decimal @db.Decimal(14, 3)
-  /// Congelados al momento de la salida.
-  costoUnitario       Decimal @db.Decimal(14, 4)   // sin IVA
-  costoUnitarioConIva Decimal @db.Decimal(14, 4)   // con IVA
-
-  partida MovimientoPartida @relation(fields: [partidaId], references: [id], onDelete: Cascade)
-  capa    CapaCosto         @relation(fields: [capaId],    references: [id])
-
-  @@schema("public")
-}
-
-/// Proyección: siempre recalculable desde los movimientos confirmados.
-model Existencia {
-  bodegaId      String   @db.Uuid
-  articuloId    String   @db.Uuid
-  cantidad      Decimal  @default(0) @db.Decimal(14, 3)
-  actualizadoEn DateTime @updatedAt
-
-  bodega   Bodega   @relation(fields: [bodegaId],   references: [id])
-  articulo Articulo @relation(fields: [articuloId], references: [id])
-
-  @@id([bodegaId, articuloId])
-  @@schema("public")
-}
-
-model Folio {
-  tipo      TipoMovimiento @id
-  prefijo   String                          // E, S, T, D, A
-  siguiente Int            @default(1)
-
-  @@schema("public")
-}
+**Y esos otros proyectos no leen las tablas.** Leen vistas versionadas, con un rol dedicado
+de solo lectura:
+
+```sql
+CREATE VIEW catalogo_gasosur.v_estacion_v1 AS
+  SELECT id, numero, alias, "empresaId", activa FROM catalogo_gasosur."Estacion";
+
+CREATE ROLE lector_catalogo NOLOGIN;
+GRANT SELECT ON catalogo_gasosur.v_estacion_v1 TO lector_catalogo;
 ```
 
-## 8. Qué cambió respecto a la demo
+Con eso se puede renombrar una columna física sin romper software ajeno —que es lo que
+[08 §10](08-versionado-y-despliegue.md) anticipa que hará falta—, la escritura es imposible
+por construcción y no por acuerdo, y ninguna contraseña queda en el repositorio: el rol es
+de grupo y cada proyecto entra con su propio usuario.
+
+Importa además una revocación explícita sobre `public`. Como la llave foránea entre
+esquemas se conservó, el catálogo compartido vive **dentro de la base de BodeGasosur**: un
+proyecto hermano comprometido tiene una conexión abierta hacia aquí, y lo único que lo
+separa del libro contable son esos permisos.
+
+## 8. Qué queda registrado
+
+Dos tablas responden dos preguntas distintas, y por eso son dos:
+
+- **`Bitacora`** — *«¿quién cambió este dato?»*. Append-only, con `antes` y `despues` en
+  `jsonb`. La escribe un **trigger**, no los servicios: la extensión de Prisma conocería al
+  usuario pero no vería lo que escriben `prisma studio`, los scripts de migración ni una
+  consulta directa. El actor llega por variable de sesión (`app.usuario_id`), y cuando
+  nadie la fijó, `app.origen` dice quién escribió.
+- **`EventoAcceso`** — *«quién entró»*, incluido quien tocó la puerta y no abrió: una
+  identidad de Clerk sin fila en `Usuario` deja `usuarioId` nulo y `clerkUserId` lleno.
+
+Mezclarlas habría llenado el libro de cambios de ruido de inicios de sesión hasta volverlo
+inservible justo cuando alguien lo necesitara.
+
+`EventoWebhook` completa el juego: las entregas de Clerk llegan al menos una vez, así que
+se guarda el identificador de la entrega **antes** de procesarla y en la misma transacción.
+Si ya estaba, no se vuelve a procesar; si la transacción falla, el reintento la recupera.
+
+## 9. Qué cambió respecto a la demo
 
 | Cambio | Origen |
 |---|---|
-| `UUIDv7` nativo en vez de `cuid()` texto | [01-arquitectura](01-arquitectura.md) §3.5 |
-| `Empresa` y `Estacion` en esquema global; el RFC sale de la estación | [06-estaciones](06-estaciones.md) |
-| `Usuario`, `Rol` y la bandera `puedeAutorizar` | D3 y el requisito #1 |
+| `UUIDv7` nativo en vez de `cuid()` texto | [01](01-arquitectura.md) §3.5 |
+| `Empresa` y `Estacion` en esquema global; el RFC sale de la estación | [06](06-estaciones.md) |
+| `Usuario` enlazado a Clerk, tres roles y la bandera `puedeAutorizar` | D3, el requisito #1 y **F1** |
 | Costeo por capas PEPS en vez de promedio ponderado | E1, confirmado por Compras |
-| Cada costo se guarda por partida doble: sin IVA y con IVA | E3 |
-| `moneda`, `tipoCambio`, `subtotal`, `iva`, `total` | E3 y E4 |
+| Cada costo por partida doble: sin IVA y con IVA, y ambos nulables | E3 y **A1** |
+| `moneda`, `tipoCambio`, `subtotal`, `iva`, `total`, con sus `CHECK` | E3, E4 y los menores |
 | `piezasPorCaja` y `capturaOriginal` | B4 |
 | `numeroSerie` como texto, sin rastreo | B5 |
 | Se eliminan `transportista` y `vehiculo`; `recibidoPor` pasa a `entregadoA` libre | D4 |
 | Tipo `DEVOLUCION` y bandera `esPrestamo` | D7 y B6 |
 | Estados de salida con autorización y confirmación de recepción | D2 y D6 |
-| `claveAnterior` en el artículo | Los 41 códigos que chocan entre bodegas |
 | `Proveedor` apunta a `Empresa` | 33 de 137 proveedores son del propio grupo |
+| `autorizadoPor` apunta a `Usuario`, con `autorizadoEn` y escritura única | **A2** |
+| Actor y marca de tiempo por transición, más `Bitacora` | **A3** |
+| `fecha` como `@db.Date`; los instantes con `@db.Timestamptz(3)` | **E4** |
+| Cantidades enteras y unidad como presentación | Decisión de la fase 2 |
+| `CapaCosto.origenId` y `fechaOriginal` | **F2** |
+| Claves de negocio inmutables; `Articulo.clave` generada por secuencia | **F4** |
+| Vistas versionadas y rol de solo lectura para `catalogo_gasosur` | **C3** |
+| **Se descartó `claveAnterior`** | Decisión posterior a la auditoría: la traducción de los códigos viejos se resuelve en la migración de datos, no en la base |
 
-## 9. Consultas que el modelo debe resolver
+## 10. Consultas que el modelo debe resolver
 
 | Pregunta de Compras | Cómo se resuelve |
 |---|---|
-| ¿Cuánto material mandamos a la estación 4 este mes? | Salidas por `estacionId` y rango de fecha; sumar `cantidad × costoUnitario` |
+| ¿Cuánto material mandamos a la estación 4 este mes? | Salidas por `estacionId` y rango de fecha; sumar el importe redondeado por renglón |
 | ¿Qué tengo en la bodega central? | `Existencia` por `bodegaId` |
 | ¿Qué está por debajo del mínimo? | `Existencia.cantidad < Articulo.stockMinimo` |
-| ¿Quién autorizó esta salida y quién se la llevó? | `autorizadoPor` y `entregadoA` |
+| ¿Quién autorizó esta salida, cuándo, y quién se la llevó? | `autorizadoPor`, `autorizadoEn` y `entregadoA` |
 | ¿Cuál es el historial de este filtro? | Kardex: partidas del artículo por fecha, con saldo corrido |
-| ¿Cuánto vale el inventario? | Sobre las capas: `SUM(cantidadRestante × costoUnitario)` sin IVA y `SUM(cantidadRestante × costoUnitarioConIva)` con IVA |
+| ¿Cuánto vale el inventario? | Sobre las capas: `SUM(cantidadRestante × costoUnitario)` sin IVA y con IVA — **más el conteo de piezas sin valuar**, que son las capas de costo nulo |
 | ¿Qué se gastó por estación este año? | Salidas agrupadas por `estacionId` |
 | ¿Con qué frecuencia se pide esta pieza? | Conteo de partidas del artículo por periodo |
 | ¿Qué salidas siguen sin confirmar recepción? | Salidas en estatus `ENTREGADA` |
 | ¿Qué material prestado no ha vuelto? | Salidas con `esPrestamo` sin devolución que las cierre |
+| ¿Quién le quitó el permiso de autorizar a la C.P. Cosumel? | `Bitacora`, tabla `Usuario`, comparando `antes` y `despues` |
 | El reporte de los viernes | Entradas, salidas y stock final del periodo |

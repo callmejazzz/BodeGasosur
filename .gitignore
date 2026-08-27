@@ -50,3 +50,6 @@ next-env.d.ts
 
 # metadatos de Finder
 .DS_Store
+
+# bóveda personal de Obsidian, no del proyecto
+.obsidian/

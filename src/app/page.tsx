@@ -6,13 +6,19 @@ import { prisma } from "@/lib/db";
 import { contarCatalogos } from "@/lib/catalogos/repos";
 import { cantidad } from "@/lib/utils";
 
+// El orden vigente es el de fases-siguientes.md, que reemplazó al plan original
+// de docs/04-plan-demo.md. Si las dos listas se separan, esta es la que miente:
+// el plan vive en el repositorio, no aquí.
 const FASES = [
-  { nombre: "Fase 0 — Cimientos", detalle: "Next.js, PostgreSQL, Prisma y layout base", estado: "lista" },
-  { nombre: "Fase 1 — Catálogos", detalle: "Alta y edición de los ocho catálogos, con datos sembrados", estado: "lista" },
-  { nombre: "Fase 2 — Entradas", detalle: "Captura de entradas de proveedor y costo promedio", estado: "pendiente" },
-  { nombre: "Fase 3 — Salidas", detalle: "Salidas a estación y área, con comprobante imprimible", estado: "pendiente" },
-  { nombre: "Fase 4 — Traspasos y ajustes", detalle: "Movimientos entre bodegas, ajustes y cancelaciones", estado: "pendiente" },
-  { nombre: "Fase 5 — Consultas", detalle: "Existencias, kardex y reportes por estación", estado: "pendiente" },
+  { nombre: "Fase 0 y 1 — Cimientos y catálogos", detalle: "Next.js, PostgreSQL, Prisma y los catálogos con datos sembrados", estado: "lista" },
+  { nombre: "Fase 2 — Cimientos corregidos", detalle: "Modelo de datos con los invariantes escritos en la base", estado: "lista" },
+  { nombre: "Fase 3 — Usuarios y permisos", detalle: "Acceso con Clerk, roles y la facultad de autorizar", estado: "pendiente" },
+  { nombre: "Fase 4 — Migración de catálogos", detalle: "Empresas, estaciones, proveedores, artículos y existencias reales", estado: "pendiente" },
+  { nombre: "Fase 5 — Entradas", detalle: "Compras con moneda, IVA y capas de costo PEPS", estado: "pendiente" },
+  { nombre: "Fase 6 — Salidas", detalle: "Solicitud, autorización, entrega y confirmación de recepción", estado: "pendiente" },
+  { nombre: "Fase 7 — Traspasos, devoluciones y conteo", detalle: "Movimientos entre bodegas, préstamos e inventario físico", estado: "pendiente" },
+  { nombre: "Fase 8 — Reportes", detalle: "Reporte de los viernes, kardex, gasto por estación y exportación", estado: "pendiente" },
+  { nombre: "Fase 9 — Acabado", detalle: "Tablero, alertas de mínimos y diseño en celular", estado: "pendiente" },
 ] as const;
 
 function Metrica({ etiqueta, valor, href }: { etiqueta: string; valor: number; href: string }) {

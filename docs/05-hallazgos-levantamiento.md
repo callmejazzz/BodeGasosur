@@ -155,11 +155,18 @@ de usuarios donde se marque quién puede autorizar.
 
 El sistema queda con **cinco roles**: Superadmin, Admin, Compras, Jefe y Gerente. La
 diferencia entre los dos primeros es que solo el Superadmin puede escribir en `Empresa` y
-`Estacion` — el Admin las consulta. La matriz completa está en
-[`fases-siguientes.md`](../fases-siguientes.md), fase 3.
+`Estacion` — el Admin las consulta.
 
 La facultad de autorizar es **independiente del rol**: es una bandera del usuario, así que
 un Jefe puede tenerla y un Admin puede no tenerla.
+
+> **Revisado después.** La auditoría de arquitectura (**F1**) mostró que cinco roles es más
+> de lo que este levantamiento sostiene, y se recortó a tres: **Superadmin, Compras y
+> Jefe**. `ADMIN` se distinguía solo por dos tablas —eso es un permiso, no un rol— y
+> `GERENTE` habría exigido administrar unas cuarenta cuentas para una solicitud que, según
+> **D1** de esta misma sección, llega por WhatsApp y captura Compras. La bandera *puede
+> autorizar* se conserva tal cual: es lo que este hallazgo hizo obligatorio. La matriz
+> vigente está en [`fases-siguientes.md`](../fases-siguientes.md), fase 3.
 
 **D4 simplifica la salida.** Se eliminan del modelo `transportista` y `vehiculo`. Lo que
 sí se conserva es **quién se lleva el material**, que es lo que registran hoy.

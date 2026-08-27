@@ -3,7 +3,11 @@
 import { useActionState } from "react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Campo, Checkbox, Input, Select } from "@/components/ui/campos";
-import type { CatalogoDef } from "@/lib/catalogos/definiciones";
+import {
+  campoSeCaptura,
+  type CatalogoDef,
+  type ModoFormulario,
+} from "@/lib/catalogos/definiciones";
 import {
   ESTADO_INICIAL,
   type EstadoFormulario,
@@ -13,12 +17,14 @@ import type { Opcion } from "@/lib/catalogos/repos";
 
 export function FormularioCatalogo({
   def,
+  modo,
   opciones,
   valores,
   accion,
   textoGuardar,
 }: {
   def: CatalogoDef;
+  modo: ModoFormulario;
   opciones: Record<string, Opcion[]>;
   valores: ValoresFormulario;
   accion: (estado: EstadoFormulario, formData: FormData) => Promise<EstadoFormulario>;
@@ -44,6 +50,33 @@ export function FormularioCatalogo({
         {def.campos.map((campo) => {
           const error = estado.errores[campo.nombre];
           const valor = actuales[campo.nombre];
+
+          // La clave que genera PostgreSQL y las claves de negocio ya dadas de
+          // alta se muestran, pero no se capturan: un input deshabilitado no
+          // viaja en el FormData, así que la pantalla no puede ni intentar
+          // escribir lo que la base va a rechazar.
+          if (!campoSeCaptura(campo, modo)) {
+            const vacio = valor === "" || valor === undefined || valor === null;
+            return (
+              <Campo
+                key={campo.nombre}
+                etiqueta={campo.etiqueta}
+                ayuda={
+                  campo.generado
+                    ? "La asigna el sistema y no se puede cambiar."
+                    : "Se define al dar de alta y ya no se puede cambiar."
+                }
+              >
+                <Input
+                  disabled
+                  readOnly
+                  value={vacio ? "" : String(valor)}
+                  placeholder={campo.generado ? "Se asignará al guardar" : undefined}
+                  className="bg-surface-muted text-muted"
+                />
+              </Campo>
+            );
+          }
 
           if (campo.tipo === "booleano") {
             return (

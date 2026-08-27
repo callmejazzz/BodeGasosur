@@ -121,11 +121,28 @@ Aquí sí aparece una rama larga, y la justifica **desacoplar «ya lo mezclé» 
 lo está usando»**, no mantener versiones viejas en paralelo, que no es un caso de este
 proyecto.
 
-## 8. Despliegue: Vercel Pro + Supabase Pro
+## 8. Despliegue: Vercel Pro + Supabase Pro *(reabierto)*
 
 **Por el momento el sistema es local** —`localhost` y PostgreSQL en Docker, ver
 [01-arquitectura.md](01-arquitectura.md) §5— y así se queda mientras dure el desarrollo. La
 migración ocurre cuando Gasosur apruebe el sistema, en `v1.0.0`.
+
+> **La auditoría reabrió esta decisión (`D1`) y sigue abierta.** El argumento es que para
+> diez usuarios en una oficina de Acapulco, el serverless cobra complejidad —el pooler, dos
+> URLs de conexión, la advertencia de IPv6, Skew Protection, arranques en frío sobre
+> transacciones con locks y `migrate deploy` metido en el build— a cambio de un escalado
+> elástico y una presencia global que nadie necesita. Media sección de las que siguen existe
+> para administrar complejidad que el propio despliegue introduce.
+>
+> La alternativa es un contenedor único —Railway, Fly o un VPS con Docker Compose— con
+> `next start`, conservando Supabase por sus respaldos administrados si conviene. La
+> arquitectura ya presume portabilidad; ejercerla ahora es gratis y después no.
+>
+> Y una pregunta que conviene hacerle a Gasosur antes de la `v1.0.0`, no después: si un
+> libro contable con costos y proveedores puede vivir con un proveedor en Estados Unidos, o
+> lo quieren en un servidor del grupo.
+>
+> Lo que sigue describe la opción original, que continúa siendo válida si se confirma.
 
 | Pieza | Elección |
 |---|---|
@@ -133,10 +150,7 @@ migración ocurre cuando Gasosur apruebe el sistema, en `v1.0.0`.
 | Base de datos | Supabase Pro — el gratuito pausa el proyecto por inactividad y no incluye respaldos |
 | Conexión | Connection pooler de Supabase, obligatorio con funciones serverless |
 
-Supabase es PostgreSQL de verdad, lo cual importa porque el esquema `catalogo_gasosur` está
-pensado para que **otros proyectos del grupo lo lean**
-([06-estaciones.md](06-estaciones.md) §3). Eso exige una base a la que se pueda conectar
-cualquier cliente Postgres.
+Supabase es PostgreSQL de verdad, lo cual importa porque el esquema `catalogo_gasosur` está pensado para que **otros proyectos del grupo lo lean** ([06-estaciones.md](06-estaciones.md) §3). Eso exige una base a la que se pueda conectar cualquier cliente Postgres.
 
 ### Lo que hay que dejar bien configurado el día del despliegue
 
@@ -166,11 +180,20 @@ varias idas y vueltas a la base de datos.
 
 ### La seguridad no se delega
 
-Supabase ofrece autenticación y RLS, pero **la lógica de permisos vive en BodeGasosur**:
-los cinco roles y la bandera *puede autorizar* de la fase 3. Prisma se conecta con un rol
-privilegiado, así que RLS no protege nada por sí solo. De Supabase se usa el PostgreSQL
-administrado con respaldos; la autorización se sostiene en el código, verificada en la capa
-de servicios.
+La autenticación se delega a **Clerk**, pero **la autorización vive en BodeGasosur**: los
+tres roles y la bandera *puede autorizar*, leídos de PostgreSQL en cada petición
+([01 §3.6](01-arquitectura.md)). Ningún proveedor externo decide quién puede autorizar una
+salida, y por eso quitarle el permiso a alguien surte efecto de inmediato.
+
+Si se conserva Supabase, su autenticación y su RLS no entran en esa decisión: Prisma se
+conecta con un rol privilegiado, así que RLS no protegería nada por sí solo. De Supabase se
+usaría el PostgreSQL administrado con respaldos.
+
+Lo que sí se delega a la base son los **invariantes** —`CHECK` y triggers—, y esa es la
+diferencia con la versión anterior de esta sección: la autorización se verifica en
+`accionProtegida`, pero no *depende* de que alguien se acuerde de llamarla, porque la base
+rechaza por su cuenta una existencia negativa o una autorización de quien no está
+facultado.
 
 ## 9. La versión tiene que verse en la aplicación
 
@@ -181,12 +204,20 @@ Sin eso, un reporte de Compras es inaccionable: no hay forma de saber si quien r
 viendo lo último o una pestaña abierta desde hace tres días. Es la única pieza de esta
 política que el usuario final ve, y es la que la hace útil en soporte.
 
-## 10. Pendiente: versionar el contrato compartido
+## 10. El contrato compartido, resuelto
 
-El día que otro proyecto de Gasosur lea el esquema `catalogo_gasosur`, lo que necesitará
+El día que otro proyecto de Gasosur lea el esquema `catalogo_gasosur`, lo que necesita
 versión propia no es la interfaz sino **el contrato**: qué columnas tienen `Empresa` y
 `Estacion` y qué garantías se dan sobre ellas. Renombrar una columna ahí rompe software
 ajeno y sería MAYOR aunque en BodeGasosur no se note nada.
 
-No hace falta formalizarlo todavía —no hay consumidores— pero conviene tenerlo presente al
-construir la fase 2, que es donde nace ese esquema.
+**Quedó resuelto en la fase 2, y sin trabajo extra.** Los otros proyectos no leen las
+tablas: leen **vistas versionadas** —`v_empresa_v1`, `v_estacion_v1`— con un rol dedicado
+de solo lectura ([02 §7](02-modelo-de-datos.md)). Con eso, renombrar una columna física no
+rompe a nadie; cuando un consumidor necesite un campo que la `v1` no expone, nace una `v2`
+y la `v1` sigue viva.
+
+El contrato pasa a versionarse por su cuenta, así que un cambio en `catalogo_gasosur` ya no
+arrastra por fuerza una MAYOR de BodeGasosur: solo la arrastraría retirar una vista que
+alguien todavía use. Y la escritura desde fuera es imposible por construcción, no por
+acuerdo.

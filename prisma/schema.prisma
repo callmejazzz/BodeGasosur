@@ -1,5 +1,19 @@
 // BodeGasosur — modelo de datos
-// Ver docs/02-modelo-de-datos.md para el razonamiento detrás de este esquema.
+//
+// Ver docs/02-modelo-de-datos.md para el razonamiento detrás de este esquema y
+// docs/09-auditoria.md para los hallazgos que lo corrigieron.
+//
+// Dos convenciones que este archivo sostiene y que conviene conocer antes de leerlo:
+//
+//   1. `fecha…` es siempre @db.Date — el día del hecho, sin hora ni zona.
+//      `…En` / `…At` es siempre @db.Timestamptz(3) — un instante.
+//      Prisma genera TIMESTAMP sin zona por omisión, así que la zona se escribe a mano.
+//
+//   2. Las cantidades son piezas enteras. No hay medias piezas en una bodega, y con
+//      enteros el invariante 9 se verifica por igualdad exacta, sin tolerancias.
+//
+// Los invariantes que la base hace cumplir no viven aquí: viven en prisma/sql/,
+// porque Prisma no sabe expresarlos. Se arman dentro de la migración.
 
 generator client {
   provider = "prisma-client-js"
@@ -7,223 +21,542 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  schemas  = ["public", "catalogo_gasosur"]
 }
+
+// ─────────────────────────────── Enumeraciones ───────────────────────────────
 
 enum TipoMovimiento {
   ENTRADA
   SALIDA
   TRASPASO
+  DEVOLUCION
   AJUSTE
+
+  @@schema("public")
 }
 
+/// Dos máquinas de estados en un solo enum. Qué combinación de (tipo, estatus) es
+/// legal lo decide un CHECK; qué transición es legal lo decide la capa de servicios.
 enum EstatusMovimiento {
   BORRADOR
   CONFIRMADO
+  SOLICITADA
+  AUTORIZADA
+  RECHAZADA
+  ENTREGADA
+  RECIBIDA
   CANCELADO
+
+  @@schema("public")
 }
 
-// ─────────────────────────── Catálogos ───────────────────────────
+enum Moneda {
+  MXN
+  USD
 
-model Bodega {
-  id        String  @id @default(cuid())
-  clave     String  @unique
-  nombre    String
-  ubicacion String?
-  activa    Boolean @default(true)
+  @@schema("public")
+}
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+/// Tres roles. GERENTE con autoservicio queda para cuando Compras lo pida.
+/// La facultad de autorizar no es un rol: es Usuario.puedeAutorizar.
+enum Rol {
+  SUPERADMIN
+  COMPRAS
+  JEFE
 
-  existencias        Existencia[]
-  movimientosOrigen  Movimiento[] @relation("BodegaOrigen")
-  movimientosDestino Movimiento[] @relation("BodegaDestino")
+  @@schema("public")
+}
+
+enum AccionBitacora {
+  INSERTAR
+  ACTUALIZAR
+  ELIMINAR
+
+  @@schema("public")
+}
+
+enum TipoEventoAcceso {
+  SESION_INICIADA
+  SESION_TERMINADA
+  SESION_REVOCADA
+  /// Sesión válida en Clerk sin fila en Usuario: alguien tocó la puerta y no abrió.
+  ACCESO_DENEGADO
+
+  @@schema("public")
+}
+
+// ───────────────────────── Catálogo global del grupo ─────────────────────────
+//
+// Otros proyectos de Gasosur leen este esquema, pero nunca estas tablas: leen las
+// vistas versionadas v_empresa_v1 y v_estacion_v1 con el rol lector_catalogo.
+
+model Empresa {
+  id          String  @id @default(uuid(7)) @db.Uuid
+  razonSocial String
+  /// Normalizado: mayúsculas, sin guiones ni espacios.
+  rfc         String? @unique
+  activa      Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  estaciones  Estacion[]
+  proveedores Proveedor[]
+
+  @@schema("catalogo_gasosur")
 }
 
 model Estacion {
-  id        String  @id @default(cuid())
+  id        String  @id @default(uuid(7)) @db.Uuid
+  /// Clave de negocio, en la URL e inmutable después del alta. Ej. ES05588.
+  numero    String  @unique
+  alias     String
+  empresaId String  @db.Uuid
+  telefono  String?
+  movil     String?
+  correo    String?
+  activa    Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  empresa     Empresa      @relation(fields: [empresaId], references: [id])
+  movimientos Movimiento[]
+
+  @@index([empresaId])
+  @@schema("catalogo_gasosur")
+}
+
+// ──────────────────────────────── Acceso ─────────────────────────────────────
+//
+// Clerk responde «quién eres». Esta tabla responde «qué puedes hacer», y esa
+// respuesta se lee de la base en cada petición: nunca viaja dentro de un token.
+// Es lo que hace que quitar puedeAutorizar surta efecto de inmediato.
+
+model Usuario {
+  id             String  @id @default(uuid(7)) @db.Uuid
+  /// Identidad en Clerk. Único enlace con el proveedor de autenticación.
+  clerkUserId    String  @unique
+  /// Copia sincronizada por webhook. Clerk es la fuente de verdad.
+  correo         String  @unique
+  rol            Rol
+  /// Independiente del rol. Nunca se copia a los claims de Clerk.
+  puedeAutorizar Boolean @default(false)
+  personaId      String? @unique @db.Uuid
+  activo         Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  persona Persona? @relation(fields: [personaId], references: [id])
+
+  bitacora            Bitacora[]
+  eventosAcceso       EventoAcceso[]
+  movimientosCreados     Movimiento[] @relation("Creador")
+  movimientosConfirmados Movimiento[] @relation("Confirmador")
+  movimientosAutorizados Movimiento[] @relation("Autorizador")
+  movimientosRechazados  Movimiento[] @relation("Rechazador")
+  movimientosEntregados  Movimiento[] @relation("Entregador")
+  movimientosRecibidos   Movimiento[] @relation("Receptor")
+  movimientosCancelados  Movimiento[] @relation("Cancelador")
+
+  @@schema("public")
+}
+
+/// Quién entró, cuándo, y quién intentó entrar sin poder. Separada de Bitacora a
+/// propósito: son preguntas distintas y mezclarlas vuelve ilegible el libro de cambios.
+model EventoAcceso {
+  id          String           @id @default(uuid(7)) @db.Uuid
+  /// Nulo cuando la identidad de Clerk no tiene Usuario local.
+  usuarioId   String?          @db.Uuid
+  /// Siempre presente: es lo único que identifica a quien no tiene cuenta aquí.
+  clerkUserId String
+  tipo        TipoEventoAcceso
+  ocurridoEn  DateTime         @default(now()) @db.Timestamptz(3)
+  ip          String?
+  agente      String?
+
+  usuario Usuario? @relation(fields: [usuarioId], references: [id])
+
+  @@index([usuarioId, ocurridoEn])
+  @@index([ocurridoEn])
+  @@schema("public")
+}
+
+/// Entregas de webhook ya vistas. Clerk entrega al menos una vez: se inserta primero
+/// y solo se procesa si la inserción no chocó, todo en la misma transacción.
+model EventoWebhook {
+  eventoId    String    @id
+  tipo        String
+  payload     Json
+  recibidoEn  DateTime  @default(now()) @db.Timestamptz(3)
+  procesadoEn DateTime? @db.Timestamptz(3)
+
+  @@schema("public")
+}
+
+/// Append-only. La escribe un trigger, no los servicios: escribirla a mano garantiza
+/// que se olvide justo en la operación que importaba. El actor sale de la variable
+/// de sesión app.usuario_id; cuando nadie la fijó, app.origen dice quién escribió.
+model Bitacora {
+  id         String         @id @default(uuid(7)) @db.Uuid
+  tabla      String
+  registroId String
+  accion     AccionBitacora
+  usuarioId  String?        @db.Uuid
+  /// "clerk-webhook", "migracion-datos"… Nulo cuando escribió un usuario.
+  origen     String?
+  antes      Json?
+  despues    Json?
+  ocurridoEn DateTime       @default(now()) @db.Timestamptz(3)
+
+  usuario Usuario? @relation(fields: [usuarioId], references: [id])
+
+  @@index([tabla, registroId, ocurridoEn])
+  @@index([usuarioId, ocurridoEn])
+  @@schema("public")
+}
+
+// ───────────────────────── Catálogos operativos ──────────────────────────────
+
+model Bodega {
+  id        String  @id @default(uuid(7)) @db.Uuid
+  /// Clave de negocio, en la URL e inmutable después del alta.
   clave     String  @unique
   nombre    String
   ubicacion String?
   activa    Boolean @default(true)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
-  movimientos Movimiento[]
+  existencias        Existencia[]
+  capas              CapaCosto[]
+  movimientosOrigen  Movimiento[] @relation("BodegaOrigen")
+  movimientosDestino Movimiento[] @relation("BodegaDestino")
+
+  @@schema("public")
 }
 
-/// Área destino dentro de la estación: Despacho, Tienda, Mantenimiento, Administración…
+/// Administración, mantenimiento y despacho. Área destino de una salida.
 model Area {
-  id     String  @id @default(cuid())
+  id     String  @id @default(uuid(7)) @db.Uuid
   nombre String  @unique
   activa Boolean @default(true)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   movimientos Movimiento[]
+
+  @@schema("public")
 }
 
+/// Presentación en la que se cuenta el artículo, no una magnitud: una cubeta de
+/// 19 litros es 1 CUB, no 19 LT. La existencia se lleva siempre en piezas enteras.
 model UnidadMedida {
-  id     String  @id @default(cuid())
+  id     String  @id @default(uuid(7)) @db.Uuid
   clave  String  @unique
   nombre String
   activa Boolean @default(true)
 
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
   articulos Articulo[]
+
+  @@schema("public")
 }
 
 model CategoriaArticulo {
-  id     String  @id @default(cuid())
+  id     String  @id @default(uuid(7)) @db.Uuid
   nombre String  @unique
   activa Boolean @default(true)
 
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
   articulos Articulo[]
+
+  @@schema("public")
 }
 
 model Articulo {
-  id          String  @id @default(cuid())
-  clave       String  @unique
-  descripcion String
-  unidadId    String
-  categoriaId String?
-  stockMinimo Decimal @default(0) @db.Decimal(14, 3)
-  activo      Boolean @default(true)
+  id            String  @id @default(uuid(7)) @db.Uuid
+  /// La asigna el sistema: ART-00001, ART-00002… Sin prefijo de categoría, porque
+  /// una clave que codifica la categoría miente en cuanto el artículo se recategoriza.
+  /// Inmutable después del alta, sin excepciones.
+  clave         String  @unique @default(dbgenerated("('ART-' || lpad(nextval('articulo_clave_seq')::text, 5, '0'))"))
+  descripcion   String
+  unidadId      String  @db.Uuid
+  categoriaId   String? @db.Uuid
+  /// Piezas que trae una caja, para convertir la captura a la unidad base.
+  piezasPorCaja Int?
+  stockMinimo   Int     @default(0)
+  activo        Boolean @default(true)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
-  unidad      UnidadMedida        @relation(fields: [unidadId], references: [id])
-  categoria   CategoriaArticulo?  @relation(fields: [categoriaId], references: [id])
+  unidad      UnidadMedida       @relation(fields: [unidadId], references: [id])
+  categoria   CategoriaArticulo? @relation(fields: [categoriaId], references: [id])
   existencias Existencia[]
+  capas       CapaCosto[]
   partidas    MovimientoPartida[]
 
   @@index([descripcion])
   @@index([categoriaId])
+  @@index([unidadId])
+  @@schema("public")
 }
 
+/// Razón social y RFC viven en Empresa: 33 de los 137 proveedores son del grupo.
 model Proveedor {
-  id          String  @id @default(cuid())
-  razonSocial String
-  rfc         String? @unique
-  contacto    String?
-  telefono    String?
-  activo      Boolean @default(true)
+  id              String  @id @default(uuid(7)) @db.Uuid
+  empresaId       String  @db.Uuid
+  nombreComercial String
+  contacto        String?
+  telefono        String?
+  correo          String?
+  giro            String?
+  activo          Boolean @default(true)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
+  empresa     Empresa      @relation(fields: [empresaId], references: [id])
   movimientos Movimiento[]
+
+  @@index([empresaId])
+  @@schema("public")
 }
 
-/// Personas que intervienen en un movimiento: solicita, autoriza, transporta, recibe.
-/// Cuando se agregue autenticación, esta tabla se enlaza 1:1 con Usuario y estos
-/// mismos campos pasan de capturarse a validarse por permisos.
+/// Quien solicita material. Puede no tener cuenta en el sistema — el gerente de la
+/// estación pide por WhatsApp y Compras captura a su nombre.
 model Persona {
-  id              String  @id @default(cuid())
-  nombre          String
-  puesto          String?
-  esTransportista Boolean @default(false)
-  activa          Boolean @default(true)
+  id     String  @id @default(uuid(7)) @db.Uuid
+  nombre String
+  puesto String?
+  activa Boolean @default(true)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
-  solicitados   Movimiento[] @relation("Solicitante")
-  autorizados   Movimiento[] @relation("Autorizador")
-  transportados Movimiento[] @relation("Transportista")
-  recibidos     Movimiento[] @relation("Receptor")
+  usuario     Usuario?
+  solicitados Movimiento[] @relation("Solicitante")
+
+  @@schema("public")
 }
 
-// ─────────────────────────── Operación ───────────────────────────
+// ──────────────────────────────── Operación ──────────────────────────────────
 
 model Movimiento {
-  id      String            @id @default(cuid())
+  id      String            @id @default(uuid(7)) @db.Uuid
   folio   String?           @unique
   tipo    TipoMovimiento
-  estatus EstatusMovimiento @default(BORRADOR)
-  /// Fecha real del hecho, que no siempre coincide con la de captura (createdAt).
-  fecha   DateTime
+  /// Sin valor por omisión: el estado inicial depende del tipo y solo la capa de
+  /// servicios lo sabe. Un CHECK impide las combinaciones (tipo, estatus) imposibles.
+  estatus EstatusMovimiento
+  /// El día del hecho, que no es el de captura. Fecha, no instante.
+  fecha   DateTime          @db.Date
 
-  bodegaOrigenId  String?
-  bodegaDestinoId String?
-  proveedorId     String?
-  estacionId      String?
-  areaId          String?
-  /// Factura, remisión u orden de compra que respalda el movimiento.
+  bodegaOrigenId  String? @db.Uuid
+  bodegaDestinoId String? @db.Uuid
+  proveedorId     String? @db.Uuid
+  estacionId      String? @db.Uuid
+  /// Opcional incluso en SALIDA: el histórico del Excel no trae área.
+  areaId          String? @db.Uuid
+  /// Factura, remisión u orden de compra.
   referencia      String?
   /// Motivo del ajuste: conteo físico, merma, daño.
   motivo          String?
 
-  solicitadoPorId String?
-  autorizadoPorId String?
-  transportistaId String?
-  recibidoPorId   String?
-  /// Unidad o placas de quien transporta.
-  vehiculo        String?
+  // Dinero: solo en ENTRADA, y el tipo de cambio solo en dólares.
+  moneda     Moneda?
+  tipoCambio Decimal? @db.Decimal(14, 6)
+  subtotal   Decimal? @db.Decimal(14, 2)
+  iva        Decimal? @db.Decimal(14, 2)
+  total      Decimal? @db.Decimal(14, 2)
+
+  /// Quién pidió el material. Puede no tener cuenta en el sistema.
+  solicitadoPorId String? @db.Uuid
+  /// Texto libre: un ingeniero, un gerente, una paquetería o "Recep. Magallanes".
+  entregadoA      String?
+
+  /// SALIDA que espera retorno del material.
+  esPrestamo  Boolean @default(false)
+  /// DEVOLUCION que cierra una salida previa.
+  devuelveAId String? @db.Uuid
 
   observaciones     String?
+  motivoRechazo     String?
   motivoCancelacion String?
-  /// Movimiento que este reversa. Un movimiento confirmado nunca se borra.
-  cancelaAId        String? @unique
+  /// El movimiento que este reversa. Un movimiento confirmado nunca se borra.
+  cancelaAId        String? @unique @db.Uuid
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  // Actor y marca de tiempo por transición. Sin esto el libro dice qué cambió pero
+  // no quién ni cuándo, que es justo lo que un libro contable existe para responder.
+  creadoPorId     String    @db.Uuid
+  confirmadoPorId String?   @db.Uuid
+  confirmadoEn    DateTime? @db.Timestamptz(3)
+  /// Obligatoriamente un usuario con la facultad, verificada en ese instante.
+  /// Ambas columnas son de escritura única, garantizada por trigger.
+  autorizadoPorId String?   @db.Uuid
+  autorizadoEn    DateTime? @db.Timestamptz(3)
+  rechazadoPorId  String?   @db.Uuid
+  rechazadoEn     DateTime? @db.Timestamptz(3)
+  entregadoPorId  String?   @db.Uuid
+  entregadoEn     DateTime? @db.Timestamptz(3)
+  recibidoPorId   String?   @db.Uuid
+  recibidoEn      DateTime? @db.Timestamptz(3)
+  canceladoPorId  String?   @db.Uuid
+  canceladoEn     DateTime? @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   partidas      MovimientoPartida[]
-  bodegaOrigen  Bodega?     @relation("BodegaOrigen", fields: [bodegaOrigenId], references: [id])
-  bodegaDestino Bodega?     @relation("BodegaDestino", fields: [bodegaDestinoId], references: [id])
-  proveedor     Proveedor?  @relation(fields: [proveedorId], references: [id])
-  estacion      Estacion?   @relation(fields: [estacionId], references: [id])
-  area          Area?       @relation(fields: [areaId], references: [id])
-  solicitadoPor Persona?    @relation("Solicitante", fields: [solicitadoPorId], references: [id])
-  autorizadoPor Persona?    @relation("Autorizador", fields: [autorizadoPorId], references: [id])
-  transportista Persona?    @relation("Transportista", fields: [transportistaId], references: [id])
-  recibidoPor   Persona?    @relation("Receptor", fields: [recibidoPorId], references: [id])
-  cancelaA      Movimiento? @relation("Cancelacion", fields: [cancelaAId], references: [id])
-  canceladoPor  Movimiento? @relation("Cancelacion")
+  capas         CapaCosto[]
+  bodegaOrigen  Bodega?      @relation("BodegaOrigen", fields: [bodegaOrigenId], references: [id])
+  bodegaDestino Bodega?      @relation("BodegaDestino", fields: [bodegaDestinoId], references: [id])
+  proveedor     Proveedor?   @relation(fields: [proveedorId], references: [id])
+  estacion      Estacion?    @relation(fields: [estacionId], references: [id])
+  area          Area?        @relation(fields: [areaId], references: [id])
+  solicitadoPor Persona?     @relation("Solicitante", fields: [solicitadoPorId], references: [id])
+  devuelveA     Movimiento?  @relation("Devolucion", fields: [devuelveAId], references: [id])
+  devoluciones  Movimiento[] @relation("Devolucion")
+  cancelaA      Movimiento?  @relation("Cancelacion", fields: [cancelaAId], references: [id])
+  canceladoPor  Movimiento?  @relation("Cancelacion")
+
+  creadoPor     Usuario  @relation("Creador", fields: [creadoPorId], references: [id])
+  confirmadoPor Usuario? @relation("Confirmador", fields: [confirmadoPorId], references: [id])
+  autorizadoPor Usuario? @relation("Autorizador", fields: [autorizadoPorId], references: [id])
+  rechazadoPor  Usuario? @relation("Rechazador", fields: [rechazadoPorId], references: [id])
+  entregadoPor  Usuario? @relation("Entregador", fields: [entregadoPorId], references: [id])
+  recibidoPor   Usuario? @relation("Receptor", fields: [recibidoPorId], references: [id])
+  canceladoPorUsuario Usuario? @relation("Cancelador", fields: [canceladoPorId], references: [id])
 
   @@index([tipo, estatus, fecha])
   @@index([estacionId, fecha])
   @@index([bodegaOrigenId])
   @@index([bodegaDestinoId])
+  @@index([proveedorId])
+  @@schema("public")
 }
 
 model MovimientoPartida {
-  id            String  @id @default(cuid())
-  movimientoId  String
-  articuloId    String
-  cantidad      Decimal @db.Decimal(14, 3)
-  /// Capturado en las entradas; tomado del costo promedio y congelado en las salidas.
-  costoUnitario Decimal @default(0) @db.Decimal(14, 4)
+  id           String @id @default(uuid(7)) @db.Uuid
+  movimientoId String @db.Uuid
+  articuloId   String @db.Uuid
+  /// Piezas enteras, siempre en la unidad base.
+  cantidad     Int
+  /// Lo que se capturó: 3 cajas de 12 se guardan como cantidad 36 y aquí "3 CAJA".
+  capturaOriginal String?
+  /// Sin IVA. Nulo = no se conoce el costo (inventario migrado). Distinto de cero.
+  costoUnitario       Decimal? @db.Decimal(14, 4)
+  /// Con IVA. Se guarda, no se recalcula: la tasa varía y el redondeo se acumula.
+  costoUnitarioConIva Decimal? @db.Decimal(14, 4)
+  /// Solo en ENTRADA: 0.1600, 0.0800 o 0 según el bien.
+  tasaIva             Decimal? @db.Decimal(5, 4)
+  /// Se anota, no se rastrea.
+  numeroSerie   String?
   observaciones String?
 
-  movimiento Movimiento @relation(fields: [movimientoId], references: [id], onDelete: Cascade)
-  articulo   Articulo   @relation(fields: [articuloId], references: [id])
+  movimiento Movimiento    @relation(fields: [movimientoId], references: [id], onDelete: Cascade)
+  articulo   Articulo      @relation(fields: [articuloId], references: [id])
+  consumos   ConsumoCapa[]
 
   @@unique([movimientoId, articuloId])
   @@index([articuloId])
+  @@schema("public")
 }
 
-/// Proyección del libro de movimientos: siempre recalculable desde cero.
+/// Una compra concreta con su costo. Es la unidad del costeo PEPS.
+/// Toda cantidad que entra crea capa, siempre — incluido el inventario migrado,
+/// que la crea con costo nulo. Es lo que hace que el invariante 9 se cumpla
+/// universalmente y que PEPS siempre encuentre de dónde consumir.
+model CapaCosto {
+  id           String @id @default(uuid(7)) @db.Uuid
+  bodegaId     String @db.Uuid
+  articuloId   String @db.Uuid
+  /// El movimiento que la creó: ENTRADA, TRASPASO, DEVOLUCION o el AJUSTE inicial.
+  movimientoId String @db.Uuid
+  /// Cuándo apareció la capa en esta bodega. Informativo: no ordena PEPS.
+  fecha         DateTime @db.Date
+  /// Fecha de la ENTRADA original. Es la que ordena PEPS, junto con el id.
+  /// Un traspaso la conserva: si llevara la del traspaso, el material se iría al
+  /// final de la fila en el destino y el costeo mentiría.
+  fechaOriginal DateTime @db.Date
+  /// Capa de la que se partió esta, en un traspaso o una devolución.
+  origenId      String?  @db.Uuid
+
+  cantidadInicial  Int
+  cantidadRestante Int
+  /// Ambos en pesos, ya convertidos al tipo de cambio de la entrada.
+  /// Nulos juntos cuando el costo no se conoce.
+  costoUnitario       Decimal? @db.Decimal(14, 4)
+  costoUnitarioConIva Decimal? @db.Decimal(14, 4)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  bodega     Bodega        @relation(fields: [bodegaId], references: [id])
+  articulo   Articulo      @relation(fields: [articuloId], references: [id])
+  movimiento Movimiento    @relation(fields: [movimientoId], references: [id])
+  origen     CapaCosto?    @relation("ParticionDeCapa", fields: [origenId], references: [id])
+  particiones CapaCosto[]  @relation("ParticionDeCapa")
+  consumos   ConsumoCapa[]
+
+  /// El índice que recorre PEPS: capas vivas de un artículo y bodega, en orden.
+  @@index([bodegaId, articuloId, fechaOriginal, id])
+  @@index([movimientoId])
+  @@index([origenId])
+  @@schema("public")
+}
+
+/// De qué capa salió cada pieza de una salida. Una partida puede tocar varias capas.
+model ConsumoCapa {
+  id        String @id @default(uuid(7)) @db.Uuid
+  partidaId String @db.Uuid
+  capaId    String @db.Uuid
+  cantidad  Int
+  /// Congelados al momento de la salida. Nulos si la capa no tenía costo.
+  costoUnitario       Decimal? @db.Decimal(14, 4)
+  costoUnitarioConIva Decimal? @db.Decimal(14, 4)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  partida MovimientoPartida @relation(fields: [partidaId], references: [id], onDelete: Cascade)
+  capa    CapaCosto         @relation(fields: [capaId], references: [id])
+
+  @@index([partidaId])
+  @@index([capaId])
+  @@schema("public")
+}
+
+/// Proyección del libro. El recálculo verifica cantidades, no costos: los costos
+/// congelados son historia, no una función recalculable del estado.
 model Existencia {
-  bodegaId      String
-  articuloId    String
-  cantidad      Decimal  @default(0) @db.Decimal(14, 3)
-  costoPromedio Decimal  @default(0) @db.Decimal(14, 4)
-  actualizadoEn DateTime @updatedAt
+  bodegaId      String   @db.Uuid
+  articuloId    String   @db.Uuid
+  cantidad      Int      @default(0)
+  actualizadoEn DateTime @updatedAt @db.Timestamptz(3)
 
   bodega   Bodega   @relation(fields: [bodegaId], references: [id])
   articulo Articulo @relation(fields: [articuloId], references: [id])
 
   @@id([bodegaId, articuloId])
   @@index([articuloId])
+  @@schema("public")
 }
 
-/// Consecutivos por tipo de movimiento. El folio se asigna al confirmar, no al
-/// crear el borrador, para no dejar huecos en la numeración.
+/// Consecutivos por tipo. El folio se asigna al confirmar, no al crear el borrador,
+/// para no dejar huecos — por eso no puede ser una secuencia de PostgreSQL, que no
+/// se revierte. Se toma con UPDATE … RETURNING, nunca leyendo y después escribiendo.
 model Folio {
   tipo      TipoMovimiento @id
   prefijo   String
   siguiente Int            @default(1)
+
+  @@schema("public")
 }

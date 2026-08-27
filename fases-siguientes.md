@@ -1,47 +1,56 @@
 # BodeGasosur — Fases siguientes
 
-Orden de trabajo a partir del levantamiento cerrado con Compras. Reemplaza el plan
-original de [`docs/04-plan-demo.md`](docs/04-plan-demo.md), que se conserva como
-referencia de cómo se llegó hasta aquí.
+Orden de trabajo a partir del levantamiento cerrado con Compras y de la
+[auditoría de arquitectura](docs/09-auditoria.md). Reemplaza el plan original de
+[`docs/04-plan-demo.md`](docs/04-plan-demo.md), que se conserva como referencia de cómo se
+llegó hasta aquí.
 
-**Ya construido:** fases 0 y 1 de aquel plan — cimientos, modelo de datos inicial y los
-ocho catálogos con datos sembrados.
+**Ya construido:**
+
+- **Fases 0 y 1** (`v0.1.0`) — cimientos, modelo de datos inicial y los catálogos con datos
+  sembrados. Se le presentó a Compras como demo.
+- **Fase 2** (`v0.2.0`) — cimientos corregidos.
 
 ---
 
-## Fase 2 — Cimientos corregidos
+## Fase 2 — Cimientos corregidos ✅
 
-Todo lo que el levantamiento invalidó del esquema actual. Va primero porque cada fase
-posterior escribe sobre estas tablas. El esquema completo de destino está en
-[`docs/02-modelo-de-datos.md`](docs/02-modelo-de-datos.md).
+Todo lo que el levantamiento y la auditoría invalidaron del esquema de la demo. Fue primero
+porque cada fase posterior escribe sobre estas tablas.
 
-- Migrar las llaves primarias a **UUIDv7** nativo (`@default(uuid(7)) @db.Uuid`)
-- Rutas por **clave de negocio**: `/estaciones/ES05588`, no por id
-- Crear el esquema `catalogo_gasosur` con `Empresa` y `Estacion`
-- `Estacion`: `numero`, `alias`, `telefono`, `movil`, `correo`. El RFC se va a `Empresa`
-- `Articulo`: agregar `piezasPorCaja` y `claveAnterior`
-- `Movimiento`: eliminar `transportista` y `vehiculo`; renombrar `recibidoPor` a
-  `entregadoA` y permitir texto libre
-- `MovimientoPartida`: agregar `numeroSerie` como texto opcional
-- Las tres áreas fijas: administración, mantenimiento y despacho
+Se resolvió **regenerando la migración inicial**: la de la demo se borró y en su lugar hay
+una sola migración limpia con el modelo corregido. En `0.x` romper está permitido, y no
+había datos reales de Gasosur que migrar.
 
-**Criterio de aceptación:** el esquema refleja lo acordado y los catálogos existentes
-siguen funcionando.
+- Llaves primarias a **UUIDv7** nativo, y rutas por clave de negocio
+- Esquema `catalogo_gasosur` con `Empresa` y `Estacion`, expuesto por **vistas versionadas**
+- Las tablas de fases posteriores, creadas desde ahora para no volver a migrar: `Usuario`,
+  `CapaCosto`, `ConsumoCapa`, `Bitacora`, `EventoAcceso` y `EventoWebhook`
+- Los invariantes **escritos en la base**: 38 `CHECK` y los triggers de bitácora,
+  inmutabilidad de claves, verificación de la facultad de autorizar y baja de bodega
+- `fecha` como día y los instantes con zona horaria explícita
+- Cantidades enteras; la unidad de medida pasa a significar presentación
+- Nueve catálogos funcionando contra el esquema nuevo
+
+**Criterio de aceptación — cumplido:** el esquema refleja lo acordado, los catálogos
+existentes siguen funcionando y 35 invariantes se verifican contra PostgreSQL.
 
 ## Fase 3 — Usuarios y permisos
 
-Se adelanta respecto al plan original. Bloquea la fase de salidas: no se puede impedir una
-salida sin autorización si el sistema no sabe quién está capturando.
+Bloquea la fase de salidas: no se puede impedir una salida sin autorización si el sistema
+no sabe quién está capturando.
 
-### Los cinco roles
+**Clerk autentica; PostgreSQL autoriza** ([01 §3.6](docs/01-arquitectura.md)). Eso saca del
+proyecto las contraseñas, las sesiones, el límite de intentos y la recuperación, y deja
+adentro lo único que no se puede delegar: el permiso.
+
+### Los tres roles
 
 | Rol | Empresas y Estaciones | Resto de las tablas | Movimientos |
 |---|---|---|---|
 | **Superadmin** | CRUD completo | CRUD completo | Todo |
-| **Admin** | **Solo lectura** | CRUD completo | Todo |
-| **Compras** | Lectura | Captura y edita catálogos operativos | Registra entradas, salidas y traspasos |
+| **Compras** | Lectura | Captura y edita catálogos operativos | Registra entradas, salidas, traspasos y devoluciones |
 | **Jefe** | Lectura | Lectura | Consulta |
-| **Gerente** | Lectura | Lectura | Solicita material para su estación |
 
 Además, transversal a los roles: la bandera **puede autorizar**, editable desde la pantalla
 de usuarios.
@@ -49,25 +58,35 @@ de usuarios.
 **Por qué la bandera y no una lista en el código:** autorizan el Lic. Hugo, la Lic. Andrea
 y el área de Compras, y la C.P. Cosumel también está facultada aunque quedó fuera de la
 lista inicial. La lista cambia; el código no debería. La facultad de autorizar es
-independiente del rol — un Jefe puede tenerla y un Admin puede no tenerla.
+independiente del rol — un Jefe puede tenerla y un usuario de Compras puede no tenerla.
 
-### Por qué Empresas y Estaciones son distintas
+**Por qué tres y no cinco.** `ADMIN` se diferenciaba de `SUPERADMIN` solo en dos tablas:
+eso es un permiso, no un rol. `GERENTE` implicaba administrar unas cuarenta cuentas de
+gerentes de estación —altas, bajas, contraseñas, capacitación, soporte— para una solicitud
+que de todos modos llega por WhatsApp y que Compras captura; el modelo ya lo soporta sin
+darles cuenta, porque `solicitadoPor` apunta a una `Persona`. Es la lectura literal de lo
+que Compras dijo, y quita el mayor costo operativo de la `v1.0.0`.
 
-Son el único caso donde el Admin no puede escribir, y no es un capricho: viven en el
-esquema **global del grupo**, que otros proyectos de Gasosur van a leer. Un cambio ahí sale
-de BodeGasosur y afecta sistemas que no controlamos. Restringir la escritura al Superadmin
-es lo que hace seguro compartir el catálogo.
+### Lo que hay que construir
+
+- Integración de Clerk, con **registro restringido a invitación**
+- **Negación por omisión:** una sesión válida de Clerk sin fila en `Usuario` no entra
+- `accionProtegida` como **único camino de escritura**, con `db.ts` sin exportar el cliente
+  de Prisma y una regla de ESLint que cierre la puerta
+- Webhooks: `user.created/updated/deleted` a `Usuario` y `Bitacora`; los de sesión a
+  `EventoAcceso`
+- Pantalla de usuarios, con la bandera editable
 
 ### Pantalla por tabla para el Superadmin
 
-El Superadmin necesita una pantalla de CRUD por cada tabla de la base de datos. **Esto ya
-está resuelto:** los catálogos de la fase 1 se declaran en
+**Esto ya está resuelto:** los catálogos se declaran en
 [`src/lib/catalogos/definiciones.ts`](src/lib/catalogos/definiciones.ts) y de esa
 descripción salen las columnas, el formulario y la validación. Agregar una tabla al panel
 del Superadmin es una entrada de configuración, no una pantalla nueva.
 
 **Criterio de aceptación:** dar y quitar la facultad de autorizar sin tocar el código ni la
-base de datos, y que un Admin no pueda modificar una estación.
+base de datos, que surta efecto en la siguiente petición, y que quede en la bitácora quién
+lo hizo.
 
 ## Fase 4 — Migración de catálogos
 
@@ -75,15 +94,30 @@ base de datos, y que un Admin no pueda modificar una estación.
 - **Pantalla de alta y edición de estaciones** — el catálogo llega incompleto: el grupo
   opera alrededor de **40 estaciones** y hay más empresas de las 22 capturadas
 - 137 proveedores; los 33 que son empresas del grupo se enlazan a la `Empresa` existente
-- 225 artículos **renumerados**, conservando la clave anterior por bodega
+- 225 artículos **renumerados** por el sistema (`ART-00001`…)
 - Personas, unificando las catorce grafías de nueve nombres reales
-- Existencia inicial como movimiento de `AJUSTE` por bodega, **sin costo**
+- Existencia inicial como movimiento de `AJUSTE` por bodega, **con capa de costo nulo**
 
 **Por qué renumerar:** los 41 códigos que aparecen en las dos bodegas designan artículos
 distintos en cada una. El código actual no puede migrarse como clave.
 
-**Criterio de aceptación:** el sistema arranca con las existencias reales de ambas bodegas
-y Compras puede rastrear sus registros viejos por la clave anterior.
+**Los códigos viejos no se guardan en la base.** Se decidió que conservarlos era trabajo
+extra de poco valor: BodeGasosur asigna claves nuevas y la normalización de las
+descripciones se hace a mano. Lo que sí tiene que existir es el **mapeo**
+`codigo_viejo,bodega,clave_nueva` como archivo versionado en `prisma/migracion-datos/`,
+producto de esa misma normalización — sin él, la tarea aparte del histórico deja de ser
+posible para siempre.
+
+**Cómo se ejecuta:** código idempotente y versionado en `prisma/migracion-datos/`,
+ejecutable N veces contra una base limpia. No trabajo manual en Studio.
+
+**El corte:** congelar el Excel un viernes, correr la migración con el archivo de ese día,
+operar ambos en paralelo una semana y conciliar. Esa semana es lo que compra la confianza
+de Compras, y de paso es la mejor prueba posible de los invariantes.
+
+**Criterio de aceptación:** el sistema arranca con las existencias reales de ambas bodegas,
+la conciliación de la semana en paralelo cierra sin diferencias, y el mapeo de códigos
+viejos queda versionado en el repositorio.
 
 ## Fase 5 — Entradas
 
@@ -96,34 +130,56 @@ Nacen completas: agregar dinero después obligaría a recalcular todo lo captura
 - Captura en caja o pieza, convirtiendo a la unidad base
 - Entregas parciales de una misma compra
 
+**Antes de escribir el consumo PEPS** hay que resolver la concurrencia, que hoy son tres
+carreras clásicas ([09 §5](docs/09-auditoria.md)):
+
+- Toda mutación de existencia empieza bloqueando la fila de `Existencia` con
+  `SELECT … FOR UPDATE`
+- El folio se toma con `UPDATE folio SET siguiente = siguiente + 1 … RETURNING`, nunca
+  leyendo y después escribiendo
+- El consumo PEPS entero en **un solo viaje**, como función de PostgreSQL
+- Idempotencia por transición condicional, para que un doble clic no duplique el movimiento
+
+**Decisión pendiente:** ¿el folio reinicia cada año? (`E-2026-00001`). En la práctica
+mexicana casi siempre sí, y es un cambio de dato, no de formato.
+
 **Criterio de aceptación:** una entrada en dólares queda valuada en pesos al tipo de cambio
-del día y no cambia después.
+del día y no cambia después; dos capturas simultáneas del mismo artículo nunca dejan
+existencia negativa.
 
 ## Fase 6 — Salidas
 
 El flujo completo, no la captura directa.
 
-- Estados: `SOLICITADA → AUTORIZADA → ENTREGADA → RECIBIDA`, con `RECHAZADA` y `CANCELADA`
-- Solicita el gerente, autoriza quien tenga la facultad, Compras entrega
+- Estados: `SOLICITADA → AUTORIZADA → ENTREGADA → RECIBIDA`, con `RECHAZADA` y `CANCELADO`
+- Solicita el gerente **por WhatsApp y Compras captura a su nombre**; autoriza quien tenga
+  la facultad; Compras entrega
 - Estación y área destino; `entregadoA` como texto libre
 - **Bloquear la salida sin existencia** y sin autorización
 - Bandeja de entregas pendientes de confirmar recepción
+
+**Hay que cerrar la pregunta 22 con Compras antes de construir esto:** *«¿se firma un vale
+de salida? ¿necesitan imprimirlo desde el sistema?»* está marcada como bloqueante y sin
+resolver. Si el vale existe, cambia el flujo —folio impreso, reimpresión, quién firma— y
+toca esta fase, no una de acabado. Junto con la exportación a Excel, decide el stack de
+impresión: hoja de estilo contra PDF generado en servidor.
 
 **Criterio de aceptación:** el sistema impide una salida no autorizada aunque la pida un
 gerente. Es el requisito #1 de Compras.
 
 ## Fase 7 — Traspasos, devoluciones y conteo
 
-- Traspaso entre Magallanes y Servi Fer en una sola operación
-- Devolución de estación a bodega
+- Traspaso entre Magallanes y Servi Fer en una sola operación, **partiendo la capa** y
+  conservando la fecha de la entrada original
+- Devolución de estación a bodega, al costo de las capas que consumió la salida
 - Préstamo con retorno, que queda abierto hasta que el material vuelve
 - Inventario físico: hoja de conteo imprimible y captura de diferencias
-- Cancelación con asiento inverso y verificación de existencias
+- Cancelación con asiento inverso, devolviendo a las capas exactas vía `ConsumoCapa`
 
 ## Fase 8 — Reportes
 
 - **Reporte de los viernes** para el Lic. Hugo: entradas, salidas y stock final
-- Existencias por bodega con alerta de mínimos
+- Existencias por bodega con alerta de mínimos, **y el conteo de piezas sin valuar**
 - Kardex por artículo
 - **Gasto acumulado por estación**
 - **Frecuencia de consumo por pieza** — es lo que usan para fijar el stock mínimo
@@ -138,15 +194,27 @@ gerente. Es el requisito #1 de Compras.
 
 ---
 
+## Transversal — Lo que la auditoría dejó fuera de las fases
+
+| | Cuándo |
+|---|---|
+| **CI**: `tsc`, `eslint`, las cuatro pruebas de invariantes contra PostgreSQL real, y `prisma migrate diff` para detectar deriva | Cuanto antes: es lo que vuelve segura la política de *«en `0.x` romper está permitido»* |
+| **Decidir dónde se despliega** (contenedor único frente a Vercel + Supabase) | Antes de la `v1.0.0` |
+| **Política de respaldos** con RPO/RTO y un simulacro de restauración documentado | Antes de la `v1.0.0` |
+| `migrate deploy` **fuera del build**, como paso de release | Al desplegar |
+| **Observabilidad**, con el release atado a la versión del pie de página | Antes de la `v1.0.0` |
+| Quitar las dependencias instaladas sin usar | Cuanto antes |
+
+---
+
 ## Tarea aparte — Histórico de movimientos
 
 **240 entradas y 137 salidas** del Excel. No afecta las existencias, que ya entran por la
 fase 4, así que puede hacerse en cualquier momento o no hacerse.
 
-Bloqueada por una sola cosa: en el histórico, `PORBA` y `SERVI FER` nombran a la empresa,
-no a la estación, y solo Compras puede decir a cuál de sus dos o tres estaciones fue cada
-salida. Los demás alias —`VACACIONAL`, `SAN MARCOS`, `ALBORADA`— se traducen igual, caso
-por caso.
+Bloqueada por dos cosas: en el histórico, `PORBA` y `SERVI FER` nombran a la empresa, no a
+la estación, y solo Compras puede decir a cuál de sus dos o tres estaciones fue cada
+salida; y necesita el mapeo de códigos viejos de la fase 4.
 
 Migra sin costo, sin proveedor, sin área y sin moneda: el Excel no los tiene.
 
@@ -156,10 +224,11 @@ Migra sin costo, sin proveedor, sin área y sin moneda: el Excel no los tiene.
 
 | Tema | Cuándo |
 |---|---|
-| Requisición → orden de compra → recepción | Cuando Compras lo pida; Diana lo quiere *"poco a poco"* |
+| **Sacar los `.xlsx` y `.docx` con datos personales a un Drive**, dejando en `docs/` el análisis derivado y un reporte | Antes de que el repositorio deje de ser privado o entre alguien externo. El historial de git ya los contiene, así que ese es el disparador real |
+| Autoservicio para gerentes de estación (rol `GERENTE`) | Cuando Compras lo pida |
+| Requisición → orden de compra → recepción | Cuando Compras lo pida; Diana lo quiere *«poco a poco»* |
 | Integración con AuditorFiscalWeb | Sin acuerdo entre Diana y Oscar; no hay prisa |
 | Alertas por WhatsApp | Después de que funcionen por pantalla y correo |
-| Despliegue en servidor y respaldos | Cuando el sistema entre en uso real |
 | Adjuntar factura escaneada | Cuando haya dónde almacenar archivos |
 
 ## Fuera de alcance

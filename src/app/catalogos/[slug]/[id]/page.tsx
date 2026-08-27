@@ -28,9 +28,7 @@ export default async function PaginaEditar({ params }: PageProps<"/catalogos/[sl
     }
   }
 
-  const titulo = String(
-    leerRuta(registro, "nombre") ?? leerRuta(registro, "razonSocial") ?? leerRuta(registro, "descripcion") ?? def.singular,
-  );
+  const titulo = String(leerRuta(registro, def.campoTitulo) ?? def.singular);
 
   return (
     <>
@@ -42,6 +40,7 @@ export default async function PaginaEditar({ params }: PageProps<"/catalogos/[sl
         />
         <FormularioCatalogo
           def={def}
+          modo="edicion"
           opciones={opciones}
           valores={valores}
           accion={guardarCatalogo.bind(null, slug, id)}
