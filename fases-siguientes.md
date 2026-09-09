@@ -26,16 +26,19 @@ había datos reales de Gasosur que migrar.
 - Esquema `catalogo_gasosur` con `Empresa` y `Estacion`, expuesto por **vistas versionadas**
 - Las tablas de fases posteriores, creadas desde ahora para no volver a migrar: `Usuario`,
   `CapaCosto`, `ConsumoCapa`, `Bitacora`, `EventoAcceso` y `EventoWebhook`
-- Los invariantes **escritos en la base**: 38 `CHECK` y los triggers de bitácora,
-  inmutabilidad de claves, verificación de la facultad de autorizar y baja de bodega
+- Los invariantes **escritos en la base**: 45 `CHECK` y 20 triggers —bitácora,
+  inmutabilidad de claves, verificación de la facultad de autorizar y baja de bodega—
 - `fecha` como día y los instantes con zona horaria explícita
 - Cantidades enteras; la unidad de medida pasa a significar presentación
 - Nueve catálogos funcionando contra el esquema nuevo
 
 **Criterio de aceptación — cumplido:** el esquema refleja lo acordado, los catálogos
-existentes siguen funcionando y 35 invariantes se verifican contra PostgreSQL.
+existentes siguen funcionando y **11 de los 14 invariantes** de
+[02 §4](docs/02-modelo-de-datos.md#4-invariantes) los hace cumplir PostgreSQL, escritos como
+45 `CHECK` y 20 triggers. Los otros tres —el 1, el 2 y el 10— dependen de la capa de
+servicios, que se construye junto con los movimientos.
 
-## Fase 3 — Usuarios y permisos
+## Fase 3 — Usuarios y permisos ✅
 
 Bloquea la fase de salidas: no se puede impedir una salida sin autorización si el sistema
 no sabe quién está capturando.
@@ -44,7 +47,7 @@ no sabe quién está capturando.
 proyecto las contraseñas, las sesiones, el límite de intentos y la recuperación, y deja
 adentro lo único que no se puede delegar: el permiso.
 
-### Los tres roles
+### Roles de usuario
 
 | Rol | Empresas y Estaciones | Resto de las tablas | Movimientos |
 |---|---|---|---|
@@ -59,36 +62,24 @@ de usuarios. Las otras dos columnas sí están implementadas y verificadas rol p
 Además, transversal a los roles: la bandera **puede autorizar**, editable desde la pantalla
 de usuarios.
 
-**Por qué la bandera y no una lista en el código:** autorizan el Lic. Hugo, la Lic. Andrea
-y el área de Compras, y la C.P. Cosumel también está facultada aunque quedó fuera de la
-lista inicial. La lista cambia; el código no debería. La facultad de autorizar es
-independiente del rol — un Jefe puede tenerla y un usuario de Compras puede no tenerla.
-
-**Por qué tres y no cinco.** `ADMIN` se diferenciaba de `SUPERADMIN` solo en dos tablas:
-eso es un permiso, no un rol. `GERENTE` implicaba administrar unas cuarenta cuentas de
-gerentes de estación —altas, bajas, contraseñas, capacitación, soporte— para una solicitud
-que de todos modos llega por WhatsApp y que Compras captura; el modelo ya lo soporta sin
-darles cuenta, porque `solicitadoPor` apunta a una `Persona`. Es la lectura literal de lo
-que Compras dijo, y quita el mayor costo operativo de la `v1.0.0`.
-
 ### Lo que se construyó
 
-| Qué | Dónde |
-|---|---|
-| Identidad delegada a Clerk, en español, con pantalla de acceso propia | `src/app/(acceso)/`, `src/proxy.ts` |
-| Arranque del primer Superadmin, idempotente y con guardas | `scripts/arranque-superadmin.ts` |
-| Negación por omisión: `sin-sesion`, `sin-acceso` y `activa` | `sesionActual()` en `src/lib/db.ts` |
-| Lectura autorizada, en transacción `REPEATABLE READ READ ONLY` | `consultar()` |
-| Escritura autorizada, que fija `app.usuario_id` para la bitácora | `accionProtegida()` |
-| Matriz de permisos tipada, con los catálogos globales separados de los operativos | [`src/lib/permisos.ts`](src/lib/permisos.ts) |
-| El cliente de Prisma fuera de la capa de aplicación, con regla de ESLint | `src/lib/db.ts`, `eslint.config.mjs` |
+| Qué                                                                                       | Dónde                                                 |
+| ----------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| Identidad delegada a Clerk, en español, con pantalla de acceso propia                     | `src/app/(acceso)/`, `src/proxy.ts`                   |
+| Arranque del primer Superadmin, idempotente y con guardas                                 | `scripts/arranque-superadmin.ts`                      |
+| Negación por omisión: `sin-sesion`, `sin-acceso` y `activa`                               | `sesionActual()` en `src/lib/db.ts`                   |
+| Lectura autorizada, en transacción `REPEATABLE READ READ ONLY`                            | `consultar()`                                         |
+| Escritura autorizada, que fija `app.usuario_id` para la bitácora                          | `accionProtegida()`                                   |
+| Matriz de permisos tipada, con los catálogos globales separados de los operativos         | [`src/lib/permisos.ts`](src/lib/permisos.ts)          |
+| El cliente de Prisma fuera de la capa de aplicación, con regla de ESLint                  | `src/lib/db.ts`, `eslint.config.mjs`                  |
 | Webhooks de Clerk: atómicos, idempotentes por `svix-id`, limitados por tipo a tres tablas | `src/app/api/webhooks/clerk/`, `escrituraDeSistema()` |
-| Pantalla de usuarios: conceder acceso, editar rol y bandera, activar y desactivar | `src/app/(sistema)/usuarios/` |
-| Navegación y catálogos según el rol, con detalle de solo lectura para quien no escribe | `navegacion.tsx`, `catalogos/[slug]/` |
-| Un solo usuario **activo** por correo, sin límite en los históricos | índice parcial en `prisma/sql/despues/` |
-| Registro de accesos y de entregas de webhook | `EventoAcceso`, `EventoWebhook` |
+| Pantalla de usuarios: conceder acceso, editar rol y bandera, activar y desactivar         | `src/app/(sistema)/usuarios/`                         |
+| Navegación y catálogos según el rol, con detalle de solo lectura para quien no escribe    | `navegacion.tsx`, `catalogos/[slug]/`                 |
+| Un solo usuario **activo** por correo, sin límite en los históricos                       | índice parcial en `prisma/sql/despues/`               |
+| Registro de accesos y de entregas de webhook                                              | `EventoAcceso`, `EventoWebhook`                       |
 
-Tres cosas conviene no perder de vista al leer esa tabla:
+No pierdas de vista estas tres cosas al leer la tabla:
 
 - **La frontera son `consultar()` y `accionProtegida()`, no la pantalla.** Ocultar un botón
   o una sección del menú es presentación. Las acciones de servidor son URLs propias y no
@@ -99,7 +90,7 @@ Tres cosas conviene no perder de vista al leer esa tabla:
 - `Usuario.correo` **no es único**. La identidad canónica es `clerkUserId`; una baja
   conserva su fila con todo el histórico colgando.
 
-### Lo que queda diferido
+### Pendiente de realizar de la Fase 3
 
 Ninguna de las dos bloquea la fase ni las siguientes:
 

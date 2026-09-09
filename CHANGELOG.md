@@ -8,6 +8,62 @@ puede hacer ahora que antes no se podía.
 
 ---
 
+## v0.3.0 — 2026-09-09
+
+Cierra la fase 3: usuarios y permisos. Es la primera versión en la que el sistema sabe
+quién está usándolo, y la que desbloquea las salidas — no se puede impedir una salida sin
+autorización si el sistema no sabe quién captura.
+
+**Lo que cambia para quien va a usar el sistema**
+
+- **Ahora se entra con una cuenta.** Tener cuenta no es tener acceso: hasta que el
+  Superadmin da de alta a la persona, el sistema no la deja pasar y deja constancia del
+  intento.
+- **Tres roles.** El **Superadmin** hace todo; **Compras** captura y edita los catálogos
+  operativos; el **Jefe** solo consulta. Empresas y Estaciones únicamente las edita el
+  Superadmin, porque otros sistemas del grupo las leen.
+- **La facultad de autorizar es una casilla del usuario**, no una lista dentro del
+  programa. Se da y se quita desde la pantalla de usuarios, **surte efecto en la siguiente
+  pantalla que se abra** —no hay que esperar a que nadie vuelva a entrar— y queda en la
+  bitácora con quién la cambió.
+- **Quien no puede editar ya no ve botones de editar.** Antes el sistema dejaba abrir el
+  formulario y solo avisaba al guardar; ahora muestra el detalle en modo consulta, con
+  todos los datos, incluidos el móvil y el correo de las estaciones que la tabla no enseña.
+- **Se corrigieron tres fallas de captura que venían de antes.** Un artículo sin «piezas
+  por caja» era imposible de guardar —eran 43 de los 52—; al fallar un guardado la clave
+  del artículo desaparecía de la pantalla; y editar un registro cuya categoría, unidad o
+  empresa se había dado de baja borraba ese vínculo, a veces sin avisar.
+
+**Por dentro**
+
+- **Clerk** para la identidad; PostgreSQL para el permiso. El rol y la facultad se leen de
+  la base en cada petición y nunca viajan dentro del token de sesión: por eso revocar
+  surte efecto de inmediato.
+- Toda lectura pasa por `consultar()`, en una transacción de solo lectura que PostgreSQL
+  hace cumplir, y toda escritura de la aplicación por `accionProtegida()`. El cliente de
+  Prisma salió de la capa de aplicación y una regla de ESLint lo sostiene: no hay a qué
+  llamarle sin pasar por el permiso.
+- Los webhooks de Clerk sincronizan el correo y desactivan a quien se dio de baja allá,
+  **sin borrar nunca su fila** — el libro tiene que seguir diciendo quién autorizó cada
+  salida años después. Cada entrega se aplica entera o no se aplica.
+- `Usuario.correo` deja de ser único: la identidad es el identificador de Clerk. Un índice
+  parcial impide lo único que no puede pasar, dos cuentas **activas** con el mismo correo.
+
+**Por saber**
+
+- **El registro sigue abierto** para poder crear los primeros usuarios. Se cierra a
+  invitación antes de la `v1.0.0`.
+- **La migración inicial se volvió a regenerar**, así que cualquier base creada con la
+  `v0.2.0` tiene que recrearse desde cero con `npm run db:reset`. Sigue sin haber datos
+  reales de Gasosur; después de la `v1.0.0` esto ya no será posible.
+- Hace falta configurar Clerk en `.env` — ver [`.env.example`](.env.example)—. Sin eso, el
+  sistema no arranca.
+- Todavía no hay pruebas automatizadas. Se construyen en la fase 4.
+
+*Migración: `20260901130247_inicial` — regenerada, reemplaza a `20260825172744_inicial`*
+
+---
+
 ## v0.2.0 — 2026-08-25
 
 Cierra la fase 2: los cimientos corregidos. Es una versión de estructura — casi nada de lo
@@ -41,7 +97,9 @@ pueden cambiar barato. Sale de la auditoría de arquitectura
   usuarios, capas de costo PEPS, consumos, bitácora, eventos de acceso y de webhook.
 - La autenticación será **Clerk**; los permisos y la auditoría se quedan en PostgreSQL,
   que es lo que permite revocar un permiso al instante.
-- 35 invariantes verificados contra PostgreSQL antes de publicar esta versión.
+- Los invariantes dejan de estar solo escritos en español: 45 `CHECK` y 20 triggers los
+  hacen cumplir en la base, así que también valen para `prisma studio` y para una
+  consulta directa.
 
 **Por saber**
 

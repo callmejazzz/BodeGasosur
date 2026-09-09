@@ -6,7 +6,7 @@ Controla la entrada y salida de material entre bodegas y estaciones, registrando
 estación se envía, quién lo autoriza, quién lo entrega, cuándo, en qué cantidad, a qué
 costo unitario, a qué área se destina y con qué observaciones.
 
-**Versión actual: `v0.2.0`** — ver [CHANGELOG.md](CHANGELOG.md).
+**Versión actual: `v0.3.0`** — ver [CHANGELOG.md](CHANGELOG.md).
 
 **Estado:** fases 0 a 3 construidas. El levantamiento con Compras está cerrado y la
 arquitectura fue auditada; sus correcciones de esquema ya están aplicadas. La fase 3 dejó
