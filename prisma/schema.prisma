@@ -76,9 +76,13 @@ enum AccionBitacora {
   @@schema("public")
 }
 
+/// Uno por evento de Clerk, en correspondencia directa: session.created,
+/// session.ended, session.removed y session.revoked. Mapear dos eventos al
+/// mismo valor ahorraría una línea aquí y costaría una decisión olvidada.
 enum TipoEventoAcceso {
   SESION_INICIADA
   SESION_TERMINADA
+  SESION_REMOVIDA
   SESION_REVOCADA
   /// Sesión válida en Clerk sin fila en Usuario: alguien tocó la puerta y no abrió.
   ACCESO_DENEGADO
@@ -139,7 +143,13 @@ model Usuario {
   /// Identidad en Clerk. Único enlace con el proveedor de autenticación.
   clerkUserId    String  @unique
   /// Copia sincronizada por webhook. Clerk es la fuente de verdad.
-  correo         String  @unique
+  ///
+  /// No es único: un usuario dado de baja conserva su fila y sus referencias
+  /// históricas, y ese correo puede volver a darse de alta con otro
+  /// clerkUserId. Convertir el historial de A en el de B sería falsificar el
+  /// libro. Lo que sí se impide, con un índice parcial en prisma/sql, es que
+  /// dos usuarios ACTIVOS compartan correo.
+  correo         String
   rol            Rol
   /// Independiente del rol. Nunca se copia a los claims de Clerk.
   puedeAutorizar Boolean @default(false)

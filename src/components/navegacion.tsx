@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 
 type Enlace = { href: string; etiqueta: string; proximamente?: boolean };
 
+const ADMINISTRACION: Enlace[] = [{ href: "/usuarios", etiqueta: "Usuarios" }];
+
 const OPERACION: Enlace[] = [
   { href: "/", etiqueta: "Tablero" },
   { href: "/movimientos", etiqueta: "Movimientos", proximamente: true },
@@ -51,11 +53,23 @@ function Item({ enlace, activo }: { enlace: Enlace; activo: boolean }) {
   );
 }
 
-export function Navegacion() {
+/**
+ * `sesion` llega desde el layout: son componentes de servidor incrustados en
+ * la barra. `puedeAdministrarUsuarios` también viene decidido de allá — este
+ * componente dibuja, no decide: ocultar un enlace es presentación, y la puerta
+ * real sigue siendo `consultar()` en cada pantalla.
+ */
+export function Navegacion({
+  sesion,
+  puedeAdministrarUsuarios,
+}: {
+  sesion?: React.ReactNode;
+  puedeAdministrarUsuarios: boolean;
+}) {
   const ruta = usePathname();
 
   return (
-    <aside className="flex w-60 shrink-0 flex-col bg-primary px-3 py-5 text-white">
+    <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col self-start overflow-y-auto bg-primary px-3 py-5 text-white">
       <Link href="/" className="mb-7 block px-3">
         <span className="block text-lg leading-tight font-semibold">BodeGasosur</span>
         <span className="block text-xs text-white/50">Control de inventario</span>
@@ -77,9 +91,20 @@ export function Navegacion() {
         ))}
       </Seccion>
 
-      <p className="mt-auto px-3 text-xs leading-relaxed text-white/35">
-        Demo para levantamiento de requerimientos. Fases 0 y 1: catálogos y datos base.
-      </p>
+      {puedeAdministrarUsuarios && (
+        <Seccion titulo="Administración">
+          {ADMINISTRACION.map((e) => (
+            <Item key={e.href} enlace={e} activo={ruta.startsWith(e.href)} />
+          ))}
+        </Seccion>
+      )}
+
+      <div className="mt-auto">
+        <p className="px-3 text-xs leading-relaxed text-white/35">
+          Demo para levantamiento de requerimientos. Fases 0 y 1: catálogos y datos base.
+        </p>
+        {sesion}
+      </div>
     </aside>
   );
 }

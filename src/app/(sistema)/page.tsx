@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ButtonLink } from "@/components/ui/button";
 import { Badge, Card, CardHeader, EncabezadoPagina } from "@/components/ui/superficies";
 import { Tabla, Td, Th, Tr } from "@/components/ui/tabla";
-import { prisma } from "@/lib/db";
+import { consultar } from "@/lib/db";
 import { contarCatalogos } from "@/lib/catalogos/repos";
 import { cantidad } from "@/lib/utils";
 
@@ -12,7 +12,7 @@ import { cantidad } from "@/lib/utils";
 const FASES = [
   { nombre: "Fase 0 y 1 — Cimientos y catálogos", detalle: "Next.js, PostgreSQL, Prisma y los catálogos con datos sembrados", estado: "lista" },
   { nombre: "Fase 2 — Cimientos corregidos", detalle: "Modelo de datos con los invariantes escritos en la base", estado: "lista" },
-  { nombre: "Fase 3 — Usuarios y permisos", detalle: "Acceso con Clerk, roles y la facultad de autorizar", estado: "pendiente" },
+  { nombre: "Fase 3 — Usuarios y permisos", detalle: "Acceso con Clerk, roles y la facultad de autorizar", estado: "lista" },
   { nombre: "Fase 4 — Migración de catálogos", detalle: "Empresas, estaciones, proveedores, artículos y existencias reales", estado: "pendiente" },
   { nombre: "Fase 5 — Entradas", detalle: "Compras con moneda, IVA y capas de costo PEPS", estado: "pendiente" },
   { nombre: "Fase 6 — Salidas", detalle: "Solicitud, autorización, entrega y confirmación de recepción", estado: "pendiente" },
@@ -37,16 +37,21 @@ function Metrica({ etiqueta, valor, href }: { etiqueta: string; valor: number; h
 export const dynamic = "force-dynamic";
 
 export default async function Tablero() {
-  const [conteos, bodegas, articulosBajos] = await Promise.all([
-    contarCatalogos(),
-    prisma.bodega.findMany({ where: { activa: true }, orderBy: { clave: "asc" } }),
-    prisma.articulo.findMany({
-      where: { activo: true },
-      orderBy: { clave: "asc" },
-      include: { unidad: true, categoria: true },
-      take: 8,
-    }),
-  ]);
+  // Las tres lecturas comparten una instantánea: dentro de `consultar` corren
+  // en una transacción REPEATABLE READ, así que los conteos y las listas no
+  // pueden contradecirse entre sí.
+  const [conteos, bodegas, articulosBajos] = await consultar("catalogos:leer", (db) =>
+    Promise.all([
+      contarCatalogos(db),
+      db.bodega.findMany({ where: { activa: true }, orderBy: { clave: "asc" } }),
+      db.articulo.findMany({
+        where: { activo: true },
+        orderBy: { clave: "asc" },
+        include: { unidad: true, categoria: true },
+        take: 8,
+      }),
+    ]),
+  );
 
   return (
     <>

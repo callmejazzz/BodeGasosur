@@ -289,28 +289,15 @@ async function main() {
       }
       console.log(`  ✓ ${folios.length} consecutivos de folio`);
 
-      // ── El Superadmin ──────────────────────────────────────────────────
+      // ── El Superadmin no se siembra aquí ───────────────────────────────
       //
-      // Clerk identifica; esta fila decide el acceso. Sin fila no hay acceso,
-      // ni siquiera con una sesión válida de Clerk — es la negación por
-      // omisión. Por eso el enlace no se inventa: sale de una variable de
-      // entorno con el id real de Clerk, y si no está, la siembra lo dice.
-      const clerkUserId = process.env.CLERK_SUPERADMIN_ID;
-      const correo = process.env.CLERK_SUPERADMIN_CORREO;
-
-      if (clerkUserId && correo) {
-        await tx.usuario.upsert({
-          where: { clerkUserId },
-          update: { correo, rol: "SUPERADMIN", puedeAutorizar: true, activo: true },
-          create: { clerkUserId, correo, rol: "SUPERADMIN", puedeAutorizar: true },
-        });
-        console.log(`  ✓ Superadmin enlazado a Clerk (${correo})`);
-      } else {
-        console.log(
-          "  · Sin Superadmin: define CLERK_SUPERADMIN_ID y CLERK_SUPERADMIN_CORREO\n" +
-            "    en .env cuando Clerk esté configurado (fase 3).",
-        );
-      }
+      // Clerk identifica; la fila en `Usuario` decide el acceso. Sin fila no se
+      // entra, ni con una sesión válida — es la negación por omisión.
+      //
+      // Ese enlace lo hace `scripts/arranque-superadmin.ts`, que resuelve el
+      // identificador de Clerk a partir del correo en vez de pedirlo copiado a
+      // mano, y se niega a correr si ya hay otro Superadmin. `db:reset` lo
+      // encadena después de esta siembra. Un solo escritor para esa fila.
     },
     { timeout: 60_000 },
   );

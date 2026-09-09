@@ -267,6 +267,10 @@ opcional con una `Persona`.
 | `COMPRAS`    | Lectura               | Catálogos operativos | Registra entradas, salidas, traspasos y devoluciones |
 | `JEFE`       | Lectura               | Lectura              | Consulta                                             |
 
+La columna de **Movimientos es diseño**: se construye en las fases 5 a 7. Desde la fase 3,
+`src/lib/permisos.ts` declara los permisos de catálogos y de usuarios, y esos sí están
+implementados.
+
 `puedeAutorizar` es una **bandera del usuario, no un rol**: un Jefe puede tenerla y un
 usuario de Compras puede no tenerla. La lista de facultados cambia —el Lic. Hugo, la Lic.
 Andrea, el área de Compras y la C.P. Cosumel— y por eso no puede vivir en el código.

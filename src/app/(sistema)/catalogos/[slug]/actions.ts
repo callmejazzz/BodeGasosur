@@ -2,9 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { campoSeCaptura, catalogoPorSlug, esquemaDe } from "@/lib/catalogos/definiciones";
+import {
+  campoSeCaptura,
+  catalogoPorSlug,
+  esquemaDe,
+  type ValoresCatalogo,
+} from "@/lib/catalogos/definiciones";
 import type { EstadoFormulario, ValoresFormulario } from "@/lib/catalogos/formulario";
 import { REPOS } from "@/lib/catalogos/repos";
+import type { Prisma } from "@prisma/client";
+import { accionProtegida, SinAcceso, SinPermiso, type UsuarioSesion } from "@/lib/db";
 
 /** Traduce las violaciones de índice único a un mensaje que se entienda. */
 function mensajeDeError(error: unknown, singular: string): string {
@@ -20,6 +27,32 @@ function mensajeDeError(error: unknown, singular: string): string {
   console.error(error);
   return "No se pudo guardar. Revisa los datos e inténtalo de nuevo.";
 }
+
+/**
+ * El único camino por el que se escribe un catálogo.
+ *
+ * El permiso no es fijo: sale de la definición, porque escribir `Empresa`
+ * exige `catalogos:globales:escribir` y escribir `Bodega` no (01 §3.3). Si el
+ * slug no existe se pide el permiso más estricto, para que un slug desconocido
+ * jamás cuele por la puerta más ancha.
+ */
+const escribirCatalogo = accionProtegida(
+  ([slug]) => catalogoPorSlug(slug)?.permisoEscritura ?? "catalogos:globales:escribir",
+  async (
+    tx: Prisma.TransactionClient,
+    _usuario: UsuarioSesion,
+    slug: string,
+    id: string | null,
+    datos: ValoresCatalogo,
+  ) => {
+    const repo = REPOS[slug];
+    if (id) {
+      await repo.actualizar(tx, id, datos);
+    } else {
+      await repo.crear(tx, datos);
+    }
+  },
+);
 
 export async function guardarCatalogo(
   slug: string,
@@ -57,12 +90,15 @@ export async function guardarCatalogo(
   }
 
   try {
-    if (id) {
-      await repo.actualizar(id, resultado.data);
-    } else {
-      await repo.crear(resultado.data);
-    }
+    await escribirCatalogo(slug, id, resultado.data);
   } catch (error) {
+    if (error instanceof SinAcceso || error instanceof SinPermiso) {
+      return {
+        errores: {},
+        mensaje: `No tienes permiso para modificar ${def.titulo.toLowerCase()}.`,
+        valores: enviados,
+      };
+    }
     return { errores: {}, mensaje: mensajeDeError(error, def.singular), valores: enviados };
   }
 

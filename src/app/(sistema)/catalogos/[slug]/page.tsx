@@ -9,6 +9,8 @@ import {
   type CatalogoDef,
 } from "@/lib/catalogos/definiciones";
 import { leerRuta, REPOS } from "@/lib/catalogos/repos";
+import { consultar } from "@/lib/db";
+import { rolTienePermiso } from "@/lib/permisos";
 import { cantidad, cn } from "@/lib/utils";
 
 function celda(registro: { id: string }, campo: CampoDef, def: CatalogoDef) {
@@ -54,7 +56,12 @@ export default async function PaginaCatalogo({
   if (!def || !repo) notFound();
 
   const busqueda = typeof q === "string" ? q.trim().toLowerCase() : "";
-  const todos = await repo.listar();
+  // El permiso de escritura sale del mismo `usuario` que `consultar` ya entrega:
+  // ni segunda lectura de sesión ni consulta extra.
+  const { todos, puedeEscribir } = await consultar("catalogos:leer", async (db, usuario) => ({
+    todos: await repo.listar(db),
+    puedeEscribir: rolTienePermiso(usuario.rol, def.permisoEscritura),
+  }));
 
   const registros = busqueda
     ? todos.filter((r) =>
@@ -74,7 +81,11 @@ export default async function PaginaCatalogo({
         titulo={def.titulo}
         descripcion={def.descripcion}
         acciones={
-          <ButtonLink href={`/catalogos/${slug}/nuevo`}>Nuev{def.genero === "f" ? "a" : "o"} {def.singular}</ButtonLink>
+          puedeEscribir ? (
+            <ButtonLink href={`/catalogos/${slug}/nuevo`} prefetch={false}>
+              Nuev{def.genero === "f" ? "a" : "o"} {def.singular}
+            </ButtonLink>
+          ) : undefined
         }
       />
 
@@ -100,11 +111,13 @@ export default async function PaginaCatalogo({
             descripcion={
               busqueda
                 ? "Prueba con otra búsqueda o limpia el filtro."
-                : `Da de alta ${def.genero === "f" ? "la primera" : "el primero"} para empezar.`
+                : puedeEscribir
+                  ? `Da de alta ${def.genero === "f" ? "la primera" : "el primero"} para empezar.`
+                  : "Nadie ha dado de alta ninguno todavía."
             }
             accion={
-              !busqueda ? (
-                <ButtonLink href={`/catalogos/${slug}/nuevo`} tamano="sm">
+              !busqueda && puedeEscribir ? (
+                <ButtonLink href={`/catalogos/${slug}/nuevo`} tamano="sm" prefetch={false}>
                   Agregar
                 </ButtonLink>
               ) : undefined
@@ -144,8 +157,9 @@ export default async function PaginaCatalogo({
                       href={`/catalogos/${slug}/${registro.id}`}
                       variante="sutil"
                       tamano="sm"
+                      prefetch={false}
                     >
-                      Editar
+                      {puedeEscribir ? "Editar" : "Ver"}
                     </ButtonLink>
                   </Td>
                 </Tr>

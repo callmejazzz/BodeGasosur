@@ -8,9 +8,10 @@ costo unitario, a qué área se destina y con qué observaciones.
 
 **Versión actual: `v0.2.0`** — ver [CHANGELOG.md](CHANGELOG.md).
 
-**Estado:** fases 0 a 2 construidas. El levantamiento con Compras está cerrado y la
-arquitectura fue auditada; sus correcciones de esquema ya están aplicadas. Lo siguiente es
-la fase 3, usuarios y permisos — ver [`fases-siguientes.md`](fases-siguientes.md).
+**Estado:** fases 0 a 3 construidas. El levantamiento con Compras está cerrado y la
+arquitectura fue auditada; sus correcciones de esquema ya están aplicadas. La fase 3 dejó
+el acceso con Clerk, los tres roles y la facultad de autorizar; lo siguiente es la fase 4,
+la migración de catálogos — ver [`fases-siguientes.md`](fases-siguientes.md).
 
 **Entorno:** local mientras dure el desarrollo. Dónde se despliega se decide antes de la
 `v1.0.0` — ver [versionado y despliegue](docs/08-versionado-y-despliegue.md) y el hallazgo

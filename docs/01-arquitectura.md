@@ -186,7 +186,9 @@ romperla es una consulta ahorrada por petición:
 Tres consecuencias que se siguen:
 
 - **Existir en Clerk no es tener acceso.** Sin fila en `Usuario` no se entra, ni con una
-  sesión válida. El alta la hace el Superadmin y el registro en Clerk es por invitación.
+  sesión válida. El registro en Clerk es por invitación, y el alta la hace el Superadmin
+  **después**, desde la pantalla de usuarios: el enlace se hace sobre el `clerkUserId`,
+  que es inmutable, y no sobre el correo, que la gente cambia.
 - **La cuenta de Clerk puede desaparecer; el libro no.** La bitácora apunta al UUID local,
   así que el sistema sigue diciendo quién autorizó cada salida años después de que esa
   persona salió de la empresa.

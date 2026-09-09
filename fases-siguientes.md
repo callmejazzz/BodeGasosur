@@ -1,4 +1,4 @@
-# BodeGasosur — Fases siguientes
+	# BodeGasosur — Fases siguientes
 
 Orden de trabajo a partir del levantamiento cerrado con Compras y de la
 [auditoría de arquitectura](docs/09-auditoria.md). Reemplaza el plan original de
@@ -52,6 +52,10 @@ adentro lo único que no se puede delegar: el permiso.
 | **Compras** | Lectura | Captura y edita catálogos operativos | Registra entradas, salidas, traspasos y devoluciones |
 | **Jefe** | Lectura | Lectura | Consulta |
 
+**La columna de Movimientos es diseño, no código.** Los movimientos se construyen en las
+fases 5 a 7; hoy [`permisos.ts`](src/lib/permisos.ts) solo declara permisos de catálogos y
+de usuarios. Las otras dos columnas sí están implementadas y verificadas rol por rol.
+
 Además, transversal a los roles: la bandera **puede autorizar**, editable desde la pantalla
 de usuarios.
 
@@ -67,15 +71,45 @@ que de todos modos llega por WhatsApp y que Compras captura; el modelo ya lo sop
 darles cuenta, porque `solicitadoPor` apunta a una `Persona`. Es la lectura literal de lo
 que Compras dijo, y quita el mayor costo operativo de la `v1.0.0`.
 
-### Lo que hay que construir
+### Lo que se construyó
 
-- Integración de Clerk, con **registro restringido a invitación**
-- **Negación por omisión:** una sesión válida de Clerk sin fila en `Usuario` no entra
-- `accionProtegida` como **único camino de escritura**, con `db.ts` sin exportar el cliente
-  de Prisma y una regla de ESLint que cierre la puerta
-- Webhooks: `user.created/updated/deleted` a `Usuario` y `Bitacora`; los de sesión a
-  `EventoAcceso`
-- Pantalla de usuarios, con la bandera editable
+| Qué | Dónde |
+|---|---|
+| Identidad delegada a Clerk, en español, con pantalla de acceso propia | `src/app/(acceso)/`, `src/proxy.ts` |
+| Arranque del primer Superadmin, idempotente y con guardas | `scripts/arranque-superadmin.ts` |
+| Negación por omisión: `sin-sesion`, `sin-acceso` y `activa` | `sesionActual()` en `src/lib/db.ts` |
+| Lectura autorizada, en transacción `REPEATABLE READ READ ONLY` | `consultar()` |
+| Escritura autorizada, que fija `app.usuario_id` para la bitácora | `accionProtegida()` |
+| Matriz de permisos tipada, con los catálogos globales separados de los operativos | [`src/lib/permisos.ts`](src/lib/permisos.ts) |
+| El cliente de Prisma fuera de la capa de aplicación, con regla de ESLint | `src/lib/db.ts`, `eslint.config.mjs` |
+| Webhooks de Clerk: atómicos, idempotentes por `svix-id`, limitados por tipo a tres tablas | `src/app/api/webhooks/clerk/`, `escrituraDeSistema()` |
+| Pantalla de usuarios: conceder acceso, editar rol y bandera, activar y desactivar | `src/app/(sistema)/usuarios/` |
+| Navegación y catálogos según el rol, con detalle de solo lectura para quien no escribe | `navegacion.tsx`, `catalogos/[slug]/` |
+| Un solo usuario **activo** por correo, sin límite en los históricos | índice parcial en `prisma/sql/despues/` |
+| Registro de accesos y de entregas de webhook | `EventoAcceso`, `EventoWebhook` |
+
+Tres cosas conviene no perder de vista al leer esa tabla:
+
+- **La frontera son `consultar()` y `accionProtegida()`, no la pantalla.** Ocultar un botón
+  o una sección del menú es presentación. Las acciones de servidor son URLs propias y no
+  pasan por ningún layout.
+- **`accionProtegida` es el único camino de escritura de la capa de aplicación**, no del
+  sistema entero: el webhook escribe por `escrituraDeSistema()` y el arranque por su
+  script, y las dos declaran su origen para la bitácora.
+- `Usuario.correo` **no es único**. La identidad canónica es `clerkUserId`; una baja
+  conserva su fila con todo el histórico colgando.
+
+### Lo que queda diferido
+
+Ninguna de las dos bloquea la fase ni las siguientes:
+
+- **Cerrar el registro a invitación** en el panel de Clerk y retirar `(acceso)/sign-up`.
+  Está abierto a propósito para poder crear los primeros usuarios; se cierra antes de la
+  `v1.0.0`.
+- **`InvitacionAcceso`** —correo normalizado, rol previsto, vigencia y estado— que el
+  Superadmin llenaría antes de invitar. Clerk **no emite ningún evento al aceptarse una
+  invitación de instancia** (solo existen los de organización), así que su disparador
+  tendrá que ser `user.created`, emparejando por correo.
 
 ### Pantalla por tabla para el Superadmin
 
@@ -84,9 +118,11 @@ que Compras dijo, y quita el mayor costo operativo de la `v1.0.0`.
 descripción salen las columnas, el formulario y la validación. Agregar una tabla al panel
 del Superadmin es una entrada de configuración, no una pantalla nueva.
 
-**Criterio de aceptación:** dar y quitar la facultad de autorizar sin tocar el código ni la
-base de datos, que surta efecto en la siguiente petición, y que quede en la bitácora quién
-lo hizo.
+**Criterio de aceptación — cumplido y verificado:** dar y quitar la facultad de autorizar
+sin tocar el código ni la base de datos, que surta efecto en la siguiente petición, y que
+quede en la bitácora quién lo hizo. Se hace desde la pantalla de usuarios, `sesionActual()`
+lee la bandera de PostgreSQL en cada petición —nunca del token— y el trigger anota el
+cambio con el `usuarioId` de quien lo hizo.
 
 ## Fase 4 — Migración de catálogos
 

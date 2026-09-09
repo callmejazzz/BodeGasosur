@@ -79,7 +79,7 @@ CREATE TYPE "Rol" AS ENUM ('SUPERADMIN', 'COMPRAS', 'JEFE');
 CREATE TYPE "AccionBitacora" AS ENUM ('INSERTAR', 'ACTUALIZAR', 'ELIMINAR');
 
 -- CreateEnum
-CREATE TYPE "TipoEventoAcceso" AS ENUM ('SESION_INICIADA', 'SESION_TERMINADA', 'SESION_REVOCADA', 'ACCESO_DENEGADO');
+CREATE TYPE "TipoEventoAcceso" AS ENUM ('SESION_INICIADA', 'SESION_TERMINADA', 'SESION_REMOVIDA', 'SESION_REVOCADA', 'ACCESO_DENEGADO');
 
 -- CreateTable
 CREATE TABLE "catalogo_gasosur"."Empresa" (
@@ -377,9 +377,6 @@ CREATE INDEX "Estacion_empresaId_idx" ON "catalogo_gasosur"."Estacion"("empresaI
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Usuario_clerkUserId_key" ON "Usuario"("clerkUserId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "Usuario_correo_key" ON "Usuario"("correo");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Usuario_personaId_key" ON "Usuario"("personaId");
@@ -788,6 +785,26 @@ ALTER TABLE "Articulo" ADD CONSTRAINT "articulo_piezas_por_caja_ck" CHECK (
 );
 
 ALTER TABLE "Folio" ADD CONSTRAINT "folio_siguiente_positivo_ck" CHECK (siguiente > 0);
+
+-- ───────────────────────────────── Acceso ──────────────────────────────────
+
+-- Un solo usuario ACTIVO por correo, sin límite en los históricos.
+--
+-- `Usuario.correo` no es único a propósito: la identidad canónica es
+-- `clerkUserId`. Cuando alguien se da de baja en Clerk su fila se conserva
+-- —de ella cuelgan la bitácora y siete relaciones de Movimiento—, y ese mismo
+-- correo puede volver a darse de alta después con otro `clerkUserId`.
+--
+-- Lo que no puede pasar es que dos cuentas ACTIVAS compartan correo: sería
+-- convertir el historial de una persona en el de otra.
+--
+-- Va en `lower()` porque un correo no distingue mayúsculas. Clerk ya los
+-- normaliza; esto cubre lo que se escriba a mano.
+--
+-- Prisma no sabe expresar un índice parcial, por eso vive aquí y no en
+-- schema.prisma.
+CREATE UNIQUE INDEX "usuario_correo_activo_uq"
+  ON public."Usuario" (lower(correo)) WHERE activo;
 -- ═══════════════════════════════════════════════════════════════════════════
 -- La bitácora, alimentada por trigger.
 --

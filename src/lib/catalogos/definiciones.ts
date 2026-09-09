@@ -1,3 +1,4 @@
+import type { Permiso } from "@/lib/permisos";
 import { z } from "zod";
 
 /**
@@ -47,6 +48,13 @@ export type CampoDef = {
 export type CatalogoDef = {
   slug: string;
   titulo: string;
+  /**
+   * Permiso que exige escribir este catálogo. Empresa y Estacion viven en el
+   * esquema global del grupo y solo las escribe el Superadmin (01 §3.3); por
+   * eso el permiso viaja con la definición y no en un condicional sobre el
+   * slug: agregar un catálogo sigue siendo una entrada de configuración.
+   */
+  permisoEscritura: Permiso;
   singular: string;
   /** Para redactar los textos: «el proveedor» vs «la bodega». */
   genero: "m" | "f";
@@ -93,6 +101,7 @@ const EMPRESA: CampoDef = {
 export const CATALOGOS: CatalogoDef[] = [
   {
     slug: "empresas",
+    permisoEscritura: "catalogos:globales:escribir",
     titulo: "Empresas",
     singular: "empresa",
     genero: "f",
@@ -121,6 +130,7 @@ export const CATALOGOS: CatalogoDef[] = [
   },
   {
     slug: "bodegas",
+    permisoEscritura: "catalogos:operativos:escribir",
     titulo: "Bodegas",
     singular: "bodega",
     genero: "f",
@@ -144,6 +154,7 @@ export const CATALOGOS: CatalogoDef[] = [
   },
   {
     slug: "estaciones",
+    permisoEscritura: "catalogos:globales:escribir",
     titulo: "Estaciones",
     singular: "estación",
     genero: "f",
@@ -170,6 +181,7 @@ export const CATALOGOS: CatalogoDef[] = [
   },
   {
     slug: "areas",
+    permisoEscritura: "catalogos:operativos:escribir",
     titulo: "Áreas",
     singular: "área",
     genero: "f",
@@ -184,6 +196,7 @@ export const CATALOGOS: CatalogoDef[] = [
   },
   {
     slug: "unidades",
+    permisoEscritura: "catalogos:operativos:escribir",
     titulo: "Unidades de medida",
     singular: "unidad de medida",
     genero: "f",
@@ -207,6 +220,7 @@ export const CATALOGOS: CatalogoDef[] = [
   },
   {
     slug: "categorias",
+    permisoEscritura: "catalogos:operativos:escribir",
     titulo: "Categorías",
     singular: "categoría",
     genero: "f",
@@ -220,6 +234,7 @@ export const CATALOGOS: CatalogoDef[] = [
   },
   {
     slug: "articulos",
+    permisoEscritura: "catalogos:operativos:escribir",
     titulo: "Artículos",
     singular: "artículo",
     genero: "m",
@@ -276,6 +291,7 @@ export const CATALOGOS: CatalogoDef[] = [
   },
   {
     slug: "proveedores",
+    permisoEscritura: "catalogos:operativos:escribir",
     titulo: "Proveedores",
     singular: "proveedor",
     genero: "m",
@@ -301,6 +317,7 @@ export const CATALOGOS: CatalogoDef[] = [
   },
   {
     slug: "personas",
+    permisoEscritura: "catalogos:operativos:escribir",
     titulo: "Personas",
     singular: "persona",
     genero: "f",
@@ -315,6 +332,17 @@ export const CATALOGOS: CatalogoDef[] = [
     ],
   },
 ];
+
+/**
+ * Si el catálogo tiene algún `select` que llenar.
+ *
+ * Solo tres de los nueve lo tienen —estaciones, artículos y proveedores—, y
+ * `cargarOpciones()` cuesta tres lecturas. Preguntarlo antes evita pagarlas en
+ * los otros seis, donde no hay ni un desplegable que alimentar.
+ */
+export function necesitaOpciones(def: CatalogoDef): boolean {
+  return def.campos.some((campo) => campo.tipo === "select");
+}
 
 export function catalogoPorSlug(slug: string): CatalogoDef | undefined {
   return CATALOGOS.find((c) => c.slug === slug);
@@ -346,8 +374,14 @@ export function esquemaDe(def: CatalogoDef, modo: ModoFormulario) {
     switch (campo.tipo) {
       case "booleano":
         // Un checkbox no marcado sencillamente no se envía en el FormData.
+        //
+        // El `.optional()` no sobra aunque la unión ya acepte `undefined`: en
+        // Zod 4 el `.transform()` envuelve el esquema en un pipe, y la llave
+        // pasa a ser obligatoria: una llave AUSENTE falla con «expected
+        // nonoptional». Sin esta línea no se puede desactivar ningún registro.
         forma[campo.nombre] = z
           .union([z.literal("on"), z.literal("true"), z.undefined(), z.null()])
+          .optional()
           .transform((v) => v === "on" || v === "true");
         break;
 
@@ -359,7 +393,11 @@ export function esquemaDe(def: CatalogoDef, modo: ModoFormulario) {
               .int("Debe ser un número entero de piezas")
               .min(0, "No puede ser negativo")
           : z
+              // Mismo motivo que en el booleano: el pipe del transform vuelve
+              // obligatoria la llave. Aquí no se manifiesta —un input numérico
+              // siempre se envía, aunque sea vacío— pero el defecto es el mismo.
               .union([z.literal(""), z.undefined(), z.null(), z.coerce.number()])
+              .optional()
               .transform((v) => (v === "" || v === undefined || v === null ? null : Number(v)))
               .refine((v) => v === null || Number.isInteger(v), "Debe ser un número entero de piezas")
               .refine((v) => v === null || v >= 0, "No puede ser negativo");

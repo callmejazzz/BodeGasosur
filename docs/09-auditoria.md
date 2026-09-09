@@ -86,8 +86,8 @@ carreras clásicas.
 | **B2** | Sin idempotencia: doble clic duplica el movimiento                                   | Alto        | Fase 5            | Decidido — fase 5 |
 | **B3** | La fecha retroactiva rompe el orden PEPS y contradice §3.2                           | Alto        | Fase 5            | ✅ decidido (ver §0) |
 | **B4** | Transacción interactiva con locks sobre serverless con pooler                        | Medio       | Despliegue        | Decidido — fase 5 |
-| **C1** | La fase 3 no tiene stack de autenticación decidido                                   | Alto        | Fase 3            | Decidido: **Clerk** — fase 3 |
-| **C2** | Las Server Actions son endpoints públicos y hoy no verifican nada                    | **Crítico** | Fase 3            | Decidido — fase 3 |
+| **C1** | La fase 3 no tiene stack de autenticación decidido                                   | Alto        | Fase 3            | ✅ **Clerk** integrado |
+| **C2** | Las Server Actions son endpoints públicos y hoy no verifican nada                    | **Crítico** | Fase 3            | ✅ `accionProtegida` |
 | **C3** | El catálogo compartido no tiene control de acceso a nivel de base                    | Medio       | Fase 2            | ✅ `v0.2.0` |
 | **C4** | Datos personales reales versionados en git                                           | Bajo        | Cuando se decida  | ✅ decidido: diferido con disparador |
 | **D1** | Vercel Pro + Supabase Pro: la opción más cara y la que peor encaja                   | Medio       | `v1.0.0`          | Abierto — antes de `v1.0.0` |
@@ -354,15 +354,23 @@ revocación**.
 surte efecto hasta que el token expire. Para el permiso que es el requisito #1 del sistema,
 eso no es aceptable.
 
-**Corrección.** Sesiones en base de datos (tabla `Sesion`, token opaco en cookie
+**Corrección propuesta.** Sesiones en base de datos (tabla `Sesion`, token opaco en cookie
 `httpOnly`) + **argon2id**. Para ~10 usuarios sin OAuth son unas 150 líneas, cero riesgo de
 dependencia, revocación inmediata y bitácora de accesos de regalo. Auth.js v5 también
 sirve; lo que no sirve es llegar a la fase 3 sin haberlo decidido.
 
+**Lo que se hizo — fase 3.** No fue esa. Se eligió **Clerk**, y `Usuario.hash` ya no
+existe: la fila guarda `clerkUserId` y nada más ([01 §3.6](01-arquitectura.md)). El
+argumento de la revocación se resolvió por otro lado y sigue en pie: `rol` y
+`puedeAutorizar` **nunca** se copian a los claims, se leen de PostgreSQL en cada petición,
+así que quitar la bandera surte efecto en la siguiente. Lo que Clerk se lleva es lo que no
+daba valor y sí riesgo: contraseñas, sesiones, expiración, límite de intentos y
+recuperación.
+
 ### C2 — Las Server Actions son endpoints públicos y hoy no verifican nada
 
-[`actions.ts`](../src/app/catalogos/[slug]/actions.ts) escribe en cualquier catálogo sin una
-sola comprobación. Es correcto para una demo y deja de serlo en la fase 3.
+`actions.ts` escribía en cualquier catálogo sin una sola comprobación. Era correcto para una
+demo y dejaba de serlo en la fase 3.
 
 Y hay que decirlo explícitamente porque es el error más frecuente del App Router: **el
 middleware de Next.js no es una frontera de autorización.** Cada acción de servidor es una
@@ -374,11 +382,17 @@ revisión. No un `requerirUsuario()` al principio de cada función —eso se olv
 la única forma de obtener un cliente de escritura sea a través del permiso:
 
 ```ts
-export const guardarCatalogo = accionProtegida(
-  "catalogos:escribir",
-  async (tx, usuario, datos) => { /* … */ },
+export const escribirCatalogo = accionProtegida(
+  ([slug]) => catalogoPorSlug(slug).permisoEscritura,
+  async (tx, usuario, slug, id, datos) => { /* … */ },
 );
 ```
+
+**Lo que se hizo — fase 3.** Eso, y con el mecanismo completo: `lib/db.ts` dejó de exportar
+el cliente de Prisma y una regla de ESLint cierra `src/app/`, así que no hay a qué llamarle
+sin pasar por el permiso. El permiso no es fijo: sale de la definición del catálogo, porque
+escribir `Empresa` exige `catalogos:globales:escribir` y escribir `Bodega` no. Leer va por
+`consultar()`, en una transacción `READ ONLY` que PostgreSQL hace cumplir.
 
 ### C3 — El catálogo compartido no tiene control de acceso a nivel de base
 
@@ -687,7 +701,8 @@ escaneo indexado de una sola tabla.
   justificó guardar el par de costos.
 - No hay regla sobre desactivar un registro en uso: ¿se puede dar de baja una `Bodega` con
   existencia mayor que cero? ¿un `Articulo` con capas vivas?
-- Falta límite de intentos de inicio de sesión (fase 3).
+- ~~Falta límite de intentos de inicio de sesión (fase 3).~~ Resuelto por delegación: lo
+  hace Clerk desde la fase 3, y por eso dejó de ser código nuestro (§3.6).
 - Los adjuntos están diferidos *«cuando haya dónde almacenarlos»*, pero **C5** confirma que
   las facturas y remisiones *«sí se guardan»*, y en cuanto entra Supabase hay dónde. El
   diferimiento se quedó sin motivo.

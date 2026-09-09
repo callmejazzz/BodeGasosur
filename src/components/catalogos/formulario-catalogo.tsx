@@ -32,8 +32,12 @@ export function FormularioCatalogo({
 }) {
   const [estado, enviar, enviando] = useActionState(accion, ESTADO_INICIAL);
 
-  // Tras un error, lo recién capturado gana sobre lo que había guardado.
-  const actuales = estado.valores ?? valores;
+  // Tras un error, lo recién capturado gana sobre lo que había guardado — pero
+  // se mezcla, no se reemplaza. Los campos que no se capturan (la clave
+  // generada, una clave de negocio ya dada de alta) no viajan en el FormData,
+  // así que reemplazar los borraba de la pantalla: al fallar un guardado, la
+  // clave del artículo desaparecía y salía el marcador de alta.
+  const actuales = estado.valores ? { ...valores, ...estado.valores } : valores;
 
   return (
     <form action={enviar} className="flex flex-col gap-5 px-5 py-5">

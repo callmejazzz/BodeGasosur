@@ -1,6 +1,6 @@
 import "server-only";
-import { prisma } from "@/lib/db";
-import type { ValoresCatalogo } from "./definiciones";
+import type { Prisma } from "@prisma/client";
+import type { FuenteOpciones, ValoresCatalogo } from "./definiciones";
 
 /**
  * Acceso a datos de los catálogos.
@@ -24,11 +24,32 @@ export type RegistroCatalogo = { id: string };
 
 export type Opcion = { valor: string; etiqueta: string };
 
+/**
+ * El cliente llega como parámetro; este módulo ya no lo importa.
+ *
+ * Es lo que vuelve mecanismo la regla de §4.1: la única forma de obtener un
+ * `TransactionClient` es pasando por `consultar()` —que lo entrega en solo
+ * lectura— o por `accionProtegida()` —que antes verificó el permiso—. Un repo
+ * no puede escribir por su cuenta porque no tiene a qué llamarle.
+ *
+ * `Prisma.TransactionClient` y no `PrismaClient` a propósito: no expone
+ * `$transaction`, así que tampoco puede abrir una transacción anidada.
+ */
 export type RepoCatalogo = {
-  listar: () => Promise<RegistroCatalogo[]>;
-  obtener: (id: string) => Promise<RegistroCatalogo | null>;
-  crear: (datos: ValoresCatalogo) => Promise<void>;
-  actualizar: (id: string, datos: ValoresCatalogo) => Promise<void>;
+  /**
+   * `obtener` incluye las relaciones igual que `listar`, y a propósito: la
+   * vista de detalle muestra la relación leyéndola del propio registro, no de
+   * la lista de opciones —que filtra por activo y se dejaría fuera lo que se
+   * dio de baja—.
+   */
+  listar: (db: Prisma.TransactionClient) => Promise<RegistroCatalogo[]>;
+  obtener: (db: Prisma.TransactionClient, id: string) => Promise<RegistroCatalogo | null>;
+  crear: (db: Prisma.TransactionClient, datos: ValoresCatalogo) => Promise<void>;
+  actualizar: (
+    db: Prisma.TransactionClient,
+    id: string,
+    datos: ValoresCatalogo,
+  ) => Promise<void>;
 };
 
 // ── Lectores tolerantes: el valor ya pasó por Zod, aquí solo se le da tipo ──
@@ -59,10 +80,10 @@ export function leerRuta(registro: unknown, ruta: string): unknown {
 
 export const REPOS: Record<string, RepoCatalogo> = {
   empresas: {
-    listar: () => prisma.empresa.findMany({ orderBy: { razonSocial: "asc" } }),
-    obtener: (id) => prisma.empresa.findUnique({ where: { id } }),
-    crear: async (d) => {
-      await prisma.empresa.create({
+    listar: (db) => db.empresa.findMany({ orderBy: { razonSocial: "asc" } }),
+    obtener: (db, id) => db.empresa.findUnique({ where: { id } }),
+    crear: async (db, d) => {
+      await db.empresa.create({
         data: {
           razonSocial: texto(d.razonSocial),
           rfc: rfc(d.rfc),
@@ -70,8 +91,8 @@ export const REPOS: Record<string, RepoCatalogo> = {
         },
       });
     },
-    actualizar: async (id, d) => {
-      await prisma.empresa.update({
+    actualizar: async (db, id, d) => {
+      await db.empresa.update({
         where: { id },
         data: {
           razonSocial: texto(d.razonSocial),
@@ -83,10 +104,10 @@ export const REPOS: Record<string, RepoCatalogo> = {
   },
 
   bodegas: {
-    listar: () => prisma.bodega.findMany({ orderBy: { clave: "asc" } }),
-    obtener: (id) => prisma.bodega.findUnique({ where: { id } }),
-    crear: async (d) => {
-      await prisma.bodega.create({
+    listar: (db) => db.bodega.findMany({ orderBy: { clave: "asc" } }),
+    obtener: (db, id) => db.bodega.findUnique({ where: { id } }),
+    crear: async (db, d) => {
+      await db.bodega.create({
         data: {
           clave: texto(d.clave).toUpperCase(),
           nombre: texto(d.nombre),
@@ -95,8 +116,8 @@ export const REPOS: Record<string, RepoCatalogo> = {
         },
       });
     },
-    actualizar: async (id, d) => {
-      await prisma.bodega.update({
+    actualizar: async (db, id, d) => {
+      await db.bodega.update({
         where: { id },
         data: {
           nombre: texto(d.nombre),
@@ -108,11 +129,12 @@ export const REPOS: Record<string, RepoCatalogo> = {
   },
 
   estaciones: {
-    listar: () =>
-      prisma.estacion.findMany({ orderBy: { numero: "asc" }, include: { empresa: true } }),
-    obtener: (id) => prisma.estacion.findUnique({ where: { id } }),
-    crear: async (d) => {
-      await prisma.estacion.create({
+    listar: (db) =>
+      db.estacion.findMany({ orderBy: { numero: "asc" }, include: { empresa: true } }),
+    obtener: (db, id) =>
+      db.estacion.findUnique({ where: { id }, include: { empresa: true } }),
+    crear: async (db, d) => {
+      await db.estacion.create({
         data: {
           numero: texto(d.numero).toUpperCase(),
           alias: texto(d.alias),
@@ -124,8 +146,8 @@ export const REPOS: Record<string, RepoCatalogo> = {
         },
       });
     },
-    actualizar: async (id, d) => {
-      await prisma.estacion.update({
+    actualizar: async (db, id, d) => {
+      await db.estacion.update({
         where: { id },
         data: {
           alias: texto(d.alias),
@@ -140,15 +162,15 @@ export const REPOS: Record<string, RepoCatalogo> = {
   },
 
   areas: {
-    listar: () => prisma.area.findMany({ orderBy: { nombre: "asc" } }),
-    obtener: (id) => prisma.area.findUnique({ where: { id } }),
-    crear: async (d) => {
-      await prisma.area.create({
+    listar: (db) => db.area.findMany({ orderBy: { nombre: "asc" } }),
+    obtener: (db, id) => db.area.findUnique({ where: { id } }),
+    crear: async (db, d) => {
+      await db.area.create({
         data: { nombre: texto(d.nombre), activa: bool(d.activa) },
       });
     },
-    actualizar: async (id, d) => {
-      await prisma.area.update({
+    actualizar: async (db, id, d) => {
+      await db.area.update({
         where: { id },
         data: { nombre: texto(d.nombre), activa: bool(d.activa) },
       });
@@ -156,10 +178,10 @@ export const REPOS: Record<string, RepoCatalogo> = {
   },
 
   unidades: {
-    listar: () => prisma.unidadMedida.findMany({ orderBy: { clave: "asc" } }),
-    obtener: (id) => prisma.unidadMedida.findUnique({ where: { id } }),
-    crear: async (d) => {
-      await prisma.unidadMedida.create({
+    listar: (db) => db.unidadMedida.findMany({ orderBy: { clave: "asc" } }),
+    obtener: (db, id) => db.unidadMedida.findUnique({ where: { id } }),
+    crear: async (db, d) => {
+      await db.unidadMedida.create({
         data: {
           clave: texto(d.clave).toUpperCase(),
           nombre: texto(d.nombre),
@@ -167,8 +189,8 @@ export const REPOS: Record<string, RepoCatalogo> = {
         },
       });
     },
-    actualizar: async (id, d) => {
-      await prisma.unidadMedida.update({
+    actualizar: async (db, id, d) => {
+      await db.unidadMedida.update({
         where: { id },
         data: { nombre: texto(d.nombre), activa: bool(d.activa) },
       });
@@ -176,15 +198,15 @@ export const REPOS: Record<string, RepoCatalogo> = {
   },
 
   categorias: {
-    listar: () => prisma.categoriaArticulo.findMany({ orderBy: { nombre: "asc" } }),
-    obtener: (id) => prisma.categoriaArticulo.findUnique({ where: { id } }),
-    crear: async (d) => {
-      await prisma.categoriaArticulo.create({
+    listar: (db) => db.categoriaArticulo.findMany({ orderBy: { nombre: "asc" } }),
+    obtener: (db, id) => db.categoriaArticulo.findUnique({ where: { id } }),
+    crear: async (db, d) => {
+      await db.categoriaArticulo.create({
         data: { nombre: texto(d.nombre), activa: bool(d.activa) },
       });
     },
-    actualizar: async (id, d) => {
-      await prisma.categoriaArticulo.update({
+    actualizar: async (db, id, d) => {
+      await db.categoriaArticulo.update({
         where: { id },
         data: { nombre: texto(d.nombre), activa: bool(d.activa) },
       });
@@ -192,15 +214,16 @@ export const REPOS: Record<string, RepoCatalogo> = {
   },
 
   articulos: {
-    listar: () =>
-      prisma.articulo.findMany({
+    listar: (db) =>
+      db.articulo.findMany({
         orderBy: { clave: "asc" },
         include: { unidad: true, categoria: true },
       }),
-    obtener: (id) => prisma.articulo.findUnique({ where: { id } }),
-    crear: async (d) => {
+    obtener: (db, id) =>
+      db.articulo.findUnique({ where: { id }, include: { unidad: true, categoria: true } }),
+    crear: async (db, d) => {
       // Sin `clave`: la asigna la secuencia de PostgreSQL.
-      await prisma.articulo.create({
+      await db.articulo.create({
         data: {
           descripcion: texto(d.descripcion),
           unidadId: texto(d.unidadId),
@@ -211,8 +234,8 @@ export const REPOS: Record<string, RepoCatalogo> = {
         },
       });
     },
-    actualizar: async (id, d) => {
-      await prisma.articulo.update({
+    actualizar: async (db, id, d) => {
+      await db.articulo.update({
         where: { id },
         data: {
           descripcion: texto(d.descripcion),
@@ -227,14 +250,15 @@ export const REPOS: Record<string, RepoCatalogo> = {
   },
 
   proveedores: {
-    listar: () =>
-      prisma.proveedor.findMany({
+    listar: (db) =>
+      db.proveedor.findMany({
         orderBy: { nombreComercial: "asc" },
         include: { empresa: true },
       }),
-    obtener: (id) => prisma.proveedor.findUnique({ where: { id } }),
-    crear: async (d) => {
-      await prisma.proveedor.create({
+    obtener: (db, id) =>
+      db.proveedor.findUnique({ where: { id }, include: { empresa: true } }),
+    crear: async (db, d) => {
+      await db.proveedor.create({
         data: {
           empresaId: texto(d.empresaId),
           nombreComercial: texto(d.nombreComercial),
@@ -246,8 +270,8 @@ export const REPOS: Record<string, RepoCatalogo> = {
         },
       });
     },
-    actualizar: async (id, d) => {
-      await prisma.proveedor.update({
+    actualizar: async (db, id, d) => {
+      await db.proveedor.update({
         where: { id },
         data: {
           empresaId: texto(d.empresaId),
@@ -263,10 +287,10 @@ export const REPOS: Record<string, RepoCatalogo> = {
   },
 
   personas: {
-    listar: () => prisma.persona.findMany({ orderBy: { nombre: "asc" } }),
-    obtener: (id) => prisma.persona.findUnique({ where: { id } }),
-    crear: async (d) => {
-      await prisma.persona.create({
+    listar: (db) => db.persona.findMany({ orderBy: { nombre: "asc" } }),
+    obtener: (db, id) => db.persona.findUnique({ where: { id } }),
+    crear: async (db, d) => {
+      await db.persona.create({
         data: {
           nombre: texto(d.nombre),
           puesto: textoOpcional(d.puesto),
@@ -274,8 +298,8 @@ export const REPOS: Record<string, RepoCatalogo> = {
         },
       });
     },
-    actualizar: async (id, d) => {
-      await prisma.persona.update({
+    actualizar: async (db, id, d) => {
+      await db.persona.update({
         where: { id },
         data: {
           nombre: texto(d.nombre),
@@ -287,26 +311,59 @@ export const REPOS: Record<string, RepoCatalogo> = {
   },
 };
 
-/** Opciones para los campos de tipo `select`. */
-export async function cargarOpciones(): Promise<Record<string, Opcion[]>> {
+/**
+ * Opciones para los campos de tipo `select`.
+ *
+ * Filtrar por activo es lo correcto al dar de alta: una baja lógica significa
+ * «ya no se puede elegir al capturar» (prisma/sql/despues/40-bajas.sql).
+ *
+ * Al EDITAR era un defecto. Un registro que ya apuntaba a algo dado de baja no
+ * encontraba su valor en la lista, el navegador caía en «Sin especificar» y
+ * guardar rompía el vínculo: con el campo obligatorio, con un mensaje que no
+ * explicaba nada; con el campo opcional —`Articulo.categoriaId`—, **en
+ * silencio**.
+ *
+ * `conservar` deja pasar, además de las activas, aquello que el registro que se
+ * está editando ya tiene asignado. Se marca como dado de baja, y solo aparece
+ * en ese registro: sigue sin poder asignarse a ninguno nuevo.
+ */
+export async function cargarOpciones(
+  db: Prisma.TransactionClient,
+  conservar: Partial<Record<FuenteOpciones, string>> = {},
+): Promise<Record<string, Opcion[]>> {
+  const filtro = (id: string | undefined) =>
+    id ? { OR: [{ activa: true }, { id }] } : { activa: true };
+
+  const marcar = (etiqueta: string, activa: boolean) =>
+    activa ? etiqueta : `${etiqueta} — dada de baja`;
+
   const [unidades, categorias, empresas] = await Promise.all([
-    prisma.unidadMedida.findMany({ where: { activa: true }, orderBy: { clave: "asc" } }),
-    prisma.categoriaArticulo.findMany({ where: { activa: true }, orderBy: { nombre: "asc" } }),
-    prisma.empresa.findMany({ where: { activa: true }, orderBy: { razonSocial: "asc" } }),
+    db.unidadMedida.findMany({ where: filtro(conservar.unidades), orderBy: { clave: "asc" } }),
+    db.categoriaArticulo.findMany({
+      where: filtro(conservar.categorias),
+      orderBy: { nombre: "asc" },
+    }),
+    db.empresa.findMany({ where: filtro(conservar.empresas), orderBy: { razonSocial: "asc" } }),
   ]);
 
   return {
-    unidades: unidades.map((u) => ({ valor: u.id, etiqueta: `${u.clave} — ${u.nombre}` })),
-    categorias: categorias.map((c) => ({ valor: c.id, etiqueta: c.nombre })),
+    unidades: unidades.map((u) => ({
+      valor: u.id,
+      etiqueta: marcar(`${u.clave} — ${u.nombre}`, u.activa),
+    })),
+    categorias: categorias.map((c) => ({
+      valor: c.id,
+      etiqueta: marcar(c.nombre, c.activa),
+    })),
     empresas: empresas.map((e) => ({
       valor: e.id,
-      etiqueta: e.rfc ? `${e.razonSocial} — ${e.rfc}` : e.razonSocial,
+      etiqueta: marcar(e.rfc ? `${e.razonSocial} — ${e.rfc}` : e.razonSocial, e.activa),
     })),
   };
 }
 
 /** Conteos para el índice de catálogos y el tablero. */
-export async function contarCatalogos() {
+export async function contarCatalogos(db: Prisma.TransactionClient) {
   const [
     empresas,
     bodegas,
@@ -318,15 +375,15 @@ export async function contarCatalogos() {
     proveedores,
     personas,
   ] = await Promise.all([
-    prisma.empresa.count(),
-    prisma.bodega.count(),
-    prisma.estacion.count(),
-    prisma.area.count(),
-    prisma.unidadMedida.count(),
-    prisma.categoriaArticulo.count(),
-    prisma.articulo.count(),
-    prisma.proveedor.count(),
-    prisma.persona.count(),
+    db.empresa.count(),
+    db.bodega.count(),
+    db.estacion.count(),
+    db.area.count(),
+    db.unidadMedida.count(),
+    db.categoriaArticulo.count(),
+    db.articulo.count(),
+    db.proveedor.count(),
+    db.persona.count(),
   ]);
 
   return {

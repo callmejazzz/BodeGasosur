@@ -219,3 +219,23 @@ ALTER TABLE "Articulo" ADD CONSTRAINT "articulo_piezas_por_caja_ck" CHECK (
 );
 
 ALTER TABLE "Folio" ADD CONSTRAINT "folio_siguiente_positivo_ck" CHECK (siguiente > 0);
+
+-- ───────────────────────────────── Acceso ──────────────────────────────────
+
+-- Un solo usuario ACTIVO por correo, sin límite en los históricos.
+--
+-- `Usuario.correo` no es único a propósito: la identidad canónica es
+-- `clerkUserId`. Cuando alguien se da de baja en Clerk su fila se conserva
+-- —de ella cuelgan la bitácora y siete relaciones de Movimiento—, y ese mismo
+-- correo puede volver a darse de alta después con otro `clerkUserId`.
+--
+-- Lo que no puede pasar es que dos cuentas ACTIVAS compartan correo: sería
+-- convertir el historial de una persona en el de otra.
+--
+-- Va en `lower()` porque un correo no distingue mayúsculas. Clerk ya los
+-- normaliza; esto cubre lo que se escriba a mano.
+--
+-- Prisma no sabe expresar un índice parcial, por eso vive aquí y no en
+-- schema.prisma.
+CREATE UNIQUE INDEX "usuario_correo_activo_uq"
+  ON public."Usuario" (lower(correo)) WHERE activo;

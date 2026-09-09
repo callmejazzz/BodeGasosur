@@ -2,13 +2,14 @@ import Link from "next/link";
 import { EncabezadoPagina } from "@/components/ui/superficies";
 import { CATALOGOS } from "@/lib/catalogos/definiciones";
 import { contarCatalogos } from "@/lib/catalogos/repos";
+import { consultar } from "@/lib/db";
 import { cantidad } from "@/lib/utils";
 
 // Lee existencias y catálogos en cada visita: son datos vivos, no contenido estático.
 export const dynamic = "force-dynamic";
 
 export default async function PaginaCatalogos() {
-  const conteos = await contarCatalogos();
+  const conteos = await consultar("catalogos:leer", (db) => contarCatalogos(db));
 
   return (
     <>

@@ -56,3 +56,9 @@ next-env.d.ts
 
 # Graphify
 /graphify-out
+
+# skills de agentes (clerk/skills). Se instalan por máquina con `npx skills add`;
+# no son código del proyecto.
+.agents/
+.claude/skills/
+skills-lock.json
