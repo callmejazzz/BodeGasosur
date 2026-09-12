@@ -94,6 +94,11 @@ enum TipoEventoAcceso {
 //
 // Otros proyectos de Gasosur leen este esquema, pero nunca estas tablas: leen las
 // vistas versionadas v_empresa_v1 y v_estacion_v1 con el rol lector_catalogo.
+//
+// Empresa representa EXCLUSIVAMENTE a las empresas del grupo Gasosur. Ninguna
+// empresa proveedora externa ni ningún dato de prueba entra aquí: el proveedor
+// lleva sus propios datos fiscales. Si un día una empresa del grupo tuviera que
+// ser proveedora, se decide como caso de negocio, no con un vínculo opcional.
 
 model Empresa {
   id          String  @id @default(uuid(7)) @db.Uuid
@@ -105,8 +110,7 @@ model Empresa {
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
-  estaciones  Estacion[]
-  proveedores Proveedor[]
+  estaciones Estacion[]
 
   @@schema("catalogo_gasosur")
 }
@@ -232,8 +236,10 @@ model Bitacora {
 
 model Bodega {
   id        String  @id @default(uuid(7)) @db.Uuid
-  /// Clave de negocio, en la URL e inmutable después del alta.
-  clave     String  @unique
+  /// La asigna el sistema: BDG-00001, BDG-00002… En la URL e inmutable después
+  /// del alta, igual que la clave de artículo.
+  clave     String  @unique @default(dbgenerated("('BDG-' || lpad(nextval('bodega_clave_seq')::text, 5, '0'))"))
+  /// Único sin distinguir mayúsculas ni espacios sobrantes (índice en prisma/sql).
   nombre    String
   ubicacion String?
   activa    Boolean @default(true)
@@ -321,11 +327,17 @@ model Articulo {
   @@schema("public")
 }
 
-/// Razón social y RFC viven en Empresa: 33 de los 137 proveedores son del grupo.
+/// A quién se le compra. Lleva sus propios datos fiscales: no apunta al catálogo
+/// global, que es solo de las empresas de Gasosur.
 model Proveedor {
   id              String  @id @default(uuid(7)) @db.Uuid
-  empresaId       String  @db.Uuid
+  /// Único sin distinguir mayúsculas ni espacios sobrantes (índice en prisma/sql).
   nombreComercial String
+  razonSocial     String
+  /// Normalizado: mayúsculas, sin guiones ni espacios. Opcional: no todo
+  /// proveedor lo tiene a la mano al darse de alta. No es único a propósito:
+  /// una misma persona física factura bajo dos nombres comerciales.
+  rfc             String?
   contacto        String?
   telefono        String?
   correo          String?
@@ -335,10 +347,9 @@ model Proveedor {
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
-  empresa     Empresa      @relation(fields: [empresaId], references: [id])
   movimientos Movimiento[]
 
-  @@index([empresaId])
+  @@index([rfc])
   @@schema("public")
 }
 
@@ -346,6 +357,7 @@ model Proveedor {
 /// estación pide por WhatsApp y Compras captura a su nombre.
 model Persona {
   id     String  @id @default(uuid(7)) @db.Uuid
+  /// Único sin distinguir mayúsculas ni espacios sobrantes (índice en prisma/sql).
   nombre String
   puesto String?
   activa Boolean @default(true)

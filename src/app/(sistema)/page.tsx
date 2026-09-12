@@ -13,13 +13,19 @@ const FASES = [
   { nombre: "Fase 0 y 1 — Cimientos y catálogos", detalle: "Next.js, PostgreSQL, Prisma y los catálogos con datos sembrados", estado: "lista" },
   { nombre: "Fase 2 — Cimientos corregidos", detalle: "Modelo de datos con los invariantes escritos en la base", estado: "lista" },
   { nombre: "Fase 3 — Usuarios y permisos", detalle: "Acceso con Clerk, roles y la facultad de autorizar", estado: "lista" },
-  { nombre: "Fase 4 — Migración de catálogos", detalle: "Empresas, estaciones, proveedores, artículos y existencias reales", estado: "pendiente" },
+  { nombre: "Fase 4 — Migración de catálogos (Plan B)", detalle: "Catálogo global real; proveedores, artículos y existencias los captura Compras", estado: "lista" },
   { nombre: "Fase 5 — Entradas", detalle: "Compras con moneda, IVA y capas de costo PEPS", estado: "pendiente" },
   { nombre: "Fase 6 — Salidas", detalle: "Solicitud, autorización, entrega y confirmación de recepción", estado: "pendiente" },
   { nombre: "Fase 7 — Traspasos, devoluciones y conteo", detalle: "Movimientos entre bodegas, préstamos e inventario físico", estado: "pendiente" },
   { nombre: "Fase 8 — Reportes", detalle: "Reporte de los viernes, kardex, gasto por estación y exportación", estado: "pendiente" },
   { nombre: "Fase 9 — Acabado", detalle: "Tablero, alertas de mínimos y diseño en celular", estado: "pendiente" },
 ] as const;
+
+const ESTADO_FASE = {
+  lista: { texto: "Lista", tono: "exito" },
+  parcial: { texto: "Parcial", tono: "aviso" },
+  pendiente: { texto: "Pendiente", tono: "neutro" },
+} as const;
 
 function Metrica({ etiqueta, valor, href }: { etiqueta: string; valor: number; href: string }) {
   return (
@@ -81,9 +87,7 @@ export default async function Tablero() {
                   <p className="text-sm font-medium text-foreground">{fase.nombre}</p>
                   <p className="text-sm text-muted">{fase.detalle}</p>
                 </div>
-                <Badge tono={fase.estado === "lista" ? "exito" : "neutro"}>
-                  {fase.estado === "lista" ? "Lista" : "Pendiente"}
-                </Badge>
+                <Badge tono={ESTADO_FASE[fase.estado].tono}>{ESTADO_FASE[fase.estado].texto}</Badge>
               </li>
             ))}
           </ul>

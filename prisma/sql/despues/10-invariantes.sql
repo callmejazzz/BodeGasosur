@@ -239,3 +239,30 @@ ALTER TABLE "Folio" ADD CONSTRAINT "folio_siguiente_positivo_ck" CHECK (siguient
 -- schema.prisma.
 CREATE UNIQUE INDEX "usuario_correo_activo_uq"
   ON public."Usuario" (lower(correo)) WHERE activo;
+
+-- ───────────────────── Nombres únicos en los catálogos ─────────────────────
+--
+-- Bodega.nombre, Persona.nombre y Proveedor.nombreComercial son la forma en
+-- que una persona identifica el registro, y también la clave con la que los
+-- scripts de configuración y de migración deciden si un renglón ya existe.
+-- Sin unicidad, «Diana Damián» y «diana damián» serían dos personas, y un
+-- script que busca por nombre actualizaría una fila cualquiera.
+--
+-- «Único» aquí significa sin distinguir mayúsculas ni espacios sobrantes.
+-- La función es IMMUTABLE porque un índice lo exige, y los scripts la usan
+-- también para BUSCAR: es la única manera de que la búsqueda y el índice
+-- coincidan siempre.
+
+CREATE OR REPLACE FUNCTION nombre_normalizado(texto text) RETURNS text AS $$
+  SELECT lower(regexp_replace(btrim(texto), '\s+', ' ', 'g'));
+$$ LANGUAGE sql IMMUTABLE STRICT;
+
+COMMENT ON FUNCTION nombre_normalizado(text) IS
+  'Minúsculas y un solo espacio entre palabras. Base de los índices únicos por nombre.';
+
+CREATE UNIQUE INDEX "bodega_nombre_uq"
+  ON public."Bodega" (nombre_normalizado(nombre));
+CREATE UNIQUE INDEX "persona_nombre_uq"
+  ON public."Persona" (nombre_normalizado(nombre));
+CREATE UNIQUE INDEX "proveedor_nombre_comercial_uq"
+  ON public."Proveedor" (nombre_normalizado("nombreComercial"));

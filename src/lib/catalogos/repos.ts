@@ -1,5 +1,6 @@
 import "server-only";
 import type { Prisma } from "@prisma/client";
+import { normalizarRfc } from "@/lib/rfc";
 import type { FuenteOpciones, ValoresCatalogo } from "./definiciones";
 
 /**
@@ -11,13 +12,13 @@ import type { FuenteOpciones, ValoresCatalogo } from "./definiciones";
  *
  * Dos ausencias son deliberadas y conviene no «arreglarlas»:
  *
- *   · `actualizar` nunca escribe una clave de negocio (Bodega.clave,
- *     Estacion.numero, UnidadMedida.clave). Un trigger de PostgreSQL lo
- *     impide de todos modos; aquí simplemente no se intenta.
+ *   · `actualizar` nunca escribe una clave de negocio (Estacion.numero,
+ *     UnidadMedida.clave). Un trigger de PostgreSQL lo impide de todos modos;
+ *     aquí simplemente no se intenta.
  *
- *   · `crear` de artículos no manda `clave`. La genera la base por secuencia
- *     —ART-00001, ART-00002…— y por eso el formulario la muestra de solo
- *     lectura.
+ *   · `crear` de artículos y de bodegas no manda `clave`. La genera la base
+ *     por secuencia —ART-00001, BDG-00001…— y por eso el formulario la muestra
+ *     de solo lectura.
  */
 
 export type RegistroCatalogo = { id: string };
@@ -62,11 +63,8 @@ const enteroOpcional = (v: unknown): number | null =>
   typeof v === "number" ? Math.trunc(v) : null;
 const bool = (v: unknown): boolean => v === true;
 
-/** Mayúsculas, sin guiones ni espacios: así se guarda el RFC en el catálogo global. */
-const rfc = (v: unknown): string | null => {
-  const crudo = textoOpcional(v);
-  return crudo ? crudo.toUpperCase().replace(/[\s-]/g, "") : null;
-};
+/** La regla del RFC es compartida con la migración de datos: vive en `@/lib/rfc`. */
+const rfc = (v: unknown): string | null => normalizarRfc(textoOpcional(v));
 
 /** Lee `unidad.clave` sobre un registro cuyo tipo estático no expone la relación. */
 export function leerRuta(registro: unknown, ruta: string): unknown {
@@ -107,9 +105,9 @@ export const REPOS: Record<string, RepoCatalogo> = {
     listar: (db) => db.bodega.findMany({ orderBy: { clave: "asc" } }),
     obtener: (db, id) => db.bodega.findUnique({ where: { id } }),
     crear: async (db, d) => {
+      // Sin `clave`: la asigna la secuencia de PostgreSQL.
       await db.bodega.create({
         data: {
-          clave: texto(d.clave).toUpperCase(),
           nombre: texto(d.nombre),
           ubicacion: textoOpcional(d.ubicacion),
           activa: bool(d.activa),
@@ -250,18 +248,14 @@ export const REPOS: Record<string, RepoCatalogo> = {
   },
 
   proveedores: {
-    listar: (db) =>
-      db.proveedor.findMany({
-        orderBy: { nombreComercial: "asc" },
-        include: { empresa: true },
-      }),
-    obtener: (db, id) =>
-      db.proveedor.findUnique({ where: { id }, include: { empresa: true } }),
+    listar: (db) => db.proveedor.findMany({ orderBy: { nombreComercial: "asc" } }),
+    obtener: (db, id) => db.proveedor.findUnique({ where: { id } }),
     crear: async (db, d) => {
       await db.proveedor.create({
         data: {
-          empresaId: texto(d.empresaId),
           nombreComercial: texto(d.nombreComercial),
+          razonSocial: texto(d.razonSocial),
+          rfc: rfc(d.rfc),
           giro: textoOpcional(d.giro),
           contacto: textoOpcional(d.contacto),
           telefono: textoOpcional(d.telefono),
@@ -274,8 +268,9 @@ export const REPOS: Record<string, RepoCatalogo> = {
       await db.proveedor.update({
         where: { id },
         data: {
-          empresaId: texto(d.empresaId),
           nombreComercial: texto(d.nombreComercial),
+          razonSocial: texto(d.razonSocial),
+          rfc: rfc(d.rfc),
           giro: textoOpcional(d.giro),
           contacto: textoOpcional(d.contacto),
           telefono: textoOpcional(d.telefono),

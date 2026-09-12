@@ -7,9 +7,13 @@ llegó hasta aquí.
 
 **Ya construido:**
 
-- **Fases 0 y 1** (`v0.1.0`) — cimientos, modelo de datos inicial y los catálogos con datos
+- **Fases 0 y 1** (`v0.1.0`) - cimientos, modelo de datos inicial y los catálogos con datos
   sembrados. Se le presentó a Compras como demo.
-- **Fase 2** (`v0.2.0`) — cimientos corregidos.
+- **Fase 2** (`v0.2.0`) - cimientos corregidos.
+- **Fase 3** (`v0.3.0`) - usuarios y permisos.
+- **Fase 4**, parcial - empresas, estaciones y dos personas migradas; dos perfiles de base
+  (desarrollo y producción) y el [Plan B](docs/10-plan-b-produccion.md) para arrancar
+  producción sin inventario.
 
 ---
 
@@ -115,36 +119,51 @@ quede en la bitácora quién lo hizo. Se hace desde la pantalla de usuarios, `se
 lee la bandera de PostgreSQL en cada petición —nunca del token— y el trigger anota el
 cambio con el `usuarioId` de quien lo hizo.
 
-## Fase 4 — Migración de catálogos
+## Fase 4 — Migración de catálogos (Plan B) ✅
 
-- 22 empresas y 32 estaciones desde `Estaciones.xlsx`, con el RFC normalizado sin guiones
-- **Pantalla de alta y edición de estaciones** — el catálogo llega incompleto: el grupo
-  opera alrededor de **40 estaciones** y hay más empresas de las 22 capturadas
-- 137 proveedores; los 33 que son empresas del grupo se enlazan a la `Empresa` existente
-- 225 artículos **renumerados** por el sistema (`ART-00001`…)
-- Personas, unificando las catorce grafías de nueve nombres reales
-- Existencia inicial como movimiento de `AJUSTE` por bodega, **con capa de costo nulo**
+La decisión canónica está en [`docs/10-plan-b-produccion.md`](docs/10-plan-b-produccion.md):
+el desarrollo sigue con datos demostrativos y **producción arranca limpia de datos
+operativos**. La fase se da por cerrada con eso; aquí solo el resumen operativo.
 
-**Por qué renumerar:** los 41 códigos que aparecen en las dos bodegas designan artículos
-distintos en cada una. El código actual no puede migrarse como clave.
+**Lo que se construyó:**
 
-**Los códigos viejos no se guardan en la base.** Se decidió que conservarlos era trabajo
-extra de poco valor: BodeGasosur asigna claves nuevas y la normalización de las
-descripciones se hace a mano. Lo que sí tiene que existir es el **mapeo**
-`codigo_viejo,bodega,clave_nueva` como archivo versionado en `prisma/migracion-datos/`,
-producto de esa misma normalización — sin él, la tarea aparte del histórico deja de ser
-posible para siempre.
+- **21 empresas y 32 estaciones** desde `Estaciones.xlsx` y **dos personas** —Diana Damián
+  Hernández y Oscar Bailón Delgado—, por [`prisma/migracion-datos/`](prisma/migracion-datos/README.md):
+  código idempotente con el corte (2026-09-10) versionado como CSV. Eran 21 empresas y no
+  22: la propia tabla de [06 §1](docs/06-estaciones.md) suma ocho compartidas y trece con
+  una estación
+- **El importador respeta lo editado desde la pantalla.** Si la base difiere del CSV se
+  detiene con el reporte —campo, valor en cada lado, y quién hizo el último cambio según
+  la bitácora— y no escribe nada. Sobrescribe solo con `--sincronizar`, y `--simular`
+  muestra el plan sin tocar la base. Nunca toca `activa` ni borra lo que no está en el CSV
+- **Dos perfiles separados:** `db:reset` (desarrollo: configuración + catálogos reales +
+  fixtures + Superadmin) y `prod:bootstrap` (producción: lo mismo sin fixtures, manual, con
+  validación del entorno antes de `migrate deploy`, resumen y confirmación). Los fixtures
+  fallan por omisión
+- **Modelo:** `Empresa` es exclusivamente Gasosur y `Proveedor` lleva su propia razón
+  social y RFC, sin vínculo entre ambos; `Bodega.clave` la asigna el sistema
+  (`BDG-00001`…); `Bodega.nombre`, `Persona.nombre` y `Proveedor.nombreComercial` son
+  únicos sin distinguir mayúsculas ni espacios sobrantes
+- **Vitest**, contra el PostgreSQL real en una base `*_prueba` que se recrea en cada corrida,
+  con las cuatro pruebas del importador: carga y segunda corrida sin escrituras, cambio
+  manual con rollback completo, `--sincronizar` con bitácora, y datos inválidos con rollback
 
-**Cómo se ejecuta:** código idempotente y versionado en `prisma/migracion-datos/`,
-ejecutable N veces contra una base limpia. No trabajo manual en Studio.
+**No se migra, y no está pendiente:** los 137 proveedores, los 225 artículos, los precios y
+la existencia inicial. Compras los captura desde la aplicación. Si algún día entrega la
+normalización, será una **carga operativa adicional** —tarea aparte, fuera de las fases—
+por este mismo mecanismo, con el mapeo `codigo_viejo,bodega,clave_nueva`, sin reiniciar
+producción; los artículos se renumerarían (`ART-00001`…) porque los 41 códigos que
+aparecen en las dos bodegas designan artículos distintos en cada una. Mientras tanto los
+artículos y proveedores demostrativos de `prisma/fixtures.ts` bastan para construir y
+probar las fases 5 a 9.
 
-**El corte:** congelar el Excel un viernes, correr la migración con el archivo de ese día,
-operar ambos en paralelo una semana y conciliar. Esa semana es lo que compra la confianza
-de Compras, y de paso es la mejor prueba posible de los invariantes.
+**Sigue vigente:** el grupo opera alrededor de **40 estaciones** y hay más empresas de las
+21 capturadas; el catálogo se completa desde la pantalla de estaciones, que ya existe.
 
-**Criterio de aceptación:** el sistema arranca con las existencias reales de ambas bodegas,
-la conciliación de la semana en paralelo cierra sin diferencias, y el mapeo de códigos
-viejos queda versionado en el repositorio.
+**Criterio de aceptación — cumplido:** producción arranca con el catálogo global real, las
+dos personas, la configuración mínima y el Superadmin; sin inventario. Verificado con
+`prod:bootstrap` contra una base limpia: 21 empresas, 32 estaciones, 2 personas, 0
+proveedores, 0 artículos.
 
 ## Fase 5 — Entradas
 
@@ -228,7 +247,7 @@ gerente. Es el requisito #1 de Compras.
 | **CI**: `tsc`, `eslint`, las cuatro pruebas de invariantes contra PostgreSQL real, y `prisma migrate diff` para detectar deriva | Cuanto antes: es lo que vuelve segura la política de *«en `0.x` romper está permitido»* |
 | **Decidir dónde se despliega** (contenedor único frente a Vercel + Supabase) | Antes de la `v1.0.0` |
 | **Política de respaldos** con RPO/RTO y un simulacro de restauración documentado | Antes de la `v1.0.0` |
-| `migrate deploy` **fuera del build**, como paso de release | Al desplegar |
+| `migrate deploy` **fuera del build**, como paso de release; la primera vez, dentro de `prod:bootstrap` | Al desplegar |
 | **Observabilidad**, con el release atado a la versión del pie de página | Antes de la `v1.0.0` |
 | Quitar las dependencias instaladas sin usar | Cuanto antes |
 

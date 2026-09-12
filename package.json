@@ -1,6 +1,6 @@
 {
   "name": "bodegasosur",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -10,10 +10,14 @@
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "db:migrate": "prisma migrate dev",
-    "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
-    "db:reset": "prisma migrate reset --force && prisma db seed && npm run acceso:arranque",
-    "acceso:arranque": "tsx scripts/arranque-superadmin.ts"
+    "db:reset": "prisma migrate reset --force && npm run db:configuracion && npm run datos:migrar && npm run db:fixtures && npm run acceso:arranque",
+    "db:configuracion": "tsx prisma/configuracion.ts",
+    "db:fixtures": "tsx prisma/fixtures.ts",
+    "datos:migrar": "tsx prisma/migracion-datos/migrar.ts",
+    "acceso:arranque": "tsx scripts/arranque-superadmin.ts",
+    "prod:bootstrap": "tsx scripts/bootstrap-produccion.ts",
+    "test": "vitest run"
   },
   "dependencies": {
     "@clerk/backend": "^3.16.13",
@@ -47,12 +51,10 @@
     "prisma": "^7.9.1",
     "tailwindcss": "^4",
     "tsx": "^4.23.12",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.11"
   },
   "description": "Sistema de control de inventario para las bodegas del grupo Gasosur",
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
-  },
   "allowScripts": {
     "prisma@7.9.1": true,
     "@prisma/engines@7.9.1": true,

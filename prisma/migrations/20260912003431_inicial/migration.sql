@@ -55,6 +55,15 @@ COMMENT ON FUNCTION uuid_generate_v7() IS
 
 CREATE SEQUENCE IF NOT EXISTS articulo_clave_seq AS bigint START WITH 1;
 
+-- ── Consecutivo de la clave de bodega ──────────────────────────────────────
+--
+-- Misma decisión que en artículos: BDG-00001, BDG-00002… La clave de bodega
+-- vive en la URL y es inmutable; si la capturara una persona, «MAG» y «SFE»
+-- serían nombres inventados por quien sembró la demo y no por Compras, y ya
+-- no habría forma de cambiarlos. Que la ponga la base cierra esa puerta.
+
+CREATE SEQUENCE IF NOT EXISTS bodega_clave_seq AS bigint START WITH 1;
+
 -- ═══ generado desde schema.prisma ═══
 
 -- CreateSchema
@@ -166,7 +175,7 @@ CREATE TABLE "Bitacora" (
 -- CreateTable
 CREATE TABLE "Bodega" (
     "id" UUID NOT NULL,
-    "clave" TEXT NOT NULL,
+    "clave" TEXT NOT NULL DEFAULT ('BDG-' || lpad(nextval('bodega_clave_seq')::text, 5, '0')),
     "nombre" TEXT NOT NULL,
     "ubicacion" TEXT,
     "activa" BOOLEAN NOT NULL DEFAULT true,
@@ -229,8 +238,9 @@ CREATE TABLE "Articulo" (
 -- CreateTable
 CREATE TABLE "Proveedor" (
     "id" UUID NOT NULL,
-    "empresaId" UUID NOT NULL,
     "nombreComercial" TEXT NOT NULL,
+    "razonSocial" TEXT NOT NULL,
+    "rfc" TEXT,
     "contacto" TEXT,
     "telefono" TEXT,
     "correo" TEXT,
@@ -418,7 +428,7 @@ CREATE INDEX "Articulo_categoriaId_idx" ON "Articulo"("categoriaId");
 CREATE INDEX "Articulo_unidadId_idx" ON "Articulo"("unidadId");
 
 -- CreateIndex
-CREATE INDEX "Proveedor_empresaId_idx" ON "Proveedor"("empresaId");
+CREATE INDEX "Proveedor_rfc_idx" ON "Proveedor"("rfc");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Movimiento_folio_key" ON "Movimiento"("folio");
@@ -482,9 +492,6 @@ ALTER TABLE "Articulo" ADD CONSTRAINT "Articulo_unidadId_fkey" FOREIGN KEY ("uni
 
 -- AddForeignKey
 ALTER TABLE "Articulo" ADD CONSTRAINT "Articulo_categoriaId_fkey" FOREIGN KEY ("categoriaId") REFERENCES "CategoriaArticulo"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Proveedor" ADD CONSTRAINT "Proveedor_empresaId_fkey" FOREIGN KEY ("empresaId") REFERENCES "catalogo_gasosur"."Empresa"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Movimiento" ADD CONSTRAINT "Movimiento_bodegaOrigenId_fkey" FOREIGN KEY ("bodegaOrigenId") REFERENCES "Bodega"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -805,6 +812,33 @@ ALTER TABLE "Folio" ADD CONSTRAINT "folio_siguiente_positivo_ck" CHECK (siguient
 -- schema.prisma.
 CREATE UNIQUE INDEX "usuario_correo_activo_uq"
   ON public."Usuario" (lower(correo)) WHERE activo;
+
+-- ───────────────────── Nombres únicos en los catálogos ─────────────────────
+--
+-- Bodega.nombre, Persona.nombre y Proveedor.nombreComercial son la forma en
+-- que una persona identifica el registro, y también la clave con la que los
+-- scripts de configuración y de migración deciden si un renglón ya existe.
+-- Sin unicidad, «Diana Damián» y «diana damián» serían dos personas, y un
+-- script que busca por nombre actualizaría una fila cualquiera.
+--
+-- «Único» aquí significa sin distinguir mayúsculas ni espacios sobrantes.
+-- La función es IMMUTABLE porque un índice lo exige, y los scripts la usan
+-- también para BUSCAR: es la única manera de que la búsqueda y el índice
+-- coincidan siempre.
+
+CREATE OR REPLACE FUNCTION nombre_normalizado(texto text) RETURNS text AS $$
+  SELECT lower(regexp_replace(btrim(texto), '\s+', ' ', 'g'));
+$$ LANGUAGE sql IMMUTABLE STRICT;
+
+COMMENT ON FUNCTION nombre_normalizado(text) IS
+  'Minúsculas y un solo espacio entre palabras. Base de los índices únicos por nombre.';
+
+CREATE UNIQUE INDEX "bodega_nombre_uq"
+  ON public."Bodega" (nombre_normalizado(nombre));
+CREATE UNIQUE INDEX "persona_nombre_uq"
+  ON public."Persona" (nombre_normalizado(nombre));
+CREATE UNIQUE INDEX "proveedor_nombre_comercial_uq"
+  ON public."Proveedor" (nombre_normalizado("nombreComercial"));
 -- ═══════════════════════════════════════════════════════════════════════════
 -- La bitácora, alimentada por trigger.
 --

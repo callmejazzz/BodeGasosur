@@ -203,15 +203,23 @@ tiene solo 20 valores capturados, entre ellos *Refacciones*, *Papelería*, *Lumi
 *Uniformes*, *Imprenta*, *Cerrajería*, *Paquetería*, *Extintores* y *Equipos de cómputo*:
 sirve como semilla de un catálogo de giros, no como dato confiable.
 
+> **No se migran.** Por el [Plan B](10-plan-b-produccion.md), Compras crea los proveedores
+> desde la aplicación. Lo de abajo queda como análisis de la hoja, y hay un dato que
+> conviene tener a la mano al capturarlos: el renglón **`ALCARAZ SOBERANIS, S.A. DE C.V.
+> (CHILPO 4)`** trae `MAS-950425-A11`, que es el RFC de **Muller y Asociados**; su correo,
+> `es15032`, es el de la estación Alcaraz 2, que `Estaciones.xlsx` atribuye a Alcaraz
+> Soberanis (`ASO8703257I5`). Es un error de captura del Excel.
+
 ### 33 de los 137 "proveedores" son empresas del propio grupo
 
 Aparecen con el mismo RFC que las empresas operadoras de las estaciones: Combustibles
 Gasosur (4 renglones), Servi Fer (3), Servicio Cayaco (3), Inmuebles Porba (2), Servi
 Boulevard (2)…
 
-No es un error: entre empresas del grupo se factura, y por eso están ahí. Pero confirma
-que **razón social y RFC son un concepto compartido** entre estaciones y proveedores, y
-justifica la tabla `Empresa` global de [06-estaciones.md](06-estaciones.md).
+No es un error: entre empresas del grupo se factura, y por eso están ahí. Durante un
+tiempo esto justificó que `Proveedor` apuntara a la tabla `Empresa` global; **se
+revirtió**: `Empresa` es exclusivamente Gasosur y el proveedor lleva su propia razón
+social y RFC ([10-plan-b-produccion.md](10-plan-b-produccion.md)).
 
 Además, **12 RFC están repetidos dentro de la propia hoja**, en parte porque se escriben
 con y sin guiones (`MAS950425A11` frente a `MAS-950425-A11`). La normalización de §4 de
@@ -219,26 +227,28 @@ ese documento resuelve las dos cosas a la vez.
 
 ## 7. Plan de migración
 
-1. **Empresas y estaciones** — desde `Estaciones.xlsx`, con el RFC normalizado. 22
-   empresas, 32 estaciones. Directo.
+> **Superado por el [Plan B](10-plan-b-produccion.md)** (2026-09-11): de esta lista se
+> hicieron el paso 1 y las dos personas confirmadas del paso 4 —en
+> [`prisma/migracion-datos/`](../prisma/migracion-datos/README.md)—. Los pasos 2, 3, 5 y 6
+> no se hacen mientras Compras no entregue una normalización confiable; si la entrega,
+> entran como carga operativa adicional sin reiniciar producción. Se conserva como
+> registro de cómo se llegó ahí.
+
+1. **Empresas y estaciones** — desde `Estaciones.xlsx`, con el RFC normalizado. 21
+   empresas, 32 estaciones. Directo. ✅
 2. **Proveedores** — 137 renglones. Los 33 del grupo se enlazan a la `Empresa` que ya
    existe; los 104 externos crean la suya. Contacto, teléfono y giro quedan opcionales.
+   **Descartado por el Plan B.**
 3. **Artículos** — 225 renglones a revisar a mano con Compras para detectar duplicados
-   entre bodegas. Se asigna clave nueva y se conserva la anterior por bodega.
+   entre bodegas. Se asigna clave nueva y se conserva la anterior en el mapeo.
+   **Esperando la normalización.**
 4. **Personas** — unificar las catorce grafías en los nombres reales. Marcar quién puede
-   autorizar.
+   autorizar. **Dos confirmadas; el resto cuando Compras diga cómo se llaman.**
 5. **Existencia inicial** — un movimiento de tipo `AJUSTE` por bodega con el stock final
    de cada artículo, fechado al día del corte y con la observación *"saldo inicial
-   migrado del Excel"*. **Sin costo**, por §3.
+   migrado del Excel"*. **Sin costo**, por §3. **Esperando la normalización.**
 6. **Histórico de movimientos** — 240 entradas y 137 salidas. Migrarlo es opcional: no
-   afecta la existencia, que ya entra por el paso 5. Vale la pena solo si Compras quiere
-   consultar los meses anteriores dentro del sistema. **Requiere resolver antes los 13
-   destinos de §4.**
-
-**Recomendación:** hacer los pasos 1 a 5 y dejar el 6 para el final, como tarea
-independiente. Así el sistema arranca con existencias correctas sin depender de que se
-aclaren los destinos ambiguos, y el Excel queda como consulta del pasado hasta que se
-decida si vale la pena traerlo.
+   afecta la existencia. **Requiere resolver antes los 13 destinos de §4.**
 
 ## 8. Preguntas del archivo — respondidas
 
@@ -255,7 +265,7 @@ decida si vale la pena traerlo.
 ### El catálogo de estaciones está incompleto por diseño
 
 `Estaciones.xlsx` tiene 32 estaciones capturadas; el grupo opera alrededor de **40**,
-y hay más empresas de las 22 registradas. **LA HERRADURA** es una de las que faltan.
+y hay más empresas de las 21 registradas. **LA HERRADURA** es una de las que faltan.
 
 No es un bloqueo: el catálogo se completa **desde el sistema**, con una pantalla de alta y
 edición de estaciones. El archivo es la carga inicial, no la fuente permanente. Esa

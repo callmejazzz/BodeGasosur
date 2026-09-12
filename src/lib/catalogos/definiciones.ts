@@ -106,7 +106,7 @@ export const CATALOGOS: CatalogoDef[] = [
     singular: "empresa",
     genero: "f",
     descripcion:
-      "Las razones sociales del grupo. Viven en el catálogo global que otros sistemas de Gasosur leen, y de ellas cuelgan las estaciones y los proveedores.",
+      "Las razones sociales del grupo Gasosur, y solo esas. Viven en el catálogo global que otros sistemas del grupo leen, y de ellas cuelgan las estaciones.",
     camposBusqueda: ["razonSocial", "rfc"],
     campoTitulo: "razonSocial",
     campos: [
@@ -142,12 +142,18 @@ export const CATALOGOS: CatalogoDef[] = [
         nombre: "clave",
         etiqueta: "Clave",
         tipo: "texto",
-        requerido: true,
-        inmutable: true,
-        placeholder: "MAG",
+        generado: true,
         sinSalto: true,
+        ayuda: "La asigna el sistema al guardar y no se puede cambiar.",
       },
-      { nombre: "nombre", etiqueta: "Nombre", tipo: "texto", requerido: true, placeholder: "Magallanes" },
+      {
+        nombre: "nombre",
+        etiqueta: "Nombre",
+        tipo: "texto",
+        requerido: true,
+        placeholder: "Magallanes",
+        ayuda: "Único: no puede haber dos bodegas con el mismo nombre.",
+      },
       { nombre: "ubicacion", etiqueta: "Ubicación", tipo: "texto", placeholder: "Calle y número" },
       ESTADO_F,
     ],
@@ -296,8 +302,8 @@ export const CATALOGOS: CatalogoDef[] = [
     singular: "proveedor",
     genero: "m",
     descripcion:
-      "A quién se le compra el material que entra a bodega. La razón social y el RFC viven en la empresa: buena parte de los proveedores son del propio grupo.",
-    camposBusqueda: ["nombreComercial", "contacto", "giro", "empresa.razonSocial"],
+      "A quién se le compra el material que entra a bodega, con sus propios datos fiscales. Es independiente del catálogo de empresas, que es solo del grupo.",
+    camposBusqueda: ["nombreComercial", "razonSocial", "rfc", "contacto", "giro"],
     campoTitulo: "nombreComercial",
     campos: [
       {
@@ -306,8 +312,23 @@ export const CATALOGOS: CatalogoDef[] = [
         tipo: "texto",
         requerido: true,
         placeholder: "Refaccionaria del Golfo",
+        ayuda: "Único: no puede haber dos proveedores con el mismo nombre comercial.",
       },
-      EMPRESA,
+      {
+        nombre: "razonSocial",
+        etiqueta: "Razón social",
+        tipo: "texto",
+        requerido: true,
+        placeholder: "Refacciones y Equipos del Golfo, S.A. de C.V.",
+      },
+      {
+        nombre: "rfc",
+        etiqueta: "RFC",
+        tipo: "texto",
+        placeholder: "REG980412H23",
+        ayuda: "Se guarda en mayúsculas, sin guiones ni espacios.",
+        sinSalto: true,
+      },
       { nombre: "giro", etiqueta: "Giro", tipo: "texto", placeholder: "Refacciones" },
       { nombre: "contacto", etiqueta: "Contacto", tipo: "texto" },
       { nombre: "telefono", etiqueta: "Teléfono", tipo: "texto" },
@@ -336,9 +357,9 @@ export const CATALOGOS: CatalogoDef[] = [
 /**
  * Si el catálogo tiene algún `select` que llenar.
  *
- * Solo tres de los nueve lo tienen —estaciones, artículos y proveedores—, y
+ * Solo dos de los nueve lo tienen —estaciones y artículos—, y
  * `cargarOpciones()` cuesta tres lecturas. Preguntarlo antes evita pagarlas en
- * los otros seis, donde no hay ni un desplegable que alimentar.
+ * los otros siete, donde no hay ni un desplegable que alimentar.
  */
 export function necesitaOpciones(def: CatalogoDef): boolean {
   return def.campos.some((campo) => campo.tipo === "select");

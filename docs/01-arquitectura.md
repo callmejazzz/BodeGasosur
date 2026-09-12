@@ -278,7 +278,7 @@ es una respuesta honesta, y hoy no existe ninguna.
 | UI            | Tailwind CSS 4 + primitivas propias           | Un puñado de componentes en `src/components/ui`, sin dependencias de terceros que después estorben |
 | Formularios   | Acciones de servidor + `useActionState`       | Validación en el servidor sin duplicar reglas en el cliente                                        |
 | Fechas        | `Intl` nativo, encapsulado en `lib/fechas.ts` | Ver §4.5. No hace falta una biblioteca para esto                                                   |
-| Pruebas       | Vitest — **planeado, todavía no instalado**   | Las que valen aquí son de integración contra el PostgreSQL de `docker-compose`                     |
+| Pruebas       | Vitest 4                                      | De integración contra el PostgreSQL de `docker-compose`, en una base `*_prueba` que se recrea en cada corrida. Hoy cubren el importador de datos; las cuatro de invariantes llegan con las fases de movimientos |
 
 Las cuatro pruebas que importan, y que van a CI cuando exista:
 
@@ -302,9 +302,16 @@ BodeGasosur/
 │  │  ├─ antes/                   #   lo que existe antes de las tablas
 │  │  └─ despues/                 #   invariantes, triggers, vistas y permisos
 │  ├─ migrations/                 # Historial versionado
-│  └─ seed.ts                     # Datos de ejemplo para enseñar el sistema
+│  ├─ configuracion.ts            # Lo mínimo real: bodegas, áreas, PZA, folios
+│  ├─ fixtures.ts                 # Datos demostrativos; solo desarrollo, fallan por omisión
+│  ├─ migracion-datos/            # Catálogos reales desde los CSV del corte (F5)
+│  └─ comun.ts                    # Cliente y búsqueda por nombre para esos scripts
+├─ pruebas/
+│  └─ base-de-pruebas.ts          # Recrea la base *_prueba antes de cada corrida de Vitest
 ├─ scripts/
-│  └─ armar-migracion.sh          # Junta prisma/sql/ con el DDL generado
+│  ├─ armar-migracion.sh          # Junta prisma/sql/ con el DDL generado
+│  ├─ arranque-superadmin.ts      # El primer Superadmin, desde su identidad en Clerk
+│  └─ bootstrap-produccion.ts     # Plan B: producción limpia, manual y con confirmación
 ├─ prisma.config.ts               # Prisma 7 lee aquí la URL de conexión
 ├─ src/
 │  ├─ app/
@@ -351,8 +358,8 @@ ni intentar lo que la base va a rechazar:
 
 | Marca | Qué significa | Ejemplo |
 |---|---|---|
-| `generado` | La asigna PostgreSQL. Nunca se captura | `Articulo.clave` |
-| `inmutable` | Se captura al alta y después no | `Bodega.clave`, `Estacion.numero` |
+| `generado` | La asigna PostgreSQL. Nunca se captura | `Articulo.clave`, `Bodega.clave` |
+| `inmutable` | Se captura al alta y después no | `Estacion.numero`, `UnidadMedida.clave` |
 
 El mecanismo es más simple de lo que parece: un `<input disabled>` no viaja en el
 `FormData`, así que el campo se ve pero no se envía, y el esquema de Zod deja de exigirlo
@@ -403,7 +410,7 @@ datos.
 npm install
 npm run db:up
 cp .env.example .env
-npm run db:reset          # aplica la migración y siembra
+npm run db:reset          # migra, configura, carga catálogos reales, fixtures y Superadmin
 npm run dev
 ```
 
@@ -434,9 +441,10 @@ Comandos útiles:
 |---|---|
 | `npm run dev` | Servidor de desarrollo |
 | `npm run db:up` / `db:down` | Levanta o baja PostgreSQL |
-| `npm run db:seed` | Vuelve a sembrar los catálogos |
+| `npm run db:reset` | Desarrollo: borra todo y encadena configuración, catálogos reales, fixtures y Superadmin |
+| `npm run prod:bootstrap` | Producción: manual y con confirmación, sin fixtures ([Plan B](10-plan-b-produccion.md)) |
+| `npm run test` | Pruebas de integración contra PostgreSQL |
 | `npm run db:studio` | Explorador visual de la base de datos |
-| `npm run db:reset` | Borra todo, remigra y resiembra |
 
 ## 6. Decisiones deliberadamente diferidas
 

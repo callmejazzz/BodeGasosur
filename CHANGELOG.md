@@ -8,6 +8,59 @@ puede hacer ahora que antes no se podía.
 
 ---
 
+## v0.4.0 — 2026-09-12
+
+Cierra la fase 4: migración de catálogos, bajo el **Plan B** de
+[`docs/10-plan-b-produccion.md`](docs/10-plan-b-produccion.md). Es la primera versión con
+datos reales de Gasosur adentro, y la que decide cómo va a arrancar producción: **limpia de
+inventario**. Compras captura proveedores y artículos desde la aplicación; el Excel no se
+migra.
+
+**Lo que cambia para quien va a usar el sistema**
+
+- **Las empresas y estaciones ya son las reales**: 21 empresas y 32 estaciones del grupo,
+  tomadas de `Estaciones.xlsx`, y dos personas de Compras. Lo que falte —el grupo opera
+  unas 40 estaciones— se captura desde la pantalla de estaciones.
+- **Empresas es solo el grupo Gasosur.** El proveedor lleva ahora su propia razón social
+  y su RFC en su pantalla; ya no se elige una empresa del catálogo global para darlo de
+  alta.
+- **La clave de bodega la asigna el sistema** (`BDG-00001`, `BDG-00002`…), igual que la
+  de artículo. Ya no se captura.
+- **No puede haber dos bodegas, dos personas ni dos proveedores con el mismo nombre**,
+  aunque cambien las mayúsculas o los espacios. El sistema lo avisa al guardar.
+- **Nada de lo que se edite en pantalla se pierde por volver a cargar el catálogo.** Si
+  el archivo de Compras y la base difieren, la carga se detiene y dice qué campo, qué valor
+  hay en cada lado y quién hizo el último cambio; sobrescribir es una decisión explícita.
+
+**Por dentro**
+
+- Dos perfiles de base que no comparten comando: `db:reset` para desarrollo, con
+  fixtures que **fallan por omisión** (exigen `BODEGASOSUR_FIXTURES=permitidos` y una base
+  sin operación), y `prod:bootstrap` para producción — manual, valida el entorno antes de
+  `migrate deploy`, rechaza una base que ya opere y exige teclear el nombre de la base.
+- `prisma/migracion-datos/`: importador en dos pasadas —planea, luego escribe— dentro de
+  una transacción firmada `migracion-datos` en la bitácora; `--simular` y `--sincronizar`.
+- **Vitest** contra el PostgreSQL real, en una base `*_prueba` que se recrea en cada
+  corrida, con las cuatro pruebas del importador. Primer paso hacia las pruebas de
+  invariantes de la auditoría (E1).
+- `Proveedor` deja de apuntar a `Empresa`; `Bodega.clave` por secuencia; índices únicos
+  normalizados por nombre. `src/lib/rfc.ts` es la única regla del RFC, compartida por la
+  pantalla y la migración.
+- `prisma/seed.ts` se reparte en `prisma/configuracion.ts` (lo mínimo real) y
+  `prisma/fixtures.ts` (lo demostrativo).
+
+**Por saber**
+
+- **La migración inicial se volvió a regenerar.** Toda base de desarrollo creada con la
+  `v0.3.0` se recrea con `npm run db:reset`, después de descomentar
+  `BODEGASOSUR_FIXTURES` en `.env`. Sigue sin haber producción; después de la `v1.0.0`
+  esto ya no será posible.
+- **Los 225 artículos, los 137 proveedores y la existencia inicial no están pendientes.**
+  Si Compras entrega una normalización confiable, entran como carga operativa adicional,
+  auditada y sin reiniciar producción.
+- Un hallazgo para cuando Compras capture proveedores: en su hoja, `ALCARAZ SOBERANIS
+  (CHILPO 4)` trae el RFC de Muller y Asociados ([07 §6](docs/07-datos-actuales.md)).
+
 ## v0.3.0 — 2026-09-09
 
 Cierra la fase 3: usuarios y permisos. Es la primera versión en la que el sistema sabe

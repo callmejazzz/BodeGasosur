@@ -2,7 +2,7 @@
 
 Fuente: `Estaciones.xlsx` (**32 estaciones capturadas**, agosto 2026).
 
-> El grupo opera alrededor de **40 estaciones**, y hay más empresas de las 22 que aparecen
+> El grupo opera alrededor de **40 estaciones**, y hay más empresas de las 21 que aparecen
 > aquí. **LA HERRADURA** es una de las que faltan. El archivo es un punto de partida
 > incompleto por diseño: el catálogo se completa desde el sistema, no editando el Excel.
 >
@@ -29,7 +29,7 @@ y varias estaciones comparten empresa:
 | SERVICIO LLANO LARGO, S.A. DE C.V. | El Quemado, Puerto Marquez |
 | COMBUSTIBLES COYUCA, S.A. DE C.V. | Coyuca 1, Coyuca 2 |
 
-**22 empresas operan las 32 estaciones capturadas.**
+**21 empresas operan las 32 estaciones capturadas** —ocho con dos o tres estaciones, trece con una—.
 
 Poner el RFC en la estación repetiría el mismo dato hasta tres veces y garantizaría que
 tarde o temprano queden versiones distintas del mismo RFC. El modelo correcto son dos
@@ -51,8 +51,10 @@ erDiagram
     }
 ```
 
-Hay una segunda razón, más fuerte, en §4: esas mismas empresas ya aparecen en el catálogo
-de proveedores.
+> **`Empresa` es exclusivamente Gasosur.** El proveedor lleva sus propios datos fiscales y
+> no apunta a este catálogo, aunque 33 renglones del Excel de proveedores compartan RFC con
+> empresas del grupo. Si una de ellas debe ser proveedora algún día, se decide como caso de
+> negocio, no con un vínculo opcional ([10-plan-b-produccion.md](10-plan-b-produccion.md)).
 
 ## 2. Campos
 
@@ -100,12 +102,10 @@ de datos, con `Empresa` y `Estacion` adentro. Prisma lo soporta con `multiSchema
 model Empresa {
   id          String  @id @default(uuid(7)) @db.Uuid
   razonSocial String
-  /// Opcional: 5 de los 137 proveedores no lo traen.
   rfc         String? @unique
   activa      Boolean @default(true)
 
   estaciones  Estacion[]
-  proveedores Proveedor[]
 
   @@schema("catalogo_gasosur")
 }

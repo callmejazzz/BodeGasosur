@@ -1,4 +1,4 @@
-# BodeGasosur — Versionado y despliegue
+	# BodeGasosur — Versionado y despliegue
 
 Cómo se numeran las versiones del sistema, qué significa cada número y cómo llega el
 código a manos de Gasosur. Aplica desde `v0.1.0` en adelante.
@@ -167,6 +167,14 @@ cualquier rama escribe en la base real — y siendo el movimiento un libro conta
 
 **Las migraciones son parte del despliegue.** El build de producción corre
 `prisma migrate deploy`. Nunca `migrate dev`, que es interactivo y puede resetear.
+
+**La primera vez, la base se levanta a mano con `npm run prod:bootstrap`** —desde una
+terminal, nunca desde el build ni el arranque de Next.js—. Antes de `migrate deploy` valida
+el entorno sin conectarse: `DATABASE_URL` válida y que no sea una base `*_prueba`, Clerk
+configurado con una llave que no sea `sk_test_`, terminal interactiva, y que
+`BODEGASOSUR_FIXTURES` no esté definida. Después aplica la migración, rechaza una base que
+ya opere, muestra el resumen y exige teclear el nombre de la base para confirmar. Ver
+[10-plan-b-produccion.md](10-plan-b-produccion.md).
 
 **Skew Protection encendido.** Cuando se promueve una versión, alguien puede llevar horas
 con la pantalla de captura abierta: su navegador tiene el JavaScript anterior, que invoca

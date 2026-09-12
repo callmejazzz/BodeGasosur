@@ -16,7 +16,6 @@ catálogo global de [06-estaciones](06-estaciones.md), el análisis del Excel vi
 ```mermaid
 erDiagram
     EMPRESA     ||--o{ ESTACION  : "opera"
-    EMPRESA     ||--o{ PROVEEDOR : "identifica fiscalmente"
 
     USUARIO     }o--o| PERSONA   : "es"
     USUARIO     ||--o{ BITACORA  : "escribe"
@@ -333,7 +332,7 @@ Si ya estaba, no se vuelve a procesar; si la transacción falla, el reintento la
 | Se eliminan `transportista` y `vehiculo`; `recibidoPor` pasa a `entregadoA` libre | D4 |
 | Tipo `DEVOLUCION` y bandera `esPrestamo` | D7 y B6 |
 | Estados de salida con autorización y confirmación de recepción | D2 y D6 |
-| `Proveedor` apunta a `Empresa` | 33 de 137 proveedores son del propio grupo |
+| `Proveedor` lleva su propia razón social y RFC; **no** apunta a `Empresa` | `Empresa` es exclusivamente Gasosur ([10](10-plan-b-produccion.md)). Si una empresa del grupo debe ser proveedora, se decide como caso de negocio |
 | `autorizadoPor` apunta a `Usuario`, con `autorizadoEn` y escritura única | **A2** |
 | Actor y marca de tiempo por transición, más `Bitacora` | **A3** |
 | `fecha` como `@db.Date`; los instantes con `@db.Timestamptz(3)` | **E4** |

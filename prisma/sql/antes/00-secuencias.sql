@@ -48,3 +48,12 @@ COMMENT ON FUNCTION uuid_generate_v7() IS
 -- consecutivo sin huecos, y por eso se toma con UPDATE … RETURNING.
 
 CREATE SEQUENCE IF NOT EXISTS articulo_clave_seq AS bigint START WITH 1;
+
+-- ── Consecutivo de la clave de bodega ──────────────────────────────────────
+--
+-- Misma decisión que en artículos: BDG-00001, BDG-00002… La clave de bodega
+-- vive en la URL y es inmutable; si la capturara una persona, «MAG» y «SFE»
+-- serían nombres inventados por quien sembró la demo y no por Compras, y ya
+-- no habría forma de cambiarlos. Que la ponga la base cierra esa puerta.
+
+CREATE SEQUENCE IF NOT EXISTS bodega_clave_seq AS bigint START WITH 1;

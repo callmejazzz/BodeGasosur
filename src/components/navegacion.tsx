@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CATALOGOS } from "@/lib/catalogos/definiciones";
 import { cn } from "@/lib/utils";
+import { version } from "../../package.json";
 
 type Enlace = { href: string; etiqueta: string; proximamente?: boolean };
 
@@ -101,7 +102,7 @@ export function Navegacion({
 
       <div className="mt-auto">
         <p className="px-3 text-xs leading-relaxed text-white/35">
-          Demo para levantamiento de requerimientos. Fases 0 y 1: catálogos y datos base.
+          BodeGasosur v{version} · fases 0 a 4. Las pantallas de movimientos llegan con la fase 5.
         </p>
         {sesion}
       </div>

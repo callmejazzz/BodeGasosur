@@ -32,7 +32,7 @@ demostración.
 ## 3. Estaciones
 
 El grupo opera alrededor de **40 estaciones**. `Estaciones.xlsx` trae **32 capturadas** y
-22 empresas; faltan varias, entre ellas **LA HERRADURA**. El número exacto todavía no se
+21 empresas; faltan varias, entre ellas **LA HERRADURA**. El número exacto todavía no se
 conoce y no afecta al funcionamiento: nada en el sistema depende de cuántas haya.
 
 Se identifican por **alias + número de estación + RFC**. NextPol usa solo nombre y RFC, así
