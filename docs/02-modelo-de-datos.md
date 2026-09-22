@@ -1,15 +1,16 @@
 # BodeGasosur — Modelo de datos
 
-Recoge lo acordado con Compras en [05-hallazgos](05-hallazgos-levantamiento.md), el
-catálogo global de [06-estaciones](06-estaciones.md), el análisis del Excel vigente en
-[07-datos-actuales](07-datos-actuales.md) y las correcciones de la
-[auditoría de arquitectura](09-auditoria.md).
+Recoge lo acordado con Compras en los [hallazgos del levantamiento](cimientos-word/05-hallazgos-levantamiento.docx), el
+catálogo global de [03-estaciones](03-estaciones.md), el análisis del Excel vigente en
+[04-datos-actuales](04-datos-actuales.md) y las correcciones de la
+[auditoría de arquitectura](cimientos-word/09-auditoria-arquitectura.docx).
 
 > **Este documento ya describe el código, no un destino.** El esquema vive en
 > [`prisma/schema.prisma`](../prisma/schema.prisma) y los invariantes que la base hace
-> cumplir en [`prisma/sql/`](../prisma/sql/). Ambos se implementaron en la fase 2
-> (`v0.2.0`). Lo que sigue explica **por qué** está así; la fuente de verdad de **cómo**
-> está es el esquema.
+> cumplir en [`prisma/sql/`](../prisma/sql/). La base del modelo se implementó en la fase 2
+> (`v0.2.0`) y la fase 5 completó el contrato de Entradas: captura estructurada, orden de
+> partidas, idempotencia, dinero exacto, folios, capas y existencias. Lo que sigue explica
+> **por qué** está así; la fuente de verdad de **cómo** está es el esquema.
 
 ## 1. Panorama
 
@@ -24,7 +25,7 @@ erDiagram
     ARTICULO    ||--o{ EXISTENCIA : "se cuenta en"
     ARTICULO    }o--|| UNIDAD_MEDIDA : "se mide en"
 
-    MOVIMIENTO  ||--|{ PARTIDA   : "detalla"
+    MOVIMIENTO  ||--o{ PARTIDA   : "detalla"
     PARTIDA     }o--|| ARTICULO   : "mueve"
     PARTIDA     ||--o{ CONSUMO    : "toma de"
     CAPA_COSTO  ||--o{ CONSUMO    : "aporta"
@@ -66,8 +67,11 @@ esto estaba sin decidir, y la tabla de tipos y el invariante 3 se contradecían.
 Los **préstamos** no son un tipo aparte: son una `SALIDA` con la bandera `esPrestamo`, que
 queda abierta hasta que una `DEVOLUCIÓN` la cierra. Es el compresor que Diana menciona.
 
-Las **entregas parciales** tampoco necesitan tabla: varias `ENTRADA` comparten la misma
-`referencia` de factura. Cuando exista orden de compra, ella será el punto de agrupación.
+Las **recepciones parciales** no agregan una tabla en la fase 5: cada entrega física es una
+`ENTRADA` independiente y varias pueden compartir `(proveedorId, referencia)`. Esto permite
+agrupar y sumar lo recibido, pero no afirmar cuánto falta: sin una orden de compra no existe
+una cantidad comprometida contra la cual comparar. Cuando se construya ese ciclo, la orden
+será la capa superior que calcule cumplimiento sin cambiar el libro.
 
 ## 3. Estados
 
@@ -98,6 +102,11 @@ hoy vive en conversaciones de WhatsApp.
 `entregadoPorId` / `entregadoEn`, `recibidoPorId` / `recibidoEn`, `canceladoPorId` /
 `canceladoEn`. Un `CHECK` por cada par impide que exista uno sin el otro.
 
+En una `ENTRADA`, **quien recibe es `confirmadoPor`**: confirmar significa que el usuario
+verificó el material y decidió incorporarlo al inventario. `creadoPor` conserva quién
+capturó el borrador, aunque sea una persona distinta, y `recibidoPor` queda reservado para
+el cierre del flujo de una salida.
+
 ## 4. Invariantes
 
 Los once del levantamiento, más lo que hizo falta escribir para que fueran verificables.
@@ -106,9 +115,9 @@ invariante y un buen propósito.
 
 | | Invariante | Quién lo impone |
 |---|---|---|
-| 1 | Un movimiento confirmado no se edita ni se borra; corregir = cancelar y recapturar | Servicios |
+| 1 | Un movimiento confirmado no se edita ni se borra; corregir = cancelar y recapturar | Trigger + servicios |
 | 2 | Solo afectan existencias los movimientos `CONFIRMADO` (o `ENTREGADA` en salidas) | Servicios |
-| 3 | Todo movimiento tiene al menos una partida, con `cantidad > 0` | `CHECK` |
+| 3 | Todo movimiento confirmado tiene al menos una partida, y cada partida lleva `cantidad > 0` | Trigger de transición + `CHECK` |
 | 4 | Un artículo no se repite dentro del mismo movimiento | `@@unique` |
 | 5 | Origen y destino de un traspaso son bodegas distintas | `CHECK` |
 | 6 | **La existencia nunca queda negativa** | `CHECK` + bloqueo `FOR UPDATE` |
@@ -145,7 +154,7 @@ la ficha del artículo y lo lleva a capas:
 **PEPS está confirmado.** Compras lo eligió deliberadamente aunque contabilidad no exija
 método alguno: da mejor control que un promedio, porque cada salida conserva el costo real
 de la compra de la que salió. Encaja además con lo ya decidido: al no rastrearse la serie
-([B5](05-hallazgos-levantamiento.md#6-discrepancias--resueltas)), no hay forma de saber de
+([B5](cimientos-word/05-hallazgos-levantamiento.docx)), no hay forma de saber de
 qué factura salió una pieza concreta, y PEPS es la aproximación más cercana.
 
 ### El inventario migrado entra con capa y sin costo
@@ -197,14 +206,17 @@ día por orden de captura»*.
 
 ### Moneda e impuestos
 
-Las entradas se capturan en pesos o en dólares. La capa de costo guarda **siempre pesos**,
-convertidos al tipo de cambio del día de la entrada, para que el valor del inventario no
-baile con el dólar de hoy.
+Las entradas se capturan en pesos o en dólares. `MovimientoPartida` y `CapaCosto` guardan
+los costos **siempre en pesos**, convertidos al tipo de cambio confirmado de la entrada,
+para que el valor del inventario no baile con el dólar de hoy.
 
 El movimiento conserva `moneda`, `tipoCambio`, `subtotal`, `iva` y `total` como constancia
-de lo que decía la factura. Tres `CHECK` cierran el bloque: el dinero solo existe en
-`ENTRADA`, en dólares el tipo de cambio es obligatorio —sin él la capa no se puede valuar
-en pesos— y en pesos está prohibido, porque no significa nada.
+de lo que decía la factura **en su moneda original**. Tres `CHECK` cierran el bloque: el
+dinero solo existe en `ENTRADA`, en dólares el tipo de cambio es obligatorio —sin él la
+partida y la capa no se pueden valuar en pesos— y en pesos está prohibido, porque no
+significa nada. La interfaz recibe el costo por la presentación elegida y en la moneda de
+la factura; la capa de servicios lo convierte a costo por unidad base en MXN antes de
+guardar la partida (§6).
 
 ### El inventario se valúa por partida doble: sin IVA y con IVA
 
@@ -236,18 +248,75 @@ $0.46, y mil piezas darían $460.00 — $3.30 de más, con el error creciendo ju
 el material barato de bodega. Los cuatro decimales no son un importe: son la constancia de
 a cuánto salió la pieza. Los importes —`subtotal`, `iva`, `total`— sí van a dos.
 
-## 6. Cantidades enteras
+### Contrato de la fase 5: confirmación, primera existencia e idempotencia
 
-`cantidad`, `cantidadInicial`, `cantidadRestante` y `stockMinimo` son `Int`. No hay medias
-piezas en una bodega, el Excel vigente no tiene columna de unidad y todo se maneja por
-pieza ([07 §3](07-datos-actuales.md)).
+**Construido en la base y el servicio de la fase 5:** un borrador no tiene folio ni afecta
+inventario. La transición `BORRADOR → CONFIRMADO`, el folio, la conversión monetaria, las
+capas y el incremento de existencia ocurren en una sola transacción.
 
-De ahí se sigue que **`UnidadMedida` describe la presentación, no una magnitud**: una
-cubeta de 19 litros es *1 CUB*, no *19 LT*. Las unidades divisibles —litro, galón,
-kilogramo, metro— salieron del catálogo, porque conservarlas dejaba una trampa para el día
-que alguien intentara capturar aceite a granel. Para el material que se compra por caja y
-se cuenta por pieza está `Articulo.piezasPorCaja`, que convierte la captura: *3 CAJA* de 12
-se guardan como cantidad 36 y `capturaOriginal = "3 CAJA"`.
+La confirmación reclama primero el encabezado con `SELECT … FOR UPDATE`. Después bloquea
+con `FOR SHARE`, en este orden fijo, el proveedor, la bodega destino y los artículos por id;
+solo entonces relee y valida los catálogos. A continuación asegura en cero cada `Existencia`
+ausente mediante `INSERT … ON CONFLICT DO NOTHING` y bloquea esas filas con `FOR UPDATE`,
+también por `articuloId`. El orden global es **encabezado → proveedor → bodega → artículos
+→ existencias → folio**.
+
+La creación del borrador usa una llave de idempotencia UUID, única en la base y estable
+durante validaciones y reintentos. La llave se busca antes de revalidar catálogos y compara
+una representación canónica de todo lo capturado, pero no de los valores derivados. El
+candado del encabezado es el reclamo principal de la confirmación; el `UPDATE` final
+condicionado a `estatus = 'BORRADOR'` es una defensa adicional. Repetir la misma operación
+devuelve el mismo movimiento; nunca crea capas, existencia o folios adicionales. El
+contrato completo está en
+[`11-fase-5-entradas.md`](decisiones-otros/11-fase-5-entradas.md).
+
+## 6. Normalización a unidades base enteras
+
+`cantidad`, `cantidadInicial`, `cantidadRestante` y `stockMinimo` son `Int`. No hay
+fracciones de la unidad base en una bodega y el Excel vigente tampoco las contempla
+([04 §3](04-datos-actuales.md)).
+
+**`UnidadMedida` describe la unidad base contable del artículo, no una magnitud divisible**:
+una cubeta de 19 litros es *1 CUB*, no *19 LT*. Litro, galón, kilogramo y metro salieron del
+catálogo porque permitirían fracciones que el modelo deliberadamente no maneja.
+
+La presentación de captura es otra cosa. En cualquier movimiento se elige `UNIDAD` —cuya
+etiqueta visible es la unidad del artículo, por ejemplo `PZA` o `CUB`— o `CAJA`. Toda
+captura se normaliza antes de afectar el libro:
+
+```text
+factorConversion = 1                                      si se captura UNIDAD
+factorConversion = fotografía de Articulo.piezasPorCaja   si se captura CAJA
+cantidad = cantidadCapturada × factorConversion
+```
+
+Por eso una caja de doce entra como `cantidad = 12`, mientras que una salida de cinco
+piezas se captura como `5 UNIDAD`, usa factor 1 y consume exactamente cinco. La misma regla
+sirve para entradas, salidas, traspasos, devoluciones y ajustes; existencia y PEPS nunca
+operan con cajas.
+
+La fase 5 reemplaza `capturaOriginal` por datos estructurados en `MovimientoPartida`:
+`orden`, `presentacionCapturada`, `cantidadCapturada`, `factorConversion` y, para entradas,
+`costoUnitarioCapturado`. `orden` conserva la posición elegida por la persona y es único
+dentro del movimiento; el identificador técnico permanece estable aunque una fila cambie
+de posición. `cantidad` y los dos costos canónicos siguen siendo los valores normalizados.
+El factor confirmado es histórico y no cambia si después cambia el catálogo. Un borrador
+cuyo factor ya no coincide debe guardarse de nuevo antes de confirmarse; el servidor no lo
+reinterpreta silenciosamente.
+
+Para una entrada, el costo capturado también se normaliza. Si `tipoCambioAplicable` es 1
+en MXN y el tipo de cambio confirmado en USD:
+
+```text
+costoUnitarioBaseMxn = redondear4(
+  costoUnitarioCapturado × tipoCambioAplicable ÷ factorConversion
+)
+```
+
+Los totales de factura se calculan desde la captura original y se redondean por renglón; no
+se reconstruyen desde el costo base redondeado. El contrato completo, incluidos IVA,
+validaciones y ejemplos, está en
+[`11-fase-5-entradas.md`](decisiones-otros/11-fase-5-entradas.md#5-normalización-a-la-unidad-base).
 
 ## 7. Usuarios, permisos y el catálogo compartido
 
@@ -260,15 +329,15 @@ opcional con una `Persona`.
 
 **Tres roles**, no cinco:
 
-| Rol          | Empresas y Estaciones | Resto de tablas      | Movimientos                                          |
-| ------------ | --------------------- | -------------------- | ---------------------------------------------------- |
-| `SUPERADMIN` | CRUD                  | CRUD                 | Todo                                                 |
-| `COMPRAS`    | Lectura               | Catálogos operativos | Registra entradas, salidas, traspasos y devoluciones |
-| `JEFE`       | Lectura               | Lectura              | Consulta                                             |
+| Rol          | Empresas y Estaciones | Resto de tablas      | Movimientos |
+| ------------ | --------------------- | -------------------- | ----------- |
+| `SUPERADMIN` | CRUD                  | CRUD                 | Entradas: lectura, captura y confirmación; los demás movimientos se habilitan en sus fases |
+| `COMPRAS`    | Lectura               | Catálogos operativos | Entradas: lectura, captura y confirmación; los demás movimientos se habilitan en sus fases |
+| `JEFE`       | Lectura               | Lectura              | Consulta de Entradas |
 
-La columna de **Movimientos es diseño**: se construye en las fases 5 a 7. Desde la fase 3,
-`src/lib/permisos.ts` declara los permisos de catálogos y de usuarios, y esos sí están
-implementados.
+La matriz ya contiene `entradas:leer`, `entradas:capturar` y `entradas:confirmar`, usados
+por las páginas y las cuatro Server Actions de la fase 5. Los permisos de Salidas,
+Traspasos, Devoluciones y Ajustes se agregarán cuando se construya cada flujo.
 
 `puedeAutorizar` es una **bandera del usuario, no un rol**: un Jefe puede tenerla y un
 usuario de Compras puede no tenerla. La lista de facultados cambia —el Lic. Hugo, la Lic.
@@ -289,7 +358,7 @@ GRANT SELECT ON catalogo_gasosur.v_estacion_v1 TO lector_catalogo;
 ```
 
 Con eso se puede renombrar una columna física sin romper software ajeno —que es lo que
-[08 §10](08-versionado-y-despliegue.md) anticipa que hará falta—, la escritura es imposible
+[05 §10](05-versionado-y-despliegue.md) anticipa que hará falta—, la escritura es imposible
 por construcción y no por acuerdo, y ninguna contraseña queda en el repositorio: el rol es
 de grupo y cada proyecto entra con su propio usuario.
 
@@ -322,17 +391,18 @@ Si ya estaba, no se vuelve a procesar; si la transacción falla, el reintento la
 | Cambio | Origen |
 |---|---|
 | `UUIDv7` nativo en vez de `cuid()` texto | [01](01-arquitectura.md) §3.5 |
-| `Empresa` y `Estacion` en esquema global; el RFC sale de la estación | [06](06-estaciones.md) |
+| `Empresa` y `Estacion` en esquema global; el RFC sale de la estación | [03](03-estaciones.md) |
 | `Usuario` enlazado a Clerk, tres roles y la bandera `puedeAutorizar` | D3, el requisito #1 y **F1** |
 | Costeo por capas PEPS en vez de promedio ponderado | E1, confirmado por Compras |
 | Cada costo por partida doble: sin IVA y con IVA, y ambos nulables | E3 y **A1** |
 | `moneda`, `tipoCambio`, `subtotal`, `iva`, `total`, con sus `CHECK` | E3, E4 y los menores |
-| `piezasPorCaja` y `capturaOriginal` | B4 |
+| `piezasPorCaja`; en fase 5, captura estructurada y factor histórico en vez de `capturaOriginal` | B4 y contrato de fase 5 |
+| `MovimientoPartida.orden` único por movimiento para conservar el orden visible sin usar la posición como identidad | Contrato de interfaz y persistencia de la fase 5 |
 | `numeroSerie` como texto, sin rastreo | B5 |
 | Se eliminan `transportista` y `vehiculo`; `recibidoPor` pasa a `entregadoA` libre | D4 |
 | Tipo `DEVOLUCION` y bandera `esPrestamo` | D7 y B6 |
 | Estados de salida con autorización y confirmación de recepción | D2 y D6 |
-| `Proveedor` lleva su propia razón social y RFC; **no** apunta a `Empresa` | `Empresa` es exclusivamente Gasosur ([10](10-plan-b-produccion.md)). Si una empresa del grupo debe ser proveedora, se decide como caso de negocio |
+| `Proveedor` lleva su propia razón social y RFC; **no** apunta a `Empresa` | `Empresa` es exclusivamente Gasosur ([10](decisiones-otros/10-plan-b-produccion.md)). Si una empresa del grupo debe ser proveedora, se decide como caso de negocio |
 | `autorizadoPor` apunta a `Usuario`, con `autorizadoEn` y escritura única | **A2** |
 | Actor y marca de tiempo por transición, más `Bitacora` | **A3** |
 | `fecha` como `@db.Date`; los instantes con `@db.Timestamptz(3)` | **E4** |

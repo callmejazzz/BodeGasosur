@@ -62,3 +62,7 @@ graphify-out/
 .agents/
 .claude/skills/
 skills-lock.json
+
+# Instrucciones locales de agentes
+AGENTS.md
+CLAUDE.md

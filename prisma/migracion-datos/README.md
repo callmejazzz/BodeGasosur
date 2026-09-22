@@ -1,6 +1,6 @@
 # Migración de datos
 
-Los catálogos reales de Gasosur entran a la base desde aquí, como código idempotente y versionado —lo que pide el hallazgo **F5** de la [auditoría](../../docs/09-auditoria.md)— y no como trabajo manual en Studio. Lo usan tanto `db:reset` (desarrollo) como `prod:bootstrap` (producción).
+Los catálogos reales de Gasosur entran a la base desde aquí, como código idempotente y versionado —lo que pide el hallazgo **F5** de la [auditoría](../../docs/cimientos-word/04-auditoria-arquitectura.docx)— y no como trabajo manual en Studio. Lo usan tanto `db:reset` (desarrollo) como `prod:bootstrap` (producción).
 
 ```bash
 npm run datos:migrar                    # crea lo que falta; se detiene ante divergencias
@@ -24,9 +24,9 @@ reales escritos de catorce formas —`OSCAR`, `OSCAR B.`, `LIC HUGO`, `LIC. HUGO
 Compras puede decir cómo se llama cada quien. Entran las dos personas confirmadas por
 nombre completo; las demás se agregan como renglón cuando se confirmen.
 
-**Los proveedores no se migran.** Por el [Plan B](../../docs/10-plan-b-produccion.md),
+**Los proveedores no se migran.** Por el [Plan B](../../docs/decisiones-otros/01-plan-b-produccion.md),
 Compras los captura desde la aplicación. Lo que se aprendió de la hoja `CATALOGO
-PROVEDORES` quedó en [07 §6](../../docs/07-datos-actuales.md).
+PROVEDORES` quedó en [04 §6](../../docs/04-datos-actuales.md).
 
 ## El CSV es carga inicial, no fuente permanente
 
@@ -51,7 +51,7 @@ Lo que el importador **no** hace:
 
 - **Idempotencia por clave de negocio.** La empresa por RFC, la estación por número y la persona por nombre —único en la base sin distinguir mayúsculas ni espacios, con el mismo `nombre_normalizado()` que usa el índice—.
 - **El RFC se normaliza con la misma función que usa la pantalla**, `normalizarRfc` de
-  [`src/lib/rfc.ts`](../../src/lib/rfc.ts): mayúsculas, sin guiones ni espacios ([06 §4](../../docs/06-estaciones.md)).
+  [`src/lib/rfc.ts`](../../src/lib/rfc.ts): mayúsculas, sin guiones ni espacios ([03 §4](../../docs/03-estaciones.md)).
 - **Validación antes de la transacción.** RFC sin forma de RFC, estación repetida, persona repetida o un mismo RFC con dos razones sociales detienen el archivo entero, con el renglón en el mensaje.
 - **Todo o nada.** Una sola transacción, firmada `migracion-datos` en la bitácora.
 

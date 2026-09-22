@@ -6,8 +6,8 @@ import { consultar } from "@/lib/db";
 import { contarCatalogos } from "@/lib/catalogos/repos";
 import { cantidad } from "@/lib/utils";
 
-// El orden vigente es el de fases-siguientes.md, que reemplazó al plan original
-// de docs/04-plan-demo.md. Si las dos listas se separan, esta es la que miente:
+// El orden vigente está en docs/entregables-fases/README.md; el plan original
+// está en docs/cimientos-word/04-plan-demo.docx. Si las listas se separan, esta es la que miente:
 // el plan vive en el repositorio, no aquí.
 const FASES = [
   { nombre: "Fase 0 y 1 — Cimientos y catálogos", detalle: "Next.js, PostgreSQL, Prisma y los catálogos con datos sembrados", estado: "lista" },

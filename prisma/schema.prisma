@@ -1,7 +1,7 @@
 // BodeGasosur — modelo de datos
 //
 // Ver docs/02-modelo-de-datos.md para el razonamiento detrás de este esquema y
-// docs/09-auditoria.md para los hallazgos que lo corrigieron.
+// docs/cimientos-word/04-auditoria-arquitectura.docx para los hallazgos que lo corrigieron.
 //
 // Dos convenciones que este archivo sostiene y que conviene conocer antes de leerlo:
 //

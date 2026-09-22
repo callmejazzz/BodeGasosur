@@ -1,4 +1,4 @@
-// Bootstrap de producción — Plan B (docs/10-plan-b-produccion.md).
+// Bootstrap de producción — Plan B (docs/decisiones-otros/10-plan-b-produccion.md).
 //
 // Deja una base lista para operar con lo mínimo real y nada demostrativo:
 // la configuración (bodegas, áreas, PZA, folios), las empresas, estaciones y

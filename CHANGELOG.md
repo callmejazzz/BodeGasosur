@@ -1,7 +1,7 @@
 # Cambios
 
 Todo lo que va entrando a BodeGasosur, versión por versión. Las versiones se numeran según
-la política de [versionado y despliegue](docs/08-versionado-y-despliegue.md).
+la política de [versionado y despliegue](docs/05-versionado-y-despliegue.md).
 
 Se escribe para quien usa el sistema, no para quien lo programa: cada entrada dice qué se
 puede hacer ahora que antes no se podía.
@@ -56,7 +56,7 @@ existencias dejan de ser cero.
 - Prisma con `relationJoins`: las relaciones se cargan en una sola sentencia en vez de en
   paralelo sobre la conexión de la transacción (pg 9 lo rechazaría).
 - 142 pruebas contra PostgreSQL real: los 14 criterios de aceptación del contrato
-  ([`docs/11-fase-5-entradas.md`](docs/11-fase-5-entradas.md) §12), el criterio 13 sobre
+  ([contrato de Entradas](docs/decisiones-otros/02-fase-5-entradas.md) §12), el criterio 13 sobre
   las Server Actions reales.
 
 **Por saber**
@@ -72,7 +72,7 @@ existencias dejan de ser cero.
 ## v0.4.0 — 2026-09-12
 
 Cierra la fase 4: migración de catálogos, bajo el **Plan B** de
-[`docs/10-plan-b-produccion.md`](docs/10-plan-b-produccion.md). Es la primera versión con
+[Plan B para producción](docs/decisiones-otros/01-plan-b-produccion.md). Es la primera versión con
 datos reales de Gasosur adentro, y la que decide cómo va a arrancar producción: **limpia de
 inventario**. Compras captura proveedores y artículos desde la aplicación; el Excel no se
 migra.
@@ -120,7 +120,7 @@ migra.
   Si Compras entrega una normalización confiable, entran como carga operativa adicional,
   auditada y sin reiniciar producción.
 - Un hallazgo para cuando Compras capture proveedores: en su hoja, `ALCARAZ SOBERANIS
-  (CHILPO 4)` trae el RFC de Muller y Asociados ([07 §6](docs/07-datos-actuales.md)).
+  (CHILPO 4)` trae el RFC de Muller y Asociados ([04 §6](docs/04-datos-actuales.md)).
 
 ## v0.3.0 — 2026-09-09
 
@@ -183,7 +183,7 @@ autorización si el sistema no sabe quién captura.
 Cierra la fase 2: los cimientos corregidos. Es una versión de estructura — casi nada de lo
 que trae se ve en pantalla todavía, y ese es el punto: son las decisiones que después no se
 pueden cambiar barato. Sale de la auditoría de arquitectura
-([09-auditoria.md](docs/09-auditoria.md)) y de las decisiones que se tomaron sobre ella.
+([09-auditoria-arquitectura.docx](docs/cimientos-word/04-auditoria-arquitectura.docx)) y de las decisiones que se tomaron sobre ella.
 
 **Lo que cambia para quien va a usar el sistema**
 
@@ -247,11 +247,11 @@ ocho catálogos. Todavía no hay captura de movimientos.
 
 - Levantamiento de requerimientos cerrado con Compras: cinco de diez supuestos resultaron
   falsos y quedaron registrados en
-  [hallazgos](docs/05-hallazgos-levantamiento.md).
+  [hallazgos](docs/cimientos-word/03-hallazgos-levantamiento.docx).
 - Catálogo del grupo levantado del Excel vigente: 22 empresas y 32 estaciones
-  ([06-estaciones.md](docs/06-estaciones.md)), y el análisis del inventario actual con su
-  plan de migración ([07-datos-actuales.md](docs/07-datos-actuales.md)).
-- Orden de trabajo vigente en [`fases-siguientes.md`](fases-siguientes.md).
+  ([03-estaciones.md](docs/03-estaciones.md)), y el análisis del inventario actual con su
+  plan de migración ([04-datos-actuales.md](docs/04-datos-actuales.md)).
+- Estado y plan de las fases en [entregables por fase](docs/entregables-fases/README.md).
 
 **Por saber**
 

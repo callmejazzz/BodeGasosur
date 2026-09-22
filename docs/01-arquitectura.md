@@ -17,10 +17,10 @@ a qué costo unitario, a qué área se destina y con qué observaciones.
 | Autenticación   | **Clerk**                                                                  | Identidad delegada: contraseñas, sesiones y bloqueo por intentos dejan de ser código nuestro (§3.6)      |
 | Autorización    | **PostgreSQL**, con tres roles y la bandera `puedeAutorizar`               | Los permisos se leen de la base en cada petición, así que revocar surte efecto de inmediato (§3.3, §3.6) |
 | Invariantes     | **En la base**, como `CHECK` y triggers                                    | La capa de servicios no es el único escritor y nunca lo será (§3.7)                                      |
-| Entorno         | **Local durante el desarrollo**; el destino se decide antes de la `v1.0.0` | Ver [08](08-versionado-y-despliegue.md) §8 y el hallazgo **D1** de la [auditoría](09-auditoria.md)       |
+| Entorno         | **Local durante el desarrollo**; el destino se decide antes de la `v1.0.0` | Ver [05](05-versionado-y-despliegue.md) §8 y el hallazgo **D1** de la [auditoría](cimientos-word/09-auditoria-arquitectura.docx)       |
 | Identificadores | **UUIDv7** nativo como llave primaria                                      | El catálogo de estaciones es global; los ids no pueden chocar entre proyectos (§3.5)                     |
 | URLs            | Por **clave de negocio**, no por id                                        | `/estaciones/ES05588`, no un UUID que nadie puede dictar por teléfono                                    |
-| Cantidades      | **Piezas enteras**                                                         | No hay medias piezas en una bodega, y el invariante 9 se verifica por igualdad exacta                    |
+| Cantidades      | **Unidades base enteras**, normalizadas desde `UNIDAD` o `CAJA`            | Existencia y PEPS nunca operan con cajas; el factor usado queda congelado en cada partida                 |
 
 ## 3. Principios rectores
 
@@ -37,6 +37,10 @@ cambió de 40 a 10 piezas?», el sistema tiene la respuesta.
 Y desde la fase 2 responde también **quién** y **cuándo**: cada transición guarda su actor
 y su marca de tiempo, y una tabla `Bitacora` alimentada por trigger guarda todo cambio a
 cualquier dato, incluido quitarle a alguien la facultad de autorizar.
+
+En una `ENTRADA`, esos actores no se confunden: `creadoPor` identifica a quien capturó el
+borrador y `confirmadoPor` a quien recibió o verificó físicamente el material y decidió
+incorporarlo al inventario. `recibidoPor` queda reservado para cerrar una `SALIDA`.
 
 ### 3.2 La existencia es un resultado, no una fuente de verdad
 
@@ -61,7 +65,7 @@ Lo que sí se conserva es la herramienta de diagnóstico: si el stock no cuadra,
 desde el libro y se compara pieza por pieza.
 
 *(Corrige una promesa anterior de este documento. Ver **B3**, **F2** y **F3** de la
-[auditoría](09-auditoria.md).)*
+[auditoría](cimientos-word/09-auditoria-arquitectura.docx).)*
 
 ### 3.3 La autorización es un permiso, y la lista de quién lo tiene es un dato
 
@@ -100,7 +104,7 @@ archivo, no un `switch` repartido por el código: agregar un rol es una entrada,
 cacería.
 
 Un caso merece regla propia: **`Empresa` y `Estacion` solo las escribe el Superadmin.**
-Viven en el esquema global del grupo ([06-estaciones.md](06-estaciones.md) §3) y otros
+Viven en el esquema global del grupo ([03-estaciones.md](03-estaciones.md) §3) y otros
 proyectos de Gasosur las leen, así que un cambio ahí sale de BodeGasosur. Restringir la
 escritura es lo que hace seguro compartir el catálogo.
 
@@ -199,7 +203,7 @@ Tres consecuencias que se siguen:
 
 ### 3.7 Un invariante que solo está escrito en español no existe
 
-[02 §4](02-modelo-de-datos.md#4-invariantes) declara once invariantes. Escritos en prosa,
+[02 §4](02-modelo-de-datos.md#4-invariantes) declara catorce invariantes. Escritos en prosa,
 todos dependían de que la capa de servicios fuera el único escritor — y no lo va a ser: la
 migración de datos de la fase 4 escribe directo, `prisma studio` escribe directo, y el
 `psql` de una noche de urgencias también.
@@ -228,10 +232,10 @@ Prisma no sabe expresar nada de esto, así que ese SQL se escribe a mano y vive 
 flowchart TD
     A["UI — React Server Components<br/>app/**"] --> B["Server Actions<br/>app/**/actions.ts"]
     B --> C["accionProtegida<br/>permiso + transacción + actor"]
-    C --> D["Capa de servicios<br/>lib/services/*.ts<br/>(reglas de inventario)"]
+    C --> D["Capa transaccional por dominio<br/>lib/&lt;dominio&gt;/*.ts<br/>(p. ej. lib/entradas)"]
     D --> E["Prisma Client<br/>lib/db.ts"]
     E --> F[("PostgreSQL<br/>CHECK · triggers · bitácora")]
-    G["Esquemas Zod<br/>lib/catalogos/definiciones.ts"] -.validan.-> B
+    G["Esquemas Zod<br/>lib/catalogos/definiciones.ts<br/>lib/entradas/formulario.ts"] -.validan.-> B
     H["Webhook de Clerk<br/>la segunda puerta"] --> E
 ```
 
@@ -248,8 +252,9 @@ habría que recordar por separado:
 
 ```ts
 export const guardarCatalogo = accionProtegida(
-  "catalogos:escribir",
-  async (tx, usuario, datos) => { /* … */ },
+  ([slug]) => catalogoPorSlug(slug)?.permisoEscritura
+    ?? "catalogos:globales:escribir",
+  async (tx, usuario, slug, id, datos) => { /* … */ },
 );
 
 // Por dentro, una sola vez para todo el sistema:
@@ -265,20 +270,30 @@ de fuera, sin sesión, y escribe. Verifica su firma antes de tocar la base, fija
 Cuando nadie fijó ninguna de las dos variables, la bitácora dice `escritura-directa` — que
 es una respuesta honesta, y hoy no existe ninguna.
 
+**Confirmar un movimiento es un único acto transaccional.** Para una entrada, el candado
+`FOR UPDATE` del encabezado es el reclamo principal; después se bloquean con `FOR SHARE`,
+en orden fijo, el proveedor, la bodega y los artículos por id. A continuación se bloquean
+las existencias por `articuloId` y, al final, el folio. La transición condicionada a
+`BORRADOR`, la conversión a MXN, las capas de costo y la existencia se confirman o revierten
+juntas. El alta lleva una llave de idempotencia única y compara toda la captura antes de
+revalidar catálogos; una existencia ausente se crea en cero con
+`INSERT … ON CONFLICT DO NOTHING` antes de bloquearla. El contrato ejecutable está en
+[`11-fase-5-entradas.md`](decisiones-otros/11-fase-5-entradas.md).
+
 ### 4.2 Stack concreto
 
 | Capa          | Tecnología                                    | Por qué                                                                                            |
 | ------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------- |
 | Framework     | Next.js 16 (App Router, Turbopack)            | Server Components: los listados de inventario se renderizan en el servidor, sin API intermedia     |
 | Lenguaje      | TypeScript (strict)                           | El dominio tiene muchos estados; los tipos evitan errores de captura                               |
-| ORM           | Prisma 7 + adaptador `@prisma/adapter-pg`     | Migraciones versionadas y transacciones explícitas, que es justo lo que exige el §3.1              |
+| ORM           | Prisma 7 + adaptador `@prisma/adapter-pg`     | Migraciones versionadas y transacciones explícitas. `relationJoins` trae cada árbol relacional en una consulta y evita consultas paralelas sobre el mismo cliente de `pg` |
 | Base de datos | PostgreSQL 16                                 | Transacciones serias, `NUMERIC` exacto para dinero, y **constraints reales** — que el §3.7 sí usa  |
 | Autenticación | Clerk (`@clerk/nextjs`)                       | Identidad delegada (§3.6). Compatible con Next 16 y React 19                                       |
 | Validación    | Zod 4                                         | Un solo esquema valida el formulario y la acción de servidor                                       |
 | UI            | Tailwind CSS 4 + primitivas propias           | Un puñado de componentes en `src/components/ui`, sin dependencias de terceros que después estorben |
 | Formularios   | Acciones de servidor + `useActionState`       | Validación en el servidor sin duplicar reglas en el cliente                                        |
 | Fechas        | `Intl` nativo, encapsulado en `lib/fechas.ts` | Ver §4.5. No hace falta una biblioteca para esto                                                   |
-| Pruebas       | Vitest 4                                      | De integración contra el PostgreSQL de `docker-compose`, en una base `*_prueba` que se recrea en cada corrida. Hoy cubren el importador de datos; las cuatro de invariantes llegan con las fases de movimientos |
+| Pruebas       | Vitest 4                                      | De integración contra el PostgreSQL de `docker-compose`, en una base `*_prueba` que se recrea en cada corrida. Cubren migración, formularios, repositorios, acciones de servidor y el contrato transaccional de Entradas; los demás movimientos incorporarán su cobertura en sus fases |
 
 Las cuatro pruebas que importan, y que van a CI cuando exista:
 
@@ -307,7 +322,8 @@ BodeGasosur/
 │  ├─ migracion-datos/            # Catálogos reales desde los CSV del corte (F5)
 │  └─ comun.ts                    # Cliente y búsqueda por nombre para esos scripts
 ├─ pruebas/
-│  └─ base-de-pruebas.ts          # Recrea la base *_prueba antes de cada corrida de Vitest
+│  ├─ base-de-pruebas.ts          # Recrea la base *_prueba antes de cada corrida de Vitest
+│  └─ semilla-entradas.ts         # Entorno aislado para las pruebas de Entradas
 ├─ scripts/
 │  ├─ armar-migracion.sh          # Junta prisma/sql/ con el DDL generado
 │  ├─ arranque-superadmin.ts      # El primer Superadmin, desde su identidad en Clerk
@@ -315,28 +331,28 @@ BodeGasosur/
 ├─ prisma.config.ts               # Prisma 7 lee aquí la URL de conexión
 ├─ src/
 │  ├─ app/
-│  │  ├─ layout.tsx               # Barra lateral + área de contenido
-│  │  ├─ page.tsx                 # Tablero
-│  │  └─ catalogos/
-│  │     ├─ page.tsx              # Índice de catálogos
-│  │     └─ [slug]/               # Los nueve catálogos, con una sola pantalla
-│  │        ├─ page.tsx           # Listado con buscador
-│  │        ├─ actions.ts         # Acción de servidor: validar y guardar
-│  │        ├─ nuevo/page.tsx
-│  │        └─ [id]/page.tsx      # Edición
+│  │  ├─ (acceso)/                # Inicio de sesión y acceso denegado
+│  │  ├─ (sistema)/
+│  │  │  ├─ layout.tsx            # Barra lateral + área de contenido
+│  │  │  ├─ page.tsx              # Tablero
+│  │  │  ├─ catalogos/            # Índice, listado, alta y edición genérica
+│  │  │  ├─ usuarios/             # Administración de acceso
+│  │  │  └─ entradas/             # Listado, captura, detalle y Server Actions
+│  │  └─ api/webhooks/clerk/       # Sincronización firmada desde Clerk
 │  ├─ components/
 │  │  ├─ ui/                      # Primitivas: botón, campos, tabla, tarjetas
 │  │  ├─ catalogos/               # Formulario genérico de catálogo
+│  │  ├─ entradas/                # Filtros, tabla, formulario, detalle y acciones
 │  │  └─ navegacion.tsx
 │  └─ lib/
 │     ├─ db.ts                    # Cliente Prisma + accionProtegida (§4.1)
-│     ├─ fechas.ts                # El único lugar que decide «hoy» (§4.5)
+│     ├─ fechas.ts                # Única frontera de fechas de negocio (§4.5)
 │     ├─ utils.ts                 # cn, formato de moneda y cantidades
 │     ├─ catalogos/
 │     │  ├─ definiciones.ts       # Los catálogos, declarados (ver §4.4)
 │     │  ├─ repos.ts              # Acceso a datos por catálogo
 │     │  └─ formulario.ts         # Tipos compartidos del formulario
-│     └─ services/                # Reglas de inventario (a partir de la fase 5)
+│     └─ entradas/                # Formulario, filtros, lecturas, primitivas y servicio transaccional
 ├─ docker-compose.yml             # PostgreSQL local
 └─ .env.example
 ```
@@ -391,10 +407,12 @@ Dos cosas que no son evidentes y que hay que sostener a mano:
   México la recorre un día hacia atrás. Un `timestamptz` sí se formatea en
   `America/Mexico_City`.
 
-Por eso ambas cosas viven en `lib/fechas.ts` y en ningún otro lugar: `hoyEnMexico()` —nunca
-`new Date()`— y las dos funciones de formato. Del lado de SQL, ninguna consulta calcula
-«hoy» por su cuenta: nada de `CURRENT_DATE`, que depende de cómo esté configurado el
-servidor que toque.
+Por eso la fase 5 creó `lib/fechas.ts` y concentra ahí: `hoyEnMexico()` —nunca `new Date()`
+para decidir el día—, la validación de una fecha calendario `YYYY-MM-DD`, su conversión al
+valor de Prisma sin desplazarla y las dos funciones de formato. Del lado de SQL, ninguna
+consulta calcula «hoy» por su cuenta: nada de `CURRENT_DATE`, que depende de cómo esté
+configurado el servidor que toque. El contrato y sus casos límite están en
+[`11-fase-5-entradas.md`](decisiones-otros/11-fase-5-entradas.md#10-fechas-de-negocio).
 
 ## 5. Entorno local
 
@@ -442,7 +460,7 @@ Comandos útiles:
 | `npm run dev` | Servidor de desarrollo |
 | `npm run db:up` / `db:down` | Levanta o baja PostgreSQL |
 | `npm run db:reset` | Desarrollo: borra todo y encadena configuración, catálogos reales, fixtures y Superadmin |
-| `npm run prod:bootstrap` | Producción: manual y con confirmación, sin fixtures ([Plan B](10-plan-b-produccion.md)) |
+| `npm run prod:bootstrap` | Producción: manual y con confirmación, sin fixtures ([Plan B](decisiones-otros/10-plan-b-produccion.md)) |
 | `npm run test` | Pruebas de integración contra PostgreSQL |
 | `npm run db:studio` | Explorador visual de la base de datos |
 
@@ -451,14 +469,16 @@ Comandos útiles:
 No se resuelven ahora, pero la arquitectura les deja lugar:
 
 - **Dónde se despliega.** Estaba decidido —Vercel Pro + Supabase Pro— y la
-  [auditoría](09-auditoria.md) lo reabrió en **D1**: para diez usuarios en una oficina de
+  [auditoría](cimientos-word/09-auditoria-arquitectura.docx) lo reabrió en **D1**: para diez usuarios en una oficina de
   Acapulco, el serverless cobra complejidad —pooler, dos URLs de conexión, arranques en
   frío sobre transacciones con locks— a cambio de un escalado elástico que nadie necesita.
   Se decide antes de la `v1.0.0`. La elección no ata nada: Next.js corre igual en un
   contenedor, en Railway o en un servidor interno del grupo.
-- **Órdenes de compra.** Hoy la entrada apunta a un proveedor y una referencia de
-  factura/remisión. Si Compras necesita el ciclo completo (requisición → OC → recepción
-  parcial), se agrega como capa **arriba** del movimiento, sin tocar el libro.
+- **Órdenes de compra.** En la fase 5 cada entrega física es una entrada independiente;
+  varias pueden compartir proveedor y referencia para agrupar y sumar lo recibido. Sin
+  una cantidad comprometida no se puede afirmar cuánto falta. Si Compras necesita el ciclo
+  completo (requisición → OC → recepción parcial), se agrega como capa **arriba** del
+  movimiento, sin tocar el libro.
 - **Rastreo por serie o lote.** Descartado en el levantamiento: la serie **se anota** en
   la partida y nada más. Si algún día hiciera falta rastrearla de verdad, es un rediseño
   del kardex, no un campo — conviene volver a discutirlo, no darlo por hecho.

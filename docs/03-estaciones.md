@@ -54,7 +54,7 @@ erDiagram
 > **`Empresa` es exclusivamente Gasosur.** El proveedor lleva sus propios datos fiscales y
 > no apunta a este catálogo, aunque 33 renglones del Excel de proveedores compartan RFC con
 > empresas del grupo. Si una de ellas debe ser proveedora algún día, se decide como caso de
-> negocio, no con un vínculo opcional ([10-plan-b-produccion.md](10-plan-b-produccion.md)).
+> negocio, no con un vínculo opcional ([10-plan-b-produccion.md](decisiones-otros/10-plan-b-produccion.md)).
 
 ## 2. Campos
 

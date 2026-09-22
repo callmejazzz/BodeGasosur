@@ -1,4 +1,4 @@
-	# BodeGasosur — Versionado y despliegue
+# BodeGasosur — Versionado y despliegue
 
 Cómo se numeran las versiones del sistema, qué significa cada número y cómo llega el
 código a manos de Gasosur. Aplica desde `v0.1.0` en adelante.
@@ -54,7 +54,7 @@ v1.0.0-rc.2   correcciones de esa revisión
 v1.0.0        aprobado y desplegado en Vercel + Supabase
 ```
 
-El orden de las fases está en [`fases-siguientes.md`](../fases-siguientes.md).
+El orden de las fases está en [entregables por fase](entregables-fases/README.md).
 
 **Las `rc` no son adorno.** Entre «lo terminé» y «Gasosur lo aprobó» va a haber al menos
 una ronda de observaciones, y hace falta poder decir *«eso quedó corregido en la rc.2»* con
@@ -150,7 +150,7 @@ migración ocurre cuando Gasosur apruebe el sistema, en `v1.0.0`.
 | Base de datos | Supabase Pro — el gratuito pausa el proyecto por inactividad y no incluye respaldos |
 | Conexión | Connection pooler de Supabase, obligatorio con funciones serverless |
 
-Supabase es PostgreSQL de verdad, lo cual importa porque el esquema `catalogo_gasosur` está pensado para que **otros proyectos del grupo lo lean** ([06-estaciones.md](06-estaciones.md) §3). Eso exige una base a la que se pueda conectar cualquier cliente Postgres.
+Supabase es PostgreSQL de verdad, lo cual importa porque el esquema `catalogo_gasosur` está pensado para que **otros proyectos del grupo lo lean** ([03-estaciones.md](03-estaciones.md) §3). Eso exige una base a la que se pueda conectar cualquier cliente Postgres.
 
 ### Lo que hay que dejar bien configurado el día del despliegue
 
@@ -174,7 +174,7 @@ el entorno sin conectarse: `DATABASE_URL` válida y que no sea una base `*_prueb
 configurado con una llave que no sea `sk_test_`, terminal interactiva, y que
 `BODEGASOSUR_FIXTURES` no esté definida. Después aplica la migración, rechaza una base que
 ya opere, muestra el resumen y exige teclear el nombre de la base para confirmar. Ver
-[10-plan-b-produccion.md](10-plan-b-produccion.md).
+[10-plan-b-produccion.md](decisiones-otros/10-plan-b-produccion.md).
 
 **Skew Protection encendido.** Cuando se promueve una versión, alguien puede llevar horas
 con la pantalla de captura abierta: su navegador tiene el JavaScript anterior, que invoca
