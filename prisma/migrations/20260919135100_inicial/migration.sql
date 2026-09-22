@@ -82,6 +82,9 @@ CREATE TYPE "EstatusMovimiento" AS ENUM ('BORRADOR', 'CONFIRMADO', 'SOLICITADA',
 CREATE TYPE "Moneda" AS ENUM ('MXN', 'USD');
 
 -- CreateEnum
+CREATE TYPE "Presentacion" AS ENUM ('UNIDAD', 'CAJA');
+
+-- CreateEnum
 CREATE TYPE "Rol" AS ENUM ('SUPERADMIN', 'COMPRAS', 'JEFE');
 
 -- CreateEnum
@@ -291,6 +294,7 @@ CREATE TABLE "Movimiento" (
     "motivoRechazo" TEXT,
     "motivoCancelacion" TEXT,
     "cancelaAId" UUID,
+    "llaveIdempotencia" UUID,
     "creadoPorId" UUID NOT NULL,
     "confirmadoPorId" UUID,
     "confirmadoEn" TIMESTAMPTZ(3),
@@ -315,8 +319,12 @@ CREATE TABLE "MovimientoPartida" (
     "id" UUID NOT NULL,
     "movimientoId" UUID NOT NULL,
     "articuloId" UUID NOT NULL,
+    "orden" INTEGER NOT NULL,
     "cantidad" INTEGER NOT NULL,
-    "capturaOriginal" TEXT,
+    "presentacionCapturada" "Presentacion" NOT NULL,
+    "cantidadCapturada" INTEGER NOT NULL,
+    "factorConversion" INTEGER NOT NULL,
+    "costoUnitarioCapturado" DECIMAL(14,4),
     "costoUnitario" DECIMAL(14,4),
     "costoUnitarioConIva" DECIMAL(14,4),
     "tasaIva" DECIMAL(5,4),
@@ -437,6 +445,9 @@ CREATE UNIQUE INDEX "Movimiento_folio_key" ON "Movimiento"("folio");
 CREATE UNIQUE INDEX "Movimiento_cancelaAId_key" ON "Movimiento"("cancelaAId");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "Movimiento_llaveIdempotencia_key" ON "Movimiento"("llaveIdempotencia");
+
+-- CreateIndex
 CREATE INDEX "Movimiento_tipo_estatus_fecha_idx" ON "Movimiento"("tipo", "estatus", "fecha");
 
 -- CreateIndex
@@ -456,6 +467,9 @@ CREATE INDEX "MovimientoPartida_articuloId_idx" ON "MovimientoPartida"("articulo
 
 -- CreateIndex
 CREATE UNIQUE INDEX "MovimientoPartida_movimientoId_articuloId_key" ON "MovimientoPartida"("movimientoId", "articuloId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "MovimientoPartida_movimientoId_orden_key" ON "MovimientoPartida"("movimientoId", "orden");
 
 -- CreateIndex
 CREATE INDEX "CapaCosto_bodegaId_articuloId_fechaOriginal_id_idx" ON "CapaCosto"("bodegaId", "articuloId", "fechaOriginal", "id");
@@ -698,11 +712,55 @@ ALTER TABLE "Movimiento" ADD CONSTRAINT "movimiento_folio_no_en_borrador_ck" CHE
   folio IS NULL OR estatus <> 'BORRADOR'
 );
 
--- Un movimiento cancelado o rechazado dice por qué.
-ALTER TABLE "Movimiento" ADD CONSTRAINT "movimiento_motivo_cancelacion_ck" CHECK (
-  estatus <> 'CANCELADO' OR "motivoCancelacion" IS NOT NULL
+-- Cada dato pertenece a un estado o a un tipo, y fuera de ellos no existe:
+-- un borrador que ya trae motivo de cancelación se confirmaría cargándolo, y
+-- una entrada con autorizador diría algo que nunca pasó.
+
+ALTER TABLE "Movimiento" ADD CONSTRAINT "movimiento_cancelacion_solo_cancelado_ck" CHECK (
+  (estatus =  'CANCELADO' AND "canceladoPorId" IS NOT NULL AND "motivoCancelacion" IS NOT NULL)
+  OR
+  (estatus <> 'CANCELADO' AND "canceladoPorId" IS NULL     AND "motivoCancelacion" IS NULL)
 );
 
+ALTER TABLE "Movimiento" ADD CONSTRAINT "movimiento_entrada_sin_datos_ajenos_ck" CHECK (
+  tipo <> 'ENTRADA' OR (
+    "autorizadoPorId" IS NULL AND "rechazadoPorId" IS NULL AND "motivoRechazo" IS NULL
+    AND "entregadoPorId" IS NULL AND "recibidoPorId" IS NULL
+    AND "solicitadoPorId" IS NULL AND "entregadoA" IS NULL AND motivo IS NULL
+  )
+);
+
+-- Un borrador no tiene quién lo confirmó; un confirmado lo tiene siempre, con
+-- folio e instante (11 §4). Con el par actor/instante de arriba, exigir el
+-- actor exige los dos.
+ALTER TABLE "Movimiento" ADD CONSTRAINT "movimiento_borrador_sin_confirmador_ck" CHECK (
+  estatus <> 'BORRADOR' OR "confirmadoPorId" IS NULL
+);
+
+ALTER TABLE "Movimiento" ADD CONSTRAINT "movimiento_confirmado_completo_ck" CHECK (
+  estatus <> 'CONFIRMADO' OR (folio IS NOT NULL AND "confirmadoPorId" IS NOT NULL)
+);
+
+-- Una entrada confirmada trae sus importes: nacen completas (11 §1).
+ALTER TABLE "Movimiento" ADD CONSTRAINT "movimiento_entrada_confirmada_importes_ck" CHECK (
+  tipo <> 'ENTRADA' OR estatus <> 'CONFIRMADO'
+  OR (subtotal IS NOT NULL AND iva IS NOT NULL AND total IS NOT NULL)
+);
+
+-- Una entrada sin llave de idempotencia es una entrada que un doble clic puede
+-- duplicar (11 §8). Los demás tipos la adoptan cuando se construyan.
+ALTER TABLE "Movimiento" ADD CONSTRAINT "movimiento_entrada_llave_ck" CHECK (
+  tipo <> 'ENTRADA' OR "llaveIdempotencia" IS NOT NULL
+);
+
+-- Antes del 2000 no hay operación que registrar. El otro extremo —no después
+-- de hoy en México— lo pone la capa de servicios con lib/fechas.ts: aquí no
+-- se usa CURRENT_DATE (01 §4.5).
+ALTER TABLE "Movimiento" ADD CONSTRAINT "movimiento_fecha_minima_ck" CHECK (
+  fecha >= DATE '2000-01-01'
+);
+
+-- Un movimiento rechazado dice por qué (el cancelado, arriba).
 ALTER TABLE "Movimiento" ADD CONSTRAINT "movimiento_motivo_rechazo_ck" CHECK (
   estatus <> 'RECHAZADA' OR "motivoRechazo" IS NOT NULL
 );
@@ -712,6 +770,8 @@ ALTER TABLE "Movimiento" ADD CONSTRAINT "movimiento_motivo_rechazo_ck" CHECK (
 -- Invariante 3: cantidad positiva. Piezas enteras, sin excepciones — el signo
 -- de un ajuste ya lo lleva la bodega.
 ALTER TABLE "MovimientoPartida" ADD CONSTRAINT "partida_cantidad_positiva_ck" CHECK (cantidad > 0);
+
+ALTER TABLE "MovimientoPartida" ADD CONSTRAINT "partida_orden_positivo_ck" CHECK (orden >= 1);
 
 -- Nulo no es cero. «No sé cuánto costó» y «costó nada» son afirmaciones
 -- distintas, y el reporte de valuación tiene que poder distinguirlas — pero
@@ -731,6 +791,31 @@ ALTER TABLE "MovimientoPartida" ADD CONSTRAINT "partida_costo_no_negativo_ck" CH
 
 ALTER TABLE "MovimientoPartida" ADD CONSTRAINT "partida_tasa_iva_ck" CHECK (
   "tasaIva" IS NULL OR ("tasaIva" >= 0 AND "tasaIva" <= 1)
+);
+
+-- ── Normalización a la unidad base (11 §5) ────────────────────────────────
+--
+-- La cantidad canónica no se captura: se deriva. Escribir la regla aquí hace
+-- que una partida con «3 CAJA de 12» y cantidad 30 sea imposible, la escriba
+-- quien la escriba.
+
+ALTER TABLE "MovimientoPartida" ADD CONSTRAINT "partida_captura_positiva_ck" CHECK (
+  "cantidadCapturada" > 0 AND "factorConversion" > 0
+);
+
+ALTER TABLE "MovimientoPartida" ADD CONSTRAINT "partida_factor_unidad_ck" CHECK (
+  "presentacionCapturada" <> 'UNIDAD' OR "factorConversion" = 1
+);
+
+ALTER TABLE "MovimientoPartida" ADD CONSTRAINT "partida_cantidad_normalizada_ck" CHECK (
+  cantidad = "cantidadCapturada" * "factorConversion"
+);
+
+-- El costo capturado es el dato de origen del costo canónico: no puede haber
+-- uno sin el otro. Al revés sí: una salida hereda costo de PEPS sin capturarlo.
+ALTER TABLE "MovimientoPartida" ADD CONSTRAINT "partida_costo_capturado_ck" CHECK (
+  "costoUnitarioCapturado" IS NULL
+  OR ("costoUnitarioCapturado" >= 0 AND "costoUnitario" IS NOT NULL)
 );
 
 -- ───────────────────────────── CapaCosto ──────────────────────────────────
@@ -1003,6 +1088,12 @@ CREATE TRIGGER estacion_numero_inmutable
   BEFORE UPDATE ON catalogo_gasosur."Estacion"
   FOR EACH ROW EXECUTE FUNCTION impedir_cambio_de_clave('numero');
 
+-- El tipo decide qué máquina de estados y qué CHECK aplican: cambiarlo sería
+-- cambiar de reglas a medio camino (ENTRADA/CONFIRMADO → SALIDA/CANCELADO).
+CREATE TRIGGER movimiento_tipo_inmutable
+  BEFORE UPDATE ON public."Movimiento"
+  FOR EACH ROW EXECUTE FUNCTION impedir_cambio_de_clave('tipo');
+
 -- ──────────────── Autorización: escritura única, y una sola vez ───────────
 
 CREATE OR REPLACE FUNCTION impedir_reescribir_autorizacion() RETURNS trigger AS $$
@@ -1065,6 +1156,171 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER movimiento_verificar_autorizador
   BEFORE INSERT OR UPDATE ON public."Movimiento"
   FOR EACH ROW EXECUTE FUNCTION verificar_facultad_de_autorizar();
+
+-- ──────────── Un movimiento confirmado no se edita ni se borra ────────────
+--
+-- 11 §1 y §4, para los tipos con la máquina BORRADOR → CONFIRMADO; SALIDA
+-- tiene sus propios estados y se cierra en la fase 6. Fuera de BORRADOR no
+-- cambia nada, ni siquiera hacia CANCELADO: la cancelación por asiento
+-- inverso es de la fase 7 y cuando llegue abrirá esta puerta a propósito.
+--
+-- Cada RAISE de este bloque lleva un SQLSTATE propio y estable (clase BG,
+-- «BodeGasosur»): es lo único que la capa de servicios acepta mostrar tal
+-- cual. Un mensaje sin código de la lista se sustituye por uno genérico.
+--
+--   BG501  el movimiento ya no está en BORRADOR: no se edita, no se borra,
+--          sus partidas no cambian
+--   BG502  un movimiento nace en BORRADOR
+--   BG503  sin partidas no se confirma
+--   BG504  el factor de una CAJA ya no es el del catálogo
+--   BG505  una entrada se confirma con costo y tasa en todas sus partidas
+--   BG506  la partida por CAJA no corresponde al catálogo
+--
+-- Bloqueos, para que esto y la confirmación no se pisen (11 §9): quien escribe
+-- una partida toma FOR UPDATE sobre su encabezado, en orden de id si son dos;
+-- la confirmación lo toma con su propio UPDATE. Así «¿tiene partidas?» y
+-- «¿el factor sigue vigente?» se responden con el encabezado cerrado. Los
+-- artículos se toman FOR SHARE después del encabezado, también por id. La
+-- capa de servicios sigue el mismo orden y lo completa: encabezado →
+-- proveedor → bodega → artículos → existencias → folio.
+
+CREATE OR REPLACE FUNCTION verificar_transicion_de_movimiento() RETURNS trigger AS $$
+DECLARE
+  v_partida record;
+  -- En un UPDATE manda el tipo que ya tenía la fila, aunque el trigger de
+  -- arriba ya impida cambiarlo: dos defensas para la misma puerta.
+  v_tipo "TipoMovimiento" := CASE WHEN TG_OP = 'INSERT' THEN NEW.tipo ELSE OLD.tipo END;
+BEGIN
+  IF v_tipo = 'SALIDA' THEN
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.estatus <> 'BORRADOR' THEN
+      RAISE EXCEPTION 'Un movimiento nace en BORRADOR y se confirma después, con sus partidas.'
+        USING ERRCODE = 'BG502';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  IF OLD.estatus <> 'BORRADOR' THEN
+    IF (to_jsonb(OLD) - 'updatedAt') <> (to_jsonb(NEW) - 'updatedAt') THEN
+      RAISE EXCEPTION 'El movimiento % está %: ya no se edita.', coalesce(OLD.folio, OLD.id::text), OLD.estatus
+        USING ERRCODE = 'BG501',
+              HINT = 'Un movimiento confirmado se corrige con un asiento inverso, no editándolo.';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  IF NEW.estatus <> 'CONFIRMADO' THEN
+    RETURN NEW;
+  END IF;
+
+  -- BORRADOR → CONFIRMADO.
+  IF NOT EXISTS (SELECT 1 FROM public."MovimientoPartida" WHERE "movimientoId" = NEW.id) THEN
+    RAISE EXCEPTION 'Un movimiento sin partidas no se confirma.'
+      USING ERRCODE = 'BG503';
+  END IF;
+
+  PERFORM 1 FROM public."Articulo"
+    WHERE id IN (SELECT "articuloId" FROM public."MovimientoPartida" WHERE "movimientoId" = NEW.id)
+    ORDER BY id FOR SHARE;
+
+  -- El factor guardado es una fotografía; si el catálogo cambió desde
+  -- entonces, la partida se vuelve a guardar, no se reinterpreta (11 §5).
+  SELECT a.clave, p."factorConversion", a."piezasPorCaja" INTO v_partida
+  FROM public."MovimientoPartida" p
+  JOIN public."Articulo" a ON a.id = p."articuloId"
+  WHERE p."movimientoId" = NEW.id
+    AND p."presentacionCapturada" = 'CAJA'
+    AND p."factorConversion" IS DISTINCT FROM a."piezasPorCaja"
+  LIMIT 1;
+  IF FOUND THEN
+    RAISE EXCEPTION 'El artículo % pasó de % a % piezas por caja: vuelve a guardar esa partida.',
+      v_partida.clave, v_partida."factorConversion", coalesce(v_partida."piezasPorCaja"::text, 'ninguna')
+      USING ERRCODE = 'BG504';
+  END IF;
+
+  IF v_tipo = 'ENTRADA' AND EXISTS (
+    SELECT 1 FROM public."MovimientoPartida"
+    WHERE "movimientoId" = NEW.id
+      AND ("costoUnitarioCapturado" IS NULL OR "tasaIva" IS NULL OR "costoUnitario" IS NULL)
+  ) THEN
+    RAISE EXCEPTION 'Una entrada se confirma con costo y tasa de IVA en todas sus partidas.'
+      USING ERRCODE = 'BG505';
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER movimiento_transicion
+  BEFORE INSERT OR UPDATE ON public."Movimiento"
+  FOR EACH ROW EXECUTE FUNCTION verificar_transicion_de_movimiento();
+
+CREATE OR REPLACE FUNCTION impedir_borrar_movimiento_cerrado() RETURNS trigger AS $$
+BEGIN
+  IF OLD.tipo <> 'SALIDA' AND OLD.estatus <> 'BORRADOR' THEN
+    RAISE EXCEPTION 'El movimiento % está %: no se borra.', coalesce(OLD.folio, OLD.id::text), OLD.estatus
+      USING ERRCODE = 'BG501';
+  END IF;
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER movimiento_cerrado_no_se_borra
+  BEFORE DELETE ON public."Movimiento"
+  FOR EACH ROW EXECUTE FUNCTION impedir_borrar_movimiento_cerrado();
+
+-- Las partidas siguen al encabezado: fuera de BORRADOR no se agregan, cambian
+-- ni quitan. Y el factor de una CAJA sale del catálogo, no del navegador.
+CREATE OR REPLACE FUNCTION verificar_escritura_de_partida() RETURNS trigger AS $$
+DECLARE
+  -- En un UPDATE que cambia de movimiento son dos encabezados.
+  v_encabezados uuid[] := ARRAY(
+    SELECT DISTINCT m FROM unnest(ARRAY[
+      CASE WHEN TG_OP <> 'DELETE' THEN NEW."movimientoId" END,
+      CASE WHEN TG_OP <> 'INSERT' THEN OLD."movimientoId" END
+    ]) AS m WHERE m IS NOT NULL ORDER BY m
+  );
+  v_cerrado record;
+  v_piezas  integer;
+BEGIN
+  -- Si el encabezado ya no existe (cascada de un borrador borrado), no hay
+  -- nada que proteger.
+  PERFORM 1 FROM public."Movimiento" WHERE id = ANY(v_encabezados) ORDER BY id FOR UPDATE;
+
+  SELECT folio, id, estatus INTO v_cerrado FROM public."Movimiento"
+    WHERE id = ANY(v_encabezados) AND tipo <> 'SALIDA' AND estatus <> 'BORRADOR' LIMIT 1;
+  IF FOUND THEN
+    RAISE EXCEPTION 'Las partidas del movimiento % (%) no se modifican.',
+      coalesce(v_cerrado.folio, v_cerrado.id::text), v_cerrado.estatus
+      USING ERRCODE = 'BG501';
+  END IF;
+
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
+
+  IF NEW."presentacionCapturada" = 'CAJA' THEN
+    SELECT "piezasPorCaja" INTO v_piezas FROM public."Articulo" WHERE id = NEW."articuloId";
+    IF v_piezas IS NULL THEN
+      RAISE EXCEPTION 'El artículo no se maneja por caja: no tiene piezas por caja.'
+        USING ERRCODE = 'BG506';
+    END IF;
+    IF NEW."factorConversion" <> v_piezas THEN
+      RAISE EXCEPTION 'El factor % no es el del catálogo (% piezas por caja).', NEW."factorConversion", v_piezas
+        USING ERRCODE = 'BG506';
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER partida_escritura
+  BEFORE INSERT OR UPDATE OR DELETE ON public."MovimientoPartida"
+  FOR EACH ROW EXECUTE FUNCTION verificar_escritura_de_partida();
 -- ═══════════════════════════════════════════════════════════════════════════
 -- Dar de baja.
 --
@@ -1173,3 +1429,65 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA catalogo_gasosur
 -- Y ahora lo único que sí puede ver: las dos vistas del contrato v1.
 GRANT USAGE  ON SCHEMA catalogo_gasosur TO lector_catalogo;
 GRANT SELECT ON catalogo_gasosur.v_empresa_v1, catalogo_gasosur.v_estacion_v1 TO lector_catalogo;
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Dinero (11 §6). El cálculo canónico vive aquí, en numeric, y no en
+-- JavaScript: 0.1 + 0.2 en punto flotante no da 0.3, y una valuación de
+-- inventario no puede depender de eso. round(numeric, n) de PostgreSQL
+-- redondea medio hacia arriba, que es lo que el contrato pide.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- Costo por unidad base en MXN a partir de lo capturado: por la presentación
+-- elegida, en la moneda de la factura. tipo_cambio nulo es MXN (factor 1).
+--
+--   costo_base_mxn(120, NULL, 12)        → 10.0000   (una caja de 12 a $120)
+--   costo_base_mxn(120, NULL, 12, 0.16)  → 11.6000   (con IVA)
+--   costo_base_mxn(10, 17.5, 1)          → 175.0000  (10 USD la pieza)
+CREATE OR REPLACE FUNCTION costo_base_mxn(
+  costo_capturado numeric,
+  tipo_cambio     numeric,
+  factor          integer,
+  tasa_iva        numeric DEFAULT 0
+) RETURNS numeric AS $$
+  SELECT round(
+    costo_capturado * (1 + coalesce(tasa_iva, 0)) * coalesce(tipo_cambio, 1) / factor,
+    4
+  );
+$$ LANGUAGE sql IMMUTABLE;
+
+COMMENT ON FUNCTION costo_base_mxn(numeric, numeric, integer, numeric) IS
+  'Costo por unidad base en MXN, cuatro decimales, desde el costo capturado por presentación y en la moneda de la factura.';
+
+-- Importe de un renglón de factura, en la moneda de la factura y a dos
+-- decimales: cantidad capturada por costo capturado, sin pasar por el costo
+-- base ya redondeado (11 §6). Los totales del encabezado son la suma de estos.
+CREATE OR REPLACE FUNCTION importe_renglon(cantidad integer, costo numeric) RETURNS numeric AS $$
+  SELECT round(cantidad * costo, 2);
+$$ LANGUAGE sql IMMUTABLE STRICT;
+
+COMMENT ON FUNCTION importe_renglon(integer, numeric) IS
+  'Importe de un renglón a dos decimales, medio hacia arriba, en la moneda de la factura.';
+
+-- Los topes de las columnas de dinero, para comprobarlos ANTES de escribir y
+-- responder con un error de dominio en vez de un desbordamiento genérico:
+-- costos son numeric(14,4), importes numeric(14,2).
+CREATE OR REPLACE FUNCTION cabe_en_costo(valor numeric) RETURNS boolean AS $$
+  SELECT valor IS NULL OR (valor >= 0 AND valor <= 9999999999.9999);
+$$ LANGUAGE sql IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION cabe_en_importe(valor numeric) RETURNS boolean AS $$
+  SELECT valor IS NULL OR (valor >= 0 AND valor <= 999999999999.99);
+$$ LANGUAGE sql IMMUTABLE;
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Búsqueda tolerante de claves con forma LETRAS-CEROS-NÚMERO (folio E-000001,
+-- bodega BDG-00002): sin guiones, sin ceros a la izquierda del número y sin
+-- distinguir mayúsculas. Se aplica a los dos lados de la comparación, así que
+-- «e1», «E-1» y «e-000001» encuentran lo mismo.
+--
+--   clave_normalizada('E-000001')  → 'e1'
+--   clave_normalizada('bdg-00010') → 'bdg10'
+--   clave_normalizada('E-100')     → 'e100'   (los ceros interiores se quedan)
+-- ═══════════════════════════════════════════════════════════════════════════
+
+CREATE OR REPLACE FUNCTION clave_normalizada(texto text) RETURNS text AS $$
+  SELECT regexp_replace(replace(lower(trim(texto)), '-', ''), '(^|[a-z])0+(\d)', '\1\2', 'g')
+$$ LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE;

@@ -8,6 +8,67 @@ puede hacer ahora que antes no se podía.
 
 ---
 
+## v0.5.0 — 2026-09-21
+
+Cierra la fase 5: entradas. Es la primera versión en la que el inventario se mueve: lo
+que llega de un proveedor entra a una bodega, con su costo, y a partir de aquí las
+existencias dejan de ser cero.
+
+**Lo que cambia para quien va a usar el sistema**
+
+- **Ya se capturan entradas.** Compras registra lo que llega de un proveedor —factura o
+  remisión, bodega destino, fecha de recepción— con una partida por artículo, por unidad
+  o por caja. Se guarda como **borrador**: se puede editar, descartar o dejar para después
+  sin tocar la existencia.
+- **Confirmar la recepción es un paso aparte.** Al confirmar, el sistema asigna el folio
+  (`E-000001`, `E-000002`…), sube la existencia de la bodega y deja el costo congelado. Una
+  entrada confirmada ya no se edita ni se borra.
+- **Cajas y piezas.** Una caja de 12 se captura como una caja; el sistema la convierte a
+  12 piezas con el costo por pieza. Si el artículo cambia de piezas por caja después,
+  el borrador pide volver a guardarse antes de confirmar; lo confirmado no se reinterpreta.
+- **Facturas en dólares.** Se captura en USD con el tipo de cambio del día; los importes
+  de la factura se conservan en dólares y el costo de inventario queda en pesos.
+- **La fecha de recepción es hoy o anterior**, según el día en México, y no antes del
+  año 2000.
+- **Un doble clic no crea dos entradas ni consume dos folios.** Repetir el alta o la
+  confirmación devuelve lo mismo.
+- **Lista de entradas** con búsqueda en vivo por folio, referencia, proveedor o bodega
+  —`e1` encuentra `E-000001`, `bdg2` encuentra `BDG-00002`—, filtros por estatus, con o
+  sin referencia y rango de fechas en un calendario. Los borradores van siempre arriba.
+- **Quién ve qué.** Compras y Superadmin capturan y confirman; el Jefe consulta. Ninguna
+  pantalla ni acción se salta esa regla, y el servidor la vuelve a exigir en cada envío.
+
+**Por dentro**
+
+- `MovimientoPartida` guarda la captura tal cual (presentación, cantidad, factor y costo
+  capturado) además de la cantidad y el costo canónicos en MXN por unidad base; el orden
+  de captura se conserva. Llave de idempotencia por borrador.
+- El dinero se calcula y redondea en PostgreSQL (`costo_base_mxn`, `importe_renglon`),
+  nunca en JavaScript; los rangos se comprueban en la base antes de escribir.
+- Invariantes nuevos en la base: un confirmado es inmutable, incluso hacia cancelado; un
+  movimiento nace en borrador y su tipo no cambia; una entrada no lleva actores de
+  autorización ni entrega; partidas y confirmación toman el mismo bloqueo.
+- Orden fijo de bloqueos —encabezado, proveedor, bodega, artículos, existencias, folio— y
+  errores de la base traducidos «fallando cerrado»: solo los `RAISE` propios (`BG501`–
+  `BG506`) conservan su texto.
+- Las Server Actions solo llegan a la base por `consultar()` y `accionProtegida()`; una
+  prueba lee el código fuente y lo vigila.
+- Prisma con `relationJoins`: las relaciones se cargan en una sola sentencia en vez de en
+  paralelo sobre la conexión de la transacción (pg 9 lo rechazaría).
+- 142 pruebas contra PostgreSQL real: los 14 criterios de aceptación del contrato
+  ([`docs/11-fase-5-entradas.md`](docs/11-fase-5-entradas.md) §12), el criterio 13 sobre
+  las Server Actions reales.
+
+**Por saber**
+
+- **La migración inicial se volvió a regenerar.** Toda base de desarrollo se recrea con
+  `npm run db:reset`. Sigue sin haber producción.
+- Las salidas, traspasos y reportes siguen pendientes: la existencia sube, todavía no
+  baja.
+- En celular, la barra lateral sigue ocupando media pantalla; es de la fase 9.
+
+---
+
 ## v0.4.0 — 2026-09-12
 
 Cierra la fase 4: migración de catálogos, bajo el **Plan B** de

@@ -55,7 +55,7 @@ next-env.d.ts
 .obsidian/
 
 # Graphify
-/graphify-out
+graphify-out/
 
 # skills de agentes (clerk/skills). Se instalan por máquina con `npx skills add`;
 # no son código del proyecto.

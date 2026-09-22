@@ -17,6 +17,11 @@
 
 generator client {
   provider = "prisma-client-js"
+  // relationJoins: las relaciones de un select se traen en una sola sentencia
+  // (LATERAL JOIN). Sin él, Prisma 7 las carga en paralelo sobre la misma
+  // conexión de la transacción, cosa que pg 9 dejará de aceptar.
+  // prisma/relaciones-en-transaccion.test.ts lo vigila.
+  previewFeatures = ["relationJoins"]
 }
 
 datasource db {
@@ -54,6 +59,16 @@ enum EstatusMovimiento {
 enum Moneda {
   MXN
   USD
+
+  @@schema("public")
+}
+
+/// Cómo se capturó una partida. El libro trabaja en la unidad base del artículo;
+/// UNIDAD se muestra con la clave real del artículo (PZA, CUB…), CAJA se convierte
+/// con Articulo.piezasPorCaja (11 §5).
+enum Presentacion {
+  UNIDAD
+  CAJA
 
   @@schema("public")
 }
@@ -417,6 +432,11 @@ model Movimiento {
   /// El movimiento que este reversa. Un movimiento confirmado nunca se borra.
   cancelaAId        String? @unique @db.Uuid
 
+  /// UUID generado al abrir el formulario y conservado en reintentos y dobles
+  /// clics: repetir el alta devuelve este mismo movimiento (11 §8). Obligatoria en
+  /// ENTRADA por CHECK.
+  llaveIdempotencia String? @unique @db.Uuid
+
   // Actor y marca de tiempo por transición. Sin esto el libro dice qué cambió pero
   // no quién ni cuándo, que es justo lo que un libro contable existe para responder.
   creadoPorId     String    @db.Uuid
@@ -471,13 +491,30 @@ model MovimientoPartida {
   id           String @id @default(uuid(7)) @db.Uuid
   movimientoId String @db.Uuid
   articuloId   String @db.Uuid
-  /// Piezas enteras, siempre en la unidad base.
+  /// Posición en que se capturó (1..n): las partidas se muestran como se
+  /// escribieron, no por clave de artículo.
+  orden        Int
+  /// Cantidad canónica en la unidad base del artículo, entera. Un CHECK exige
+  /// cantidad = cantidadCapturada × factorConversion.
   cantidad     Int
-  /// Lo que se capturó: 3 cajas de 12 se guardan como cantidad 36 y aquí "3 CAJA".
-  capturaOriginal String?
-  /// Sin IVA. Nulo = no se conoce el costo (inventario migrado). Distinto de cero.
+
+  // Lo que la persona capturó (11 §5). El factor es una fotografía de
+  // Articulo.piezasPorCaja al guardar: cambiar el catálogo después no reinterpreta
+  // la partida.
+  presentacionCapturada  Presentacion
+  cantidadCapturada      Int
+  /// 1 si UNIDAD; piezasPorCaja si CAJA.
+  factorConversion       Int
+  /// Solo en ENTRADA: sin IVA, por la presentación capturada y en la moneda de la
+  /// factura. De aquí salen los importes del encabezado.
+  costoUnitarioCapturado Decimal? @db.Decimal(14, 4)
+
+  /// Sin IVA, SIEMPRE en MXN y por unidad base: ya convertido con el tipo de
+  /// cambio y dividido entre el factor (11 §6). Nulo = no se conoce el costo
+  /// (inventario migrado). Distinto de cero.
   costoUnitario       Decimal? @db.Decimal(14, 4)
-  /// Con IVA. Se guarda, no se recalcula: la tasa varía y el redondeo se acumula.
+  /// Con IVA, en MXN por unidad base. Se guarda, no se recalcula: la tasa varía y
+  /// el redondeo se acumula.
   costoUnitarioConIva Decimal? @db.Decimal(14, 4)
   /// Solo en ENTRADA: 0.1600, 0.0800 o 0 según el bien.
   tasaIva             Decimal? @db.Decimal(5, 4)
@@ -490,6 +527,7 @@ model MovimientoPartida {
   consumos   ConsumoCapa[]
 
   @@unique([movimientoId, articuloId])
+  @@unique([movimientoId, orden])
   @@index([articuloId])
   @@schema("public")
 }

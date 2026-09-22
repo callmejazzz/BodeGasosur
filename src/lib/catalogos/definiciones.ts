@@ -1,14 +1,6 @@
 import type { Permiso } from "@/lib/permisos";
 import { z } from "zod";
 
-/**
- * Los catálogos se declaran, no se programan uno por uno.
- *
- * Compras va a renombrar campos, agregar catálogos y quitar otros durante el
- * levantamiento de requerimientos. Con esta definición, cada uno de esos cambios
- * es una entrada de configuración y no una pantalla nueva.
- */
-
 export type FuenteOpciones = "unidades" | "categorias" | "empresas";
 
 export type CampoDef = {
@@ -30,37 +22,20 @@ export type CampoDef = {
   /** Marca el campo activo/activa, que se dibuja como etiqueta de estado. */
   esEstado?: boolean;
 
-  /**
-   * Lo asigna PostgreSQL, no quien captura. Nunca se envía en el formulario:
-   * en el alta se muestra vacío y en la edición, de solo lectura.
-   */
   generado?: boolean;
 
-  /**
-   * Clave de negocio: se captura al dar de alta y después no se puede cambiar.
-   * Vive en la URL y en los WhatsApp de Compras, así que cambiarla rompe
-   * enlaces ajenos. Un trigger lo impide también en la base; esto solo evita
-   * que la pantalla ofrezca algo que va a fallar.
-   */
   inmutable?: boolean;
 };
 
 export type CatalogoDef = {
   slug: string;
   titulo: string;
-  /**
-   * Permiso que exige escribir este catálogo. Empresa y Estacion viven en el
-   * esquema global del grupo y solo las escribe el Superadmin (01 §3.3); por
-   * eso el permiso viaja con la definición y no en un condicional sobre el
-   * slug: agregar un catálogo sigue siendo una entrada de configuración.
-   */
   permisoEscritura: Permiso;
   singular: string;
   /** Para redactar los textos: «el proveedor» vs «la bodega». */
   genero: "m" | "f";
   descripcion: string;
   campos: CampoDef[];
-  /** Campos sobre los que aplica el buscador. Admite rutas: `empresa.razonSocial`. */
   camposBusqueda: string[];
   /** Campo que encabeza la pantalla de edición. */
   campoTitulo: string;
@@ -106,7 +81,7 @@ export const CATALOGOS: CatalogoDef[] = [
     singular: "empresa",
     genero: "f",
     descripcion:
-      "Las razones sociales del grupo Gasosur, y solo esas. Viven en el catálogo global que otros sistemas del grupo leen, y de ellas cuelgan las estaciones.",
+      "Las razones sociales del grupo Gasosur.",
     camposBusqueda: ["razonSocial", "rfc"],
     campoTitulo: "razonSocial",
     campos: [

@@ -6,13 +6,15 @@ Controla la entrada y salida de material entre bodegas y estaciones, registrando
 estación se envía, quién lo autoriza, quién lo entrega, cuándo, en qué cantidad, a qué
 costo unitario, a qué área se destina y con qué observaciones.
 
-**Versión actual: `v0.4.0`** — ver [CHANGELOG.md](CHANGELOG.md).
+**Versión actual: `v0.5.0`** — ver [CHANGELOG.md](CHANGELOG.md).
 
-**Estado:** fases 0 a 4 construidas. El levantamiento con Compras está cerrado y la
+**Estado:** fases 0 a 5 construidas. El levantamiento con Compras está cerrado y la
 arquitectura fue auditada; sus correcciones de esquema ya están aplicadas. La fase 4 cerró
 bajo el [Plan B](docs/10-plan-b-produccion.md): el catálogo global real, dos perfiles de
-base —desarrollo y producción— y producción arrancando sin inventario. Lo siguiente es la
-fase 5, entradas — ver [`fases-siguientes.md`](fases-siguientes.md).
+base —desarrollo y producción— y producción arrancando sin inventario. La fase 5 cerró con
+las entradas completas: borrador, confirmación con folio, capas de costo en pesos, cajas y
+piezas, dólares, y los 14 criterios de aceptación probados contra PostgreSQL. Sigue la
+fase 6, salidas. Ver [`fases-siguientes.md`](fases-siguientes.md).
 
 **Entorno:** local mientras dure el desarrollo. Dónde se despliega se decide antes de la
 `v1.0.0` — ver [versionado y despliegue](docs/08-versionado-y-despliegue.md) y el hallazgo
@@ -24,16 +26,22 @@ Requiere Node 20+ y Docker.
 
 ```bash
 npm install
+cp .env.example .env      # Asigna un nombre y puerto propios antes de seguir.
 npm run db:up
-cp .env.example .env      # y descomentar BODEGASOSUR_FIXTURES: sin eso, los fixtures se niegan a correr
 npm run db:reset
 npm run dev
 ```
 
+Cada desarrollador tiene que usar su propio `COMPOSE_PROJECT_NAME`, `POSTGRES_PORT` y
+`POSTGRES_DB` en `.env`; las dos URLs de base deben referirse a ese mismo nombre y puerto.
+Así Docker crea un contenedor y volumen independientes y `db:reset` solo borra esa base
+local. La guía completa, incluida la forma de entrar como Superadmin en un entorno de
+desarrollo aislado, está en [colaboración de desarrollo](docs/12-colaboracion-desarrollo.md).
+
 La aplicación queda en <http://localhost:3000>.
 
-> PostgreSQL se publica en el puerto **5433** para no chocar con la instalación local
-> que ocupa el 5432.
+> PostgreSQL se publica en el puerto definido por `POSTGRES_PORT` (5433 por omisión),
+> para no chocar con una instalación local que ocupe el 5432.
 
 | Comando | Qué hace |
 |---|---|
@@ -67,6 +75,9 @@ El script junta `prisma/sql/antes/`, el DDL que genera Prisma desde `schema.pris
   invariantes escritos en la base: existencia nunca negativa, autorización verificada en el
   instante del acto y de escritura única, claves de negocio inmutables, y una bitácora
   alimentada por trigger que registra todo cambio a cualquier dato.
+- **Núcleo transaccional de entradas** — borradores idempotentes, normalización por
+  presentación, cálculo monetario en PostgreSQL, confirmación concurrente, folios, capas de
+  costo y existencias; todavía sin pantallas ni Server Actions.
 - **Tablero** con el avance por fases y los datos base cargados.
 
 Las pantallas de captura de movimientos —entradas, salidas, traspasos— son de fases
@@ -91,6 +102,8 @@ producción arranca sin ellos, por el [Plan B](docs/10-plan-b-produccion.md).
 | [Versionado y despliegue](docs/08-versionado-y-despliegue.md) | Política de versiones y ramas |
 | [Auditoría de arquitectura](docs/09-auditoria.md) | Revisión de las bases, con lo que se resolvió y lo que sigue abierto |
 | [Plan B para producción](docs/10-plan-b-produccion.md) | Producción arranca sin inventario; los dos perfiles de base |
+| [Contrato de la Fase 5](docs/11-fase-5-entradas.md) | Funcionamiento, decisiones, seguridad, pruebas y orden de implementación de entradas |
+| [Colaboración de desarrollo](docs/12-colaboracion-desarrollo.md) | Alta de desarrolladores, Clerk y bases locales aisladas |
 | [Cambios](CHANGELOG.md) | Qué trae cada versión, escrito para quien usa el sistema |
 | **[Fases siguientes](fases-siguientes.md)** | **Orden de trabajo vigente** |
 

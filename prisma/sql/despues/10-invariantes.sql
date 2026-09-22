@@ -125,11 +125,55 @@ ALTER TABLE "Movimiento" ADD CONSTRAINT "movimiento_folio_no_en_borrador_ck" CHE
   folio IS NULL OR estatus <> 'BORRADOR'
 );
 
--- Un movimiento cancelado o rechazado dice por qué.
-ALTER TABLE "Movimiento" ADD CONSTRAINT "movimiento_motivo_cancelacion_ck" CHECK (
-  estatus <> 'CANCELADO' OR "motivoCancelacion" IS NOT NULL
+-- Cada dato pertenece a un estado o a un tipo, y fuera de ellos no existe:
+-- un borrador que ya trae motivo de cancelación se confirmaría cargándolo, y
+-- una entrada con autorizador diría algo que nunca pasó.
+
+ALTER TABLE "Movimiento" ADD CONSTRAINT "movimiento_cancelacion_solo_cancelado_ck" CHECK (
+  (estatus =  'CANCELADO' AND "canceladoPorId" IS NOT NULL AND "motivoCancelacion" IS NOT NULL)
+  OR
+  (estatus <> 'CANCELADO' AND "canceladoPorId" IS NULL     AND "motivoCancelacion" IS NULL)
 );
 
+ALTER TABLE "Movimiento" ADD CONSTRAINT "movimiento_entrada_sin_datos_ajenos_ck" CHECK (
+  tipo <> 'ENTRADA' OR (
+    "autorizadoPorId" IS NULL AND "rechazadoPorId" IS NULL AND "motivoRechazo" IS NULL
+    AND "entregadoPorId" IS NULL AND "recibidoPorId" IS NULL
+    AND "solicitadoPorId" IS NULL AND "entregadoA" IS NULL AND motivo IS NULL
+  )
+);
+
+-- Un borrador no tiene quién lo confirmó; un confirmado lo tiene siempre, con
+-- folio e instante (11 §4). Con el par actor/instante de arriba, exigir el
+-- actor exige los dos.
+ALTER TABLE "Movimiento" ADD CONSTRAINT "movimiento_borrador_sin_confirmador_ck" CHECK (
+  estatus <> 'BORRADOR' OR "confirmadoPorId" IS NULL
+);
+
+ALTER TABLE "Movimiento" ADD CONSTRAINT "movimiento_confirmado_completo_ck" CHECK (
+  estatus <> 'CONFIRMADO' OR (folio IS NOT NULL AND "confirmadoPorId" IS NOT NULL)
+);
+
+-- Una entrada confirmada trae sus importes: nacen completas (11 §1).
+ALTER TABLE "Movimiento" ADD CONSTRAINT "movimiento_entrada_confirmada_importes_ck" CHECK (
+  tipo <> 'ENTRADA' OR estatus <> 'CONFIRMADO'
+  OR (subtotal IS NOT NULL AND iva IS NOT NULL AND total IS NOT NULL)
+);
+
+-- Una entrada sin llave de idempotencia es una entrada que un doble clic puede
+-- duplicar (11 §8). Los demás tipos la adoptan cuando se construyan.
+ALTER TABLE "Movimiento" ADD CONSTRAINT "movimiento_entrada_llave_ck" CHECK (
+  tipo <> 'ENTRADA' OR "llaveIdempotencia" IS NOT NULL
+);
+
+-- Antes del 2000 no hay operación que registrar. El otro extremo —no después
+-- de hoy en México— lo pone la capa de servicios con lib/fechas.ts: aquí no
+-- se usa CURRENT_DATE (01 §4.5).
+ALTER TABLE "Movimiento" ADD CONSTRAINT "movimiento_fecha_minima_ck" CHECK (
+  fecha >= DATE '2000-01-01'
+);
+
+-- Un movimiento rechazado dice por qué (el cancelado, arriba).
 ALTER TABLE "Movimiento" ADD CONSTRAINT "movimiento_motivo_rechazo_ck" CHECK (
   estatus <> 'RECHAZADA' OR "motivoRechazo" IS NOT NULL
 );
@@ -139,6 +183,8 @@ ALTER TABLE "Movimiento" ADD CONSTRAINT "movimiento_motivo_rechazo_ck" CHECK (
 -- Invariante 3: cantidad positiva. Piezas enteras, sin excepciones — el signo
 -- de un ajuste ya lo lleva la bodega.
 ALTER TABLE "MovimientoPartida" ADD CONSTRAINT "partida_cantidad_positiva_ck" CHECK (cantidad > 0);
+
+ALTER TABLE "MovimientoPartida" ADD CONSTRAINT "partida_orden_positivo_ck" CHECK (orden >= 1);
 
 -- Nulo no es cero. «No sé cuánto costó» y «costó nada» son afirmaciones
 -- distintas, y el reporte de valuación tiene que poder distinguirlas — pero
@@ -158,6 +204,31 @@ ALTER TABLE "MovimientoPartida" ADD CONSTRAINT "partida_costo_no_negativo_ck" CH
 
 ALTER TABLE "MovimientoPartida" ADD CONSTRAINT "partida_tasa_iva_ck" CHECK (
   "tasaIva" IS NULL OR ("tasaIva" >= 0 AND "tasaIva" <= 1)
+);
+
+-- ── Normalización a la unidad base (11 §5) ────────────────────────────────
+--
+-- La cantidad canónica no se captura: se deriva. Escribir la regla aquí hace
+-- que una partida con «3 CAJA de 12» y cantidad 30 sea imposible, la escriba
+-- quien la escriba.
+
+ALTER TABLE "MovimientoPartida" ADD CONSTRAINT "partida_captura_positiva_ck" CHECK (
+  "cantidadCapturada" > 0 AND "factorConversion" > 0
+);
+
+ALTER TABLE "MovimientoPartida" ADD CONSTRAINT "partida_factor_unidad_ck" CHECK (
+  "presentacionCapturada" <> 'UNIDAD' OR "factorConversion" = 1
+);
+
+ALTER TABLE "MovimientoPartida" ADD CONSTRAINT "partida_cantidad_normalizada_ck" CHECK (
+  cantidad = "cantidadCapturada" * "factorConversion"
+);
+
+-- El costo capturado es el dato de origen del costo canónico: no puede haber
+-- uno sin el otro. Al revés sí: una salida hereda costo de PEPS sin capturarlo.
+ALTER TABLE "MovimientoPartida" ADD CONSTRAINT "partida_costo_capturado_ck" CHECK (
+  "costoUnitarioCapturado" IS NULL
+  OR ("costoUnitarioCapturado" >= 0 AND "costoUnitario" IS NOT NULL)
 );
 
 -- ───────────────────────────── CapaCosto ──────────────────────────────────

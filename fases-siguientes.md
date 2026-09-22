@@ -5,6 +5,9 @@ Orden de trabajo a partir del levantamiento cerrado con Compras y de la
 [`docs/04-plan-demo.md`](docs/04-plan-demo.md), que se conserva como referencia de cómo se
 llegó hasta aquí.
 
+Los entregables, archivos, commits y versiones de referencia de cada fase están separados
+en [`docs/entregables-fases/`](docs/entregables-fases/README.md).
+
 **Ya construido:**
 
 - **Fases 0 y 1** (`v0.1.0`) - cimientos, modelo de datos inicial y los catálogos con datos
@@ -59,9 +62,10 @@ adentro lo único que no se puede delegar: el permiso.
 | **Compras** | Lectura | Captura y edita catálogos operativos | Registra entradas, salidas, traspasos y devoluciones |
 | **Jefe** | Lectura | Lectura | Consulta |
 
-**La columna de Movimientos es diseño, no código.** Los movimientos se construyen en las
-fases 5 a 7; hoy [`permisos.ts`](src/lib/permisos.ts) solo declara permisos de catálogos y
-de usuarios. Las otras dos columnas sí están implementadas y verificadas rol por rol.
+**La columna de Movimientos se implementa por fase.** [`permisos.ts`](src/lib/permisos.ts)
+ya declara y prueba `entradas:leer`, `entradas:capturar` y `entradas:confirmar`; los permisos
+de salidas, traspasos y devoluciones se agregarán cuando se construyan esas fases. Las otras
+dos columnas también están implementadas y verificadas rol por rol.
 
 Además, transversal a los roles: la bandera **puede autorizar**, editable desde la pantalla
 de usuarios.
@@ -121,32 +125,17 @@ cambio con el `usuarioId` de quien lo hizo.
 
 ## Fase 4 — Migración de catálogos (Plan B) ✅
 
-La decisión canónica está en [`docs/10-plan-b-produccion.md`](docs/10-plan-b-produccion.md):
-el desarrollo sigue con datos demostrativos y **producción arranca limpia de datos
-operativos**. La fase se da por cerrada con eso; aquí solo el resumen operativo.
+La decisión canónica está en [`docs/10-plan-b-produccion.md`](docs/10-plan-b-produccion.md): el desarrollo sigue con datos demostrativos y **producción arranca limpia de datos operativos**. La fase se da por cerrada con eso; aquí solo el resumen operativo.
 
 **Lo que se construyó:**
 
-- **21 empresas y 32 estaciones** desde `Estaciones.xlsx` y **dos personas** —Diana Damián
-  Hernández y Oscar Bailón Delgado—, por [`prisma/migracion-datos/`](prisma/migracion-datos/README.md):
-  código idempotente con el corte (2026-09-10) versionado como CSV. Eran 21 empresas y no
-  22: la propia tabla de [06 §1](docs/06-estaciones.md) suma ocho compartidas y trece con
-  una estación
-- **El importador respeta lo editado desde la pantalla.** Si la base difiere del CSV se
-  detiene con el reporte —campo, valor en cada lado, y quién hizo el último cambio según
-  la bitácora— y no escribe nada. Sobrescribe solo con `--sincronizar`, y `--simular`
-  muestra el plan sin tocar la base. Nunca toca `activa` ni borra lo que no está en el CSV
-- **Dos perfiles separados:** `db:reset` (desarrollo: configuración + catálogos reales +
-  fixtures + Superadmin) y `prod:bootstrap` (producción: lo mismo sin fixtures, manual, con
-  validación del entorno antes de `migrate deploy`, resumen y confirmación). Los fixtures
-  fallan por omisión
-- **Modelo:** `Empresa` es exclusivamente Gasosur y `Proveedor` lleva su propia razón
-  social y RFC, sin vínculo entre ambos; `Bodega.clave` la asigna el sistema
-  (`BDG-00001`…); `Bodega.nombre`, `Persona.nombre` y `Proveedor.nombreComercial` son
-  únicos sin distinguir mayúsculas ni espacios sobrantes
-- **Vitest**, contra el PostgreSQL real en una base `*_prueba` que se recrea en cada corrida,
-  con las cuatro pruebas del importador: carga y segunda corrida sin escrituras, cambio
-  manual con rollback completo, `--sincronizar` con bitácora, y datos inválidos con rollback
+| Entrega                              | Resultado y comportamiento                                                                                                                                                                                                   | Evidencia / punto de entrada                                                                                                  |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| **Datos reales del catálogo global** | 21 Empresas, 32 Estaciones y 2 Personas: Diana Damián Hernández y Oscar Bailón Delgado.                                                                                                                                      | [`estaciones.csv`](prisma/migracion-datos/datos/estaciones.csv) y [`personas.csv`](prisma/migracion-datos/datos/personas.csv) |
+| **Importador seguro e idempotente**  | Crea faltantes; una segunda corrida no escribe. Si hay una edición manual, se detiene y reporta la divergencia. `--simular` no escribe; `--sincronizar` sobrescribe solo de forma explícita. No reactiva ni borra registros. | [`prisma/migracion-datos/`](prisma/migracion-datos/README.md)                                                                 |
+| **Dos perfiles de base**             | Desarrollo carga configuración, catálogo real, fixtures y Superadmin. Producción carga únicamente configuración, catálogo real y Superadmin.                                                                                 | - `npm run db:reset`<br>- `npm run prod:bootstrap`                                                                            |
+| **Modelo y reglas de catálogo**      | `Empresa` contiene exclusivamente entidades de Gasosur. `Proveedor` conserva sus propios datos fiscales. La clave de Bodega es automática; Bodega, Persona y Proveedor tienen unicidad normalizada por nombre.               | [`schema.prisma`](prisma/schema.prisma) e invariantes SQL                                                                     |
+| **Verificación automatizada**        | 8 pruebas de integración en 4 grupos: carga inicial, segunda corrida sin escrituras, divergencias/rollback y sincronización explícita.                                                                                       | `npm run test` sobre base `*_prueba`                                                                                          |
 
 **No se migra, y no está pendiente:** los 137 proveedores, los 225 artículos, los precios y
 la existencia inicial. Compras los captura desde la aplicación. Si algún día entrega la
@@ -167,31 +156,61 @@ proveedores, 0 artículos.
 
 ## Fase 5 — Entradas
 
-Nacen completas: agregar dinero después obligaría a recalcular todo lo capturado.
+El contrato completo está en [`docs/11-fase-5-entradas.md`](docs/11-fase-5-entradas.md). Las entradas nacen completas: agregar dinero o capas después obligaría a reinterpretar todo lo ya capturado.
 
-- Proveedor, factura o remisión, bodega destino, quién recibe
-- **Moneda (MXN/USD), tipo de cambio e IVA**
-- Capas de costo por entrada, consumidas por **PEPS**
-- Cada costo se guarda sin IVA y con IVA, para valuar el inventario de las dos formas
-- Captura en caja o pieza, convirtiendo a la unidad base
-- Entregas parciales de una misma compra
+**Estado actual:** terminada en la `v0.5.0`. Los once pasos del contrato (§13) están
+construidos y los catorce criterios de aceptación (§12) se prueban contra PostgreSQL real,
+el 13 sobre las Server Actions reales.
 
-**Antes de escribir el consumo PEPS** hay que resolver la concurrencia, que hoy son tres
-carreras clásicas ([09 §5](docs/09-auditoria.md)):
+### Alcance funcional
 
-- Toda mutación de existencia empieza bloqueando la fila de `Existencia` con
-  `SELECT … FOR UPDATE`
-- El folio se toma con `UPDATE folio SET siguiente = siguiente + 1 … RETURNING`, nunca
-  leyendo y después escribiendo
-- El consumo PEPS entero en **un solo viaje**, como función de PostgreSQL
-- Idempotencia por transición condicional, para que un doble clic no duplique el movimiento
+- Borrador editable con proveedor, factura o remisión, bodega destino y fecha del hecho
+- **Moneda (MXN/USD), tipo de cambio e IVA** desde la primera versión
+- Partidas capturadas como `UNIDAD` o `CAJA` y normalizadas en el servidor: `UNIDAD` usa
+  factor 1, `CAJA` usa una fotografía de `Articulo.piezasPorCaja`; se conservan la cantidad,
+  presentación, factor y costo originales de la captura
+- Confirmación de recepción por un usuario: en una `ENTRADA`, **quien recibe es
+  `confirmadoPor`**; `creadoPor` sigue diciendo quién capturó el borrador
+- Una capa de costo por partida confirmada; esta fase **crea** las capas que las salidas
+  consumirán después por PEPS
+- Costos sin IVA y con IVA en `MovimientoPartida` y `CapaCosto`, siempre por **unidad base
+  y en MXN**; el costo capturado puede ser por caja o unidad y el encabezado `Movimiento`
+  conserva moneda, tipo de cambio y totales de la factura en su moneda original
+- Recepciones parciales como varias `ENTRADA` del mismo proveedor y referencia, sin calcular
+  cuánto falta por recibir mientras no exista una orden de compra
 
-**Decisión pendiente:** ¿el folio reinicia cada año? (`E-2026-00001`). En la práctica
-mexicana casi siempre sí, y es un cambio de dato, no de formato.
+### Decisiones de integridad y concurrencia
 
-**Criterio de aceptación:** una entrada en dólares queda valuada en pesos al tipo de cambio
-del día y no cambia después; dos capturas simultáneas del mismo artículo nunca dejan
-existencia negativa.
+- El borrador no tiene folio ni afecta existencias. Al confirmar, el encabezado se reclama
+  con `FOR UPDATE`; la transición `BORRADOR → CONFIRMADO`, el folio, las capas y la
+  existencia se escriben en una sola transacción
+- El orden global de bloqueos es encabezado → proveedor → bodega → artículos por id →
+  existencias por `articuloId` → folio. Proveedor, bodega y artículos se bloquean con
+  `FOR SHARE` antes de releer y validar los catálogos
+- Si aún no existe `Existencia` para un artículo/bodega, se crea en cero con
+  `INSERT … ON CONFLICT DO NOTHING`; después se bloquea con `SELECT … FOR UPDATE`. En un
+  movimiento con varias partidas, las filas se bloquean ordenadas por `articuloId`
+- El folio se toma con `UPDATE … RETURNING`, nunca leyendo y después escribiendo, y **no se
+  reinicia cada año**
+- El alta busca primero una llave de idempotencia única y compara una firma canónica de
+  toda la captura; la restricción única y el `SAVEPOINT` cubren solicitudes concurrentes.
+  La confirmación usa además una transición condicional para que un doble clic devuelva el
+  mismo movimiento y nunca duplique existencia ni folio
+- Los errores de base fallan cerrados: solo los SQLSTATE propios `BG501`–`BG506` conservan
+  el texto controlado; cualquier otro detalle de Prisma o PostgreSQL queda en el servidor
+- `src/lib/fechas.ts` es la única frontera para fechas calendario:
+  «hoy» se calcula en `America/Mexico_City`, un `@db.Date` se formatea en UTC y los instantes
+  `…En` / `…At` se muestran en la zona de México
+- El consumo PEPS completo será una función de PostgreSQL de un solo viaje cuando las
+  salidas lo necesiten; no forma parte de confirmar una entrada
+
+**Criterio de aceptación:** una entrada en dólares conserva los totales originales de la
+factura y crea costos en pesos al tipo de cambio confirmado; dos primeras entradas
+simultáneas del mismo artículo/bodega suman ambas cantidades sin perder actualizaciones;
+repetir el alta o la confirmación devuelve el mismo movimiento; y después de cada
+confirmación la existencia es exactamente igual a la suma de sus capas restantes. Una caja
+de doce se guarda como 12 unidades y una futura salida de cinco piezas consumirá 5 y dejará
+7; un cambio posterior en `piezasPorCaja` no reinterpreta el movimiento confirmado.
 
 ## Fase 6 — Salidas
 
@@ -201,6 +220,8 @@ El flujo completo, no la captura directa.
 - Solicita el gerente **por WhatsApp y Compras captura a su nombre**; autoriza quien tenga
   la facultad; Compras entrega
 - Estación y área destino; `entregadoA` como texto libre
+- Captura como `UNIDAD` o `CAJA` reutilizando la misma normalización de la fase 5; una salida
+  parcial consume unidades base, no cajas completas
 - **Bloquear la salida sin existencia** y sin autorización
 - Bandeja de entregas pendientes de confirmar recepción
 
@@ -268,14 +289,14 @@ Migra sin costo, sin proveedor, sin área y sin moneda: el Excel no los tiene.
 
 ## Diferido
 
-| Tema | Cuándo |
-|---|---|
+| Tema                                                                                                                  | Cuándo                                                                                                                                          |
+| --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Sacar los `.xlsx` y `.docx` con datos personales a un Drive**, dejando en `docs/` el análisis derivado y un reporte | Antes de que el repositorio deje de ser privado o entre alguien externo. El historial de git ya los contiene, así que ese es el disparador real |
-| Autoservicio para gerentes de estación (rol `GERENTE`) | Cuando Compras lo pida |
-| Requisición → orden de compra → recepción | Cuando Compras lo pida; Diana lo quiere *«poco a poco»* |
-| Integración con AuditorFiscalWeb | Sin acuerdo entre Diana y Oscar; no hay prisa |
-| Alertas por WhatsApp | Después de que funcionen por pantalla y correo |
-| Adjuntar factura escaneada | Cuando haya dónde almacenar archivos |
+| Autoservicio para gerentes de estación (rol `GERENTE`)                                                                | Cuando Compras lo pida                                                                                                                          |
+| Requisición → orden de compra → recepción                                                                             | Cuando Compras lo pida; Diana lo quiere *«poco a poco»*                                                                                         |
+| Integración con AuditorFiscalWeb                                                                                      | Sin acuerdo entre Diana y Oscar; no hay prisa                                                                                                   |
+| Alertas por WhatsApp                                                                                                  | Después de que funcionen por pantalla y correo                                                                                                  |
+| Adjuntar factura escaneada                                                                                            | Cuando haya dónde almacenar archivos                                                                                                            |
 
 ## Fuera de alcance
 

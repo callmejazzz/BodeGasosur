@@ -14,7 +14,7 @@ const FASES = [
   { nombre: "Fase 2 — Cimientos corregidos", detalle: "Modelo de datos con los invariantes escritos en la base", estado: "lista" },
   { nombre: "Fase 3 — Usuarios y permisos", detalle: "Acceso con Clerk, roles y la facultad de autorizar", estado: "lista" },
   { nombre: "Fase 4 — Migración de catálogos (Plan B)", detalle: "Catálogo global real; proveedores, artículos y existencias los captura Compras", estado: "lista" },
-  { nombre: "Fase 5 — Entradas", detalle: "Compras con moneda, IVA y capas de costo PEPS", estado: "pendiente" },
+  { nombre: "Fase 5 — Entradas", detalle: "Compras con moneda, IVA y capas de costo PEPS", estado: "lista" },
   { nombre: "Fase 6 — Salidas", detalle: "Solicitud, autorización, entrega y confirmación de recepción", estado: "pendiente" },
   { nombre: "Fase 7 — Traspasos, devoluciones y conteo", detalle: "Movimientos entre bodegas, préstamos e inventario físico", estado: "pendiente" },
   { nombre: "Fase 8 — Reportes", detalle: "Reporte de los viernes, kardex, gasto por estación y exportación", estado: "pendiente" },

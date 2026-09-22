@@ -4,7 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CATALOGOS } from "@/lib/catalogos/definiciones";
 import { cn } from "@/lib/utils";
-import { version } from "../../package.json";
+import packageJson from "../../package.json";
+
+const { version } = packageJson;
 
 type Enlace = { href: string; etiqueta: string; proximamente?: boolean };
 
@@ -12,6 +14,7 @@ const ADMINISTRACION: Enlace[] = [{ href: "/usuarios", etiqueta: "Usuarios" }];
 
 const OPERACION: Enlace[] = [
   { href: "/", etiqueta: "Tablero" },
+  { href: "/entradas", etiqueta: "Entradas" },
   { href: "/movimientos", etiqueta: "Movimientos", proximamente: true },
   { href: "/existencias", etiqueta: "Existencias", proximamente: true },
   { href: "/kardex", etiqueta: "Kardex", proximamente: true },
@@ -78,7 +81,7 @@ export function Navegacion({
 
       <Seccion titulo="Operación">
         {OPERACION.map((e) => (
-          <Item key={e.href} enlace={e} activo={ruta === e.href} />
+          <Item key={e.href} enlace={e} activo={e.href === "/" ? ruta === "/" : ruta.startsWith(e.href)} />
         ))}
       </Seccion>
 
@@ -102,7 +105,7 @@ export function Navegacion({
 
       <div className="mt-auto">
         <p className="px-3 text-xs leading-relaxed text-white/35">
-          BodeGasosur v{version} · fases 0 a 4. Las pantallas de movimientos llegan con la fase 5.
+          BodeGasosur v{version} · fases 0 a 5. Las salidas llegan con la fase 6.
         </p>
         {sesion}
       </div>
