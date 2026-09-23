@@ -40,7 +40,9 @@ cualquier dato, incluido quitarle a alguien la facultad de autorizar.
 
 En una `ENTRADA`, esos actores no se confunden: `creadoPor` identifica a quien capturó el
 borrador y `confirmadoPor` a quien recibió o verificó físicamente el material y decidió
-incorporarlo al inventario. `recibidoPor` queda reservado para cerrar una `SALIDA`.
+incorporarlo al inventario. En una `SALIDA`, `entregadoPor` registra el retiro de la
+bodega (`RETIRADA`) y `recibidoPor` la confirmación de recepción en la estación
+(`RECIBIDA`); esta última cierra la salida.
 
 ### 3.2 La existencia es un resultado, no una fuente de verdad
 

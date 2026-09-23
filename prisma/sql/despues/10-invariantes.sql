@@ -14,7 +14,7 @@
 -- Dos máquinas de estados en un solo enum. Esta es la frontera entre ellas:
 -- nada de tipo = ENTRADA, estatus = AUTORIZADA.
 ALTER TABLE "Movimiento" ADD CONSTRAINT "movimiento_tipo_estatus_ck" CHECK (
-  (tipo = 'SALIDA'  AND estatus IN ('SOLICITADA','AUTORIZADA','RECHAZADA','ENTREGADA','RECIBIDA','CANCELADO'))
+  (tipo = 'SALIDA'  AND estatus IN ('SOLICITADA','AUTORIZADA','RECHAZADA','RETIRADA','RECIBIDA','CANCELADO'))
   OR
   (tipo <> 'SALIDA' AND estatus IN ('BORRADOR','CONFIRMADO','CANCELADO'))
 );

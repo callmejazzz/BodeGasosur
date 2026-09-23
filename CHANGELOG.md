@@ -8,6 +8,19 @@ puede hacer ahora que antes no se podía.
 
 ---
 
+## En desarrollo — Fase 6
+
+- Contrato de salidas: solicitud, autorización o rechazo, retiro con PEPS y
+  confirmación de recepción que cierra la salida.
+- La fase no genera vale imprimible. `RETIRADA` distingue la salida física de
+  `RECIBIDA`, que conserva quién y cuándo confirmó la llegada.
+- Permisos de salidas y verificación de la facultad de autorizar en cada petición.
+- Restricciones SQL iniciales contra transiciones inválidas, retiro sin autorización
+  o sin consumos, cambios a partidas autorizadas y borrado de salidas. El servicio y
+  las pantallas siguen pendientes.
+
+---
+
 ## v0.5.0 — 2026-09-21
 
 Cierra la fase 5: entradas. Es la primera versión en la que el inventario se mueve: lo

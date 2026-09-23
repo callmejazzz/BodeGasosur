@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PERMISOS, rolTienePermiso } from "./permisos";
+import { PERMISOS, rolTienePermiso, usuarioTienePermiso } from "./permisos";
 
 describe("permisos de entradas", () => {
   it("Superadmin y Compras leen, capturan y confirman", () => {
@@ -19,6 +19,27 @@ describe("permisos de entradas", () => {
   it("ningún rol tiene permisos repetidos", () => {
     for (const [rol, permisos] of Object.entries(PERMISOS)) {
       expect(new Set(permisos).size, rol).toBe(permisos.length);
+    }
+  });
+});
+
+describe("permisos de salidas", () => {
+  it("Superadmin y Compras capturan, retiran y registran recepción; Jefe solo consulta", () => {
+    for (const rol of ["SUPERADMIN", "COMPRAS"] as const) {
+      for (const permiso of ["salidas:leer", "salidas:capturar", "salidas:retirar", "salidas:recibir"] as const) {
+        expect(usuarioTienePermiso({ rol, puedeAutorizar: false }, permiso), `${rol}: ${permiso}`).toBe(true);
+      }
+    }
+    expect(usuarioTienePermiso({ rol: "JEFE", puedeAutorizar: false }, "salidas:leer")).toBe(true);
+    for (const permiso of ["salidas:capturar", "salidas:retirar", "salidas:recibir"] as const) {
+      expect(usuarioTienePermiso({ rol: "JEFE", puedeAutorizar: true }, permiso), permiso).toBe(false);
+    }
+  });
+
+  it("la bandera vigente decide la autorización independientemente del rol", () => {
+    for (const rol of ["SUPERADMIN", "COMPRAS", "JEFE"] as const) {
+      expect(usuarioTienePermiso({ rol, puedeAutorizar: false }, "salidas:autorizar"), rol).toBe(false);
+      expect(usuarioTienePermiso({ rol, puedeAutorizar: true }, "salidas:autorizar"), rol).toBe(true);
     }
   });
 });

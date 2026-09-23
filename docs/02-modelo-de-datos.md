@@ -78,34 +78,34 @@ será la capa superior que calcule cumplimiento sin cambiar el libro.
 | Tipo | Flujo |
 |---|---|
 | ENTRADA, TRASPASO, DEVOLUCIÓN, AJUSTE | `BORRADOR → CONFIRMADO`, o `CANCELADO` |
-| SALIDA | `SOLICITADA → AUTORIZADA → ENTREGADA → RECIBIDA`, con `RECHAZADA` y `CANCELADO` |
+| SALIDA | `SOLICITADA → AUTORIZADA → RETIRADA → RECIBIDA`, con `RECHAZADA` y `CANCELADO`; `RECIBIDA` es terminal |
 
 Son **dos máquinas de estados en un solo enum**, y la base sabe cuál corresponde a cada
 tipo: un `CHECK` sobre `(tipo, estatus)` impide un `ENTRADA` en estatus `AUTORIZADA`. Qué
-transición es legal —y no solo qué combinación existe— lo decide una tabla de transiciones
-en la capa de servicios, para que una transición ilegal sea un error de tipos y no una
-convención que se respeta mientras alguien se acuerde.
+transición es legal —y no solo qué combinación existe— la defienden el trigger SQL y
+la capa de servicios, para que una transición ilegal no dependa de la interfaz.
 
 `estatus` **no tiene valor por omisión**: el inicial depende del tipo —una salida nace
 `SOLICITADA`, todo lo demás nace `BORRADOR`— y una columna no puede tener un `DEFAULT` que
 dependa de otra columna.
 
-**La existencia se descuenta al pasar a `ENTREGADA`**, no al autorizar. Autorizar es un
-permiso; entregar es el hecho físico. Entre uno y otro el material sigue en la bodega.
+**La existencia se descuenta al pasar a `RETIRADA`**, no al autorizar. Autorizar es un
+permiso; retirar es el hecho físico. Entre uno y otro el material sigue en la bodega.
 
-`RECIBIDA` es lo que Diana llama *«cerrar el pendiente»*: confirma que la estación recibió.
-No mueve existencia, solo cierra el ciclo. La bandeja de entregas sin confirmar es lo que
-hoy vive en conversaciones de WhatsApp.
+`RECIBIDA` confirma que la estación recibió el material y cierra la salida sin
+volver a descontar existencia. Guarda quién y cuándo confirmó. La fase 6 no genera
+vale imprimible, por decisión de alcance comunicada el 2026-09-23.
 
 **Cada transición deja su actor y su marca de tiempo**: `creadoPorId`, `confirmadoPorId` /
 `confirmadoEn`, `autorizadoPorId` / `autorizadoEn`, `rechazadoPorId` / `rechazadoEn`,
-`entregadoPorId` / `entregadoEn`, `recibidoPorId` / `recibidoEn`, `canceladoPorId` /
-`canceladoEn`. Un `CHECK` por cada par impide que exista uno sin el otro.
+`entregadoPorId` / `entregadoEn`, `recibidoPorId` / `recibidoEn`,
+`canceladoPorId` / `canceladoEn`. Los nombres `entregado*` se conservan para el
+registro del retiro físico. Un `CHECK` por cada par impide que exista uno sin el otro.
 
 En una `ENTRADA`, **quien recibe es `confirmadoPor`**: confirmar significa que el usuario
 verificó el material y decidió incorporarlo al inventario. `creadoPor` conserva quién
-capturó el borrador, aunque sea una persona distinta, y `recibidoPor` queda reservado para
-el cierre del flujo de una salida.
+capturó el borrador, aunque sea una persona distinta. `recibidoPor` se usa al
+confirmar una `SALIDA` en la estación.
 
 ## 4. Invariantes
 
@@ -116,7 +116,7 @@ invariante y un buen propósito.
 | | Invariante | Quién lo impone |
 |---|---|---|
 | 1 | Un movimiento confirmado no se edita ni se borra; corregir = cancelar y recapturar | Trigger + servicios |
-| 2 | Solo afectan existencias los movimientos `CONFIRMADO` (o `ENTREGADA` en salidas) | Servicios |
+| 2 | Solo afectan existencias los movimientos `CONFIRMADO` (o el paso a `RETIRADA` en salidas) | Servicios |
 | 3 | Todo movimiento confirmado tiene al menos una partida, y cada partida lleva `cantidad > 0` | Trigger de transición + `CHECK` |
 | 4 | Un artículo no se repite dentro del mismo movimiento | `@@unique` |
 | 5 | Origen y destino de un traspaso son bodegas distintas | `CHECK` |
@@ -331,13 +331,15 @@ opcional con una `Persona`.
 
 | Rol          | Empresas y Estaciones | Resto de tablas      | Movimientos |
 | ------------ | --------------------- | -------------------- | ----------- |
-| `SUPERADMIN` | CRUD                  | CRUD                 | Entradas: lectura, captura y confirmación; los demás movimientos se habilitan en sus fases |
-| `COMPRAS`    | Lectura               | Catálogos operativos | Entradas: lectura, captura y confirmación; los demás movimientos se habilitan en sus fases |
-| `JEFE`       | Lectura               | Lectura              | Consulta de Entradas |
+| `SUPERADMIN` | CRUD                  | CRUD                 | Entradas completas; Salidas: lectura, captura, retiro, recepción y autorización solo con bandera |
+| `COMPRAS`    | Lectura               | Catálogos operativos | Entradas completas; Salidas: lectura, captura, retiro, recepción y autorización solo con bandera |
+| `JEFE`       | Lectura               | Lectura              | Consulta de Entradas y Salidas; autorización solo con bandera |
 
-La matriz ya contiene `entradas:leer`, `entradas:capturar` y `entradas:confirmar`, usados
-por las páginas y las cuatro Server Actions de la fase 5. Los permisos de Salidas,
-Traspasos, Devoluciones y Ajustes se agregarán cuando se construya cada flujo.
+La matriz ya contiene los permisos de Entradas usados por sus páginas y Server Actions,
+y los cinco permisos de Salidas. Para `salidas:autorizar`, la puerta común exige además
+`puedeAutorizar` vigente. El [contrato de la fase 6](decisiones-otros/04-fase-6-salidas.md)
+documenta el avance de esa fase. Los permisos de Traspasos, Devoluciones y Ajustes se
+agregarán cuando se construya cada flujo.
 
 `puedeAutorizar` es una **bandera del usuario, no un rol**: un Jefe puede tenerla y un
 usuario de Compras puede no tenerla. La lista de facultados cambia —el Lic. Hugo, la Lic.
@@ -401,7 +403,7 @@ Si ya estaba, no se vuelve a procesar; si la transacción falla, el reintento la
 | `numeroSerie` como texto, sin rastreo | B5 |
 | Se eliminan `transportista` y `vehiculo`; `recibidoPor` pasa a `entregadoA` libre | D4 |
 | Tipo `DEVOLUCION` y bandera `esPrestamo` | D7 y B6 |
-| Estados de salida con autorización y confirmación de recepción | D2 y D6 |
+| Estados de salida con autorización; `RETIRADA` registra salida física y `RECIBIDA` cierra desde 2026-09-23 | D2 y D6, ajustados por decisión de alcance posterior |
 | `Proveedor` lleva su propia razón social y RFC; **no** apunta a `Empresa` | `Empresa` es exclusivamente Gasosur ([10](decisiones-otros/10-plan-b-produccion.md)). Si una empresa del grupo debe ser proveedora, se decide como caso de negocio |
 | `autorizadoPor` apunta a `Usuario`, con `autorizadoEn` y escritura única | **A2** |
 | Actor y marca de tiempo por transición, más `Bitacora` | **A3** |
@@ -424,7 +426,8 @@ Si ya estaba, no se vuelve a procesar; si la transacción falla, el reintento la
 | ¿Cuánto vale el inventario? | Sobre las capas: `SUM(cantidadRestante × costoUnitario)` sin IVA y con IVA — **más el conteo de piezas sin valuar**, que son las capas de costo nulo |
 | ¿Qué se gastó por estación este año? | Salidas agrupadas por `estacionId` |
 | ¿Con qué frecuencia se pide esta pieza? | Conteo de partidas del artículo por periodo |
-| ¿Qué salidas siguen sin confirmar recepción? | Salidas en estatus `ENTREGADA` |
+| ¿Qué salidas autorizadas faltan por retirar? | Salidas en estatus `AUTORIZADA` |
+| ¿Qué salidas siguen sin confirmar recepción? | Salidas en estatus `RETIRADA` |
 | ¿Qué material prestado no ha vuelto? | Salidas con `esPrestamo` sin devolución que las cierre |
 | ¿Quién le quitó el permiso de autorizar a la C.P. Cosumel? | `Bitacora`, tabla `Usuario`, comparando `antes` y `despues` |
 | El reporte de los viernes | Entradas, salidas y stock final del periodo |

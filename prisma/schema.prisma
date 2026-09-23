@@ -49,7 +49,9 @@ enum EstatusMovimiento {
   SOLICITADA
   AUTORIZADA
   RECHAZADA
-  ENTREGADA
+  /// Material que ya salió de la bodega; descuenta inventario.
+  RETIRADA
+  /// La estación confirmó la recepción; cierra la salida sin mover inventario.
   RECIBIDA
   CANCELADO
 
@@ -450,6 +452,7 @@ model Movimiento {
   rechazadoEn     DateTime? @db.Timestamptz(3)
   entregadoPorId  String?   @db.Uuid
   entregadoEn     DateTime? @db.Timestamptz(3)
+  /// Compras registra la confirmación comunicada por la estación.
   recibidoPorId   String?   @db.Uuid
   recibidoEn      DateTime? @db.Timestamptz(3)
   canceladoPorId  String?   @db.Uuid

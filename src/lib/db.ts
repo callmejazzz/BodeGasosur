@@ -4,7 +4,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { Prisma, PrismaClient, type Rol } from "@prisma/client";
 import { headers } from "next/headers";
 import { cache } from "react";
-import { rolTienePermiso, type Permiso } from "@/lib/permisos";
+import { usuarioTienePermiso, type Permiso } from "@/lib/permisos";
 
 // Prisma 7 exige un driver adapter explícito.
 const createPrismaClient = () =>
@@ -96,7 +96,7 @@ export class SinPermiso extends Error {
 async function exigir(permiso: Permiso): Promise<UsuarioSesion> {
   const sesion = await sesionActual();
   if (sesion.estado !== "activa") throw new SinAcceso();
-  if (!rolTienePermiso(sesion.usuario.rol, permiso)) throw new SinPermiso(permiso);
+  if (!usuarioTienePermiso(sesion.usuario, permiso)) throw new SinPermiso(permiso);
   return sesion.usuario;
 }
 

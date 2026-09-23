@@ -6,7 +6,7 @@ Controla la entrada y salida de material entre bodegas y estaciones, registrando
 
 **Versión actual: `v0.5.0`** - ver [CHANGELOG.md](CHANGELOG.md).
 
-**Estado:** fases 0 a 5 construidas. La fase 5 cerró con las entradas completas: borrador, confirmación con folio, capas de costo en pesos, cajas y piezas, dólares, y los 14 criterios de aceptación probados contra PostgreSQL. Sigue la fase 6, salidas. Ver [entregables por fase](docs/entregables-fases/README.md).
+**Estado:** fases 0 a 5 construidas. La fase 6 empezó con su contrato, permisos y restricciones SQL; todavía no tiene servicio ni pantallas de salidas. Ver [entregables por fase](docs/entregables-fases/README.md).
 
 **Entorno:** local mientras dure el desarrollo. Dónde se despliega se decide antes de la
 `v1.0.0` — ver [versionado y despliegue](docs/05-versionado-y-despliegue.md) y el hallazgo
@@ -72,7 +72,9 @@ El script junta `prisma/sql/antes/`, el DDL que genera Prisma desde `schema.pris
   importes se calculan en PostgreSQL.
 - **Tablero** con el avance por fases y los datos base cargados.
 
-Las pantallas de salidas y traspasos siguen para fases posteriores; sus tablas ya existen.
+Las pantallas de salidas y traspasos siguen pendientes; sus tablas ya existen. El
+[contrato de la fase 6](docs/decisiones-otros/04-fase-6-salidas.md) describe el flujo y
+las pruebas necesarias antes de habilitar una entrega.
 
 **Empresas, estaciones y dos personas son las reales de Gasosur**, cargadas por
 [`prisma/migracion-datos/`](prisma/migracion-datos/README.md). **Artículos y proveedores son
@@ -94,6 +96,8 @@ producción arranca sin ellos, por el [Plan B](docs/decisiones-otros/01-plan-b-p
 | [Auditoría de arquitectura](docs/cimientos-word/04-auditoria-arquitectura.docx) | Revisión de las bases, con lo que se resolvió y lo que sigue abierto |
 | [Plan B para producción](docs/decisiones-otros/01-plan-b-produccion.md) | Producción arranca sin inventario; los dos perfiles de base |
 | [Contrato de la Fase 5](docs/decisiones-otros/02-fase-5-entradas.md) | Funcionamiento, decisiones, seguridad, pruebas y orden de implementación de entradas |
+| [Contrato de la Fase 6](docs/decisiones-otros/04-fase-6-salidas.md) | Estados, permisos, PEPS, seguridad y pruebas de salidas |
+| [Guía de construcción de Salidas](docs/decisiones-otros/05-guia-implementacion-salidas.md) | Orden de implementación del dominio y pruebas antes de habilitar entregas |
 | [Colaboración de desarrollo](docs/decisiones-otros/03-colaboracion-desarrollo.md) | Alta de desarrolladores, Clerk y bases locales aisladas |
 | [Cambios](CHANGELOG.md) | Qué trae cada versión, escrito para quien usa el sistema |
 | **[Entregables por fase](docs/entregables-fases/README.md)** | **Estado y plan de las fases** |
