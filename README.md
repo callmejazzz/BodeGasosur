@@ -6,7 +6,7 @@ Controla la entrada y salida de material entre bodegas y estaciones, registrando
 
 **Versión actual: `v0.5.0`** - ver [CHANGELOG.md](CHANGELOG.md).
 
-**Estado:** fases 0 a 5 construidas. La fase 6 empezó con su contrato, permisos y restricciones SQL; todavía no tiene servicio ni pantallas de salidas. Ver [entregables por fase](docs/entregables-fases/README.md).
+**Estado:** fases 0 a 5 construidas. La fase 6 ya tiene dominio transaccional, conciliación SQL y Server Actions con pruebas; faltan las pantallas. Ver [entregables por fase](docs/entregables-fases/README.md).
 
 **Entorno:** local mientras dure el desarrollo. Dónde se despliega se decide antes de la
 `v1.0.0` — ver [versionado y despliegue](docs/05-versionado-y-despliegue.md) y el hallazgo
@@ -61,25 +61,15 @@ El script junta `prisma/sql/antes/`, el DDL que genera Prisma desde `schema.pris
 
 ## Qué hay construido
 
-- **Nueve catálogos** con alta, edición, búsqueda y baja lógica: empresas, bodegas,
-  estaciones, áreas, unidades de medida, categorías, artículos, proveedores y personas.
-- **Modelo de datos completo** — 19 modelos en dos esquemas de PostgreSQL, con los
-  invariantes escritos en la base: existencia nunca negativa, autorización verificada en el
-  instante del acto y de escritura única, claves de negocio inmutables, y una bitácora
-  alimentada por trigger que registra todo cambio a cualquier dato.
-- **Entradas completas en el trabajo local** — listado, captura y edición de borradores,
-  confirmación con folio, capas de costo, existencias y Server Actions protegidas. Los
-  importes se calculan en PostgreSQL.
+- **Nueve catálogos** con alta, edición, búsqueda y baja lógica: empresas, bodegas, estaciones, áreas, unidades de medida, categorías, artículos, proveedores y personas.
+- **Modelo de datos completo** — 19 modelos en dos esquemas de PostgreSQL, con los invariantes escritos en la base: existencia nunca negativa, autorización verificada en el instante del acto y de escritura única, claves de negocio inmutables, y una bitácora alimentada por trigger que registra todo cambio a cualquier dato.
+- **Entradas completas en el trabajo local** — listado, captura y edición de borradores, confirmación con folio, capas de costo, existencias y Server Actions protegidas. Los importes se calculan en PostgreSQL.
+- **Salidas en desarrollo** — solicitud, autorización, rechazo, cancelación, retiro PEPS y recepción, con lecturas, Server Actions protegidas, conciliación SQL y pruebas contra PostgreSQL. Faltan las pantallas para usar el flujo desde la aplicación.
 - **Tablero** con el avance por fases y los datos base cargados.
 
-Las pantallas de salidas y traspasos siguen pendientes; sus tablas ya existen. El
-[contrato de la fase 6](docs/decisiones-otros/04-fase-6-salidas.md) describe el flujo y
-las pruebas necesarias antes de habilitar una entrega.
+Las pantallas de salidas y traspasos siguen pendientes; sus tablas ya existen. El [contrato de la fase 6](docs/decisiones-otros/04-fase-6-salidas.md) describe el flujo y las pruebas necesarias antes de habilitar una entrega.
 
-**Empresas, estaciones y dos personas son las reales de Gasosur**, cargadas por
-[`prisma/migracion-datos/`](prisma/migracion-datos/README.md). **Artículos y proveedores son
-fixtures de desarrollo** (`prisma/fixtures.ts`) para probar movimientos, kardex y PEPS;
-producción arranca sin ellos, por el [Plan B](docs/decisiones-otros/01-plan-b-produccion.md).
+**Empresas, estaciones y dos personas son las reales de Gasosur**, cargadas por [`prisma/migracion-datos/`](prisma/migracion-datos/README.md). **Artículos y proveedores son fixtures de desarrollo** (`prisma/fixtures.ts`) para probar movimientos, kardex y PEPS; producción arranca sin ellos, por el [Plan B](docs/decisiones-otros/01-plan-b-produccion.md).
 
 ## Documentación
 

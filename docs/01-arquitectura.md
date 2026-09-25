@@ -264,7 +264,12 @@ export const guardarCatalogo = accionProtegida(
 //   2. verifica el permiso contra Record<Rol, Permiso[]>
 //   3. abre la transacción
 //   4. SET LOCAL app.usuario_id = …   ← lo lee el trigger de la bitácora
+//   5. antes del commit relee activo, rol y puedeAutorizar con FOR SHARE
 ```
+
+Las Actions de Entradas y Salidas leen el `FormData` y ejecutan Zod dentro del
+callback protegido, después de comprobar sesión y permiso. La relectura final de
+`Usuario` es común a todas las escrituras hechas con `accionProtegida()`.
 
 **Hay una segunda puerta, y se declara en vez de descubrirse.** El webhook de Clerk llega
 de fuera, sin sesión, y escribe. Verifica su firma antes de tocar la base, fija
@@ -325,7 +330,8 @@ BodeGasosur/
 │  └─ comun.ts                    # Cliente y búsqueda por nombre para esos scripts
 ├─ pruebas/
 │  ├─ base-de-pruebas.ts          # Recrea la base *_prueba antes de cada corrida de Vitest
-│  └─ semilla-entradas.ts         # Entorno aislado para las pruebas de Entradas
+│  ├─ semilla-entradas.ts         # Entorno aislado para las pruebas de Entradas
+│  └─ semilla-salidas.ts          # Entorno aislado para las pruebas de Salidas
 ├─ scripts/
 │  ├─ armar-migracion.sh          # Junta prisma/sql/ con el DDL generado
 │  ├─ arranque-superadmin.ts      # El primer Superadmin, desde su identidad en Clerk
@@ -339,7 +345,8 @@ BodeGasosur/
 │  │  │  ├─ page.tsx              # Tablero
 │  │  │  ├─ catalogos/            # Índice, listado, alta y edición genérica
 │  │  │  ├─ usuarios/             # Administración de acceso
-│  │  │  └─ entradas/             # Listado, captura, detalle y Server Actions
+│  │  │  ├─ entradas/             # Listado, captura, detalle y Server Actions
+│  │  │  └─ salidas/actions.ts     # Seis Server Actions; pantallas pendientes
 │  │  └─ api/webhooks/clerk/       # Sincronización firmada desde Clerk
 │  ├─ components/
 │  │  ├─ ui/                      # Primitivas: botón, campos, tabla, tarjetas
@@ -354,7 +361,9 @@ BodeGasosur/
 │     │  ├─ definiciones.ts       # Los catálogos, declarados (ver §4.4)
 │     │  ├─ repos.ts              # Acceso a datos por catálogo
 │     │  └─ formulario.ts         # Tipos compartidos del formulario
-│     └─ entradas/                # Formulario, filtros, lecturas, primitivas y servicio transaccional
+│     ├─ entradas/                # Formulario, filtros, lecturas, primitivas y servicio transaccional
+│     ├─ movimientos/             # Primitivas, validación y errores compartidos
+│     └─ salidas/                 # Formulario, lecturas, PEPS, servicio y pruebas
 ├─ docker-compose.yml             # PostgreSQL local
 └─ .env.example
 ```

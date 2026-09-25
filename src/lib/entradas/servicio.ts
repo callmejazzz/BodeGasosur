@@ -1,16 +1,15 @@
 import { Prisma, type Moneda, type Presentacion } from "@prisma/client";
 import type { UsuarioSesion } from "@/lib/db";
 import { deFechaDeBase, aFechaDeBase, hoyEnMexico, motivoFechaNoOperativa } from "@/lib/fechas";
+import { chocaCon } from "@/lib/movimientos/errores";
+import { asegurarYBloquearExistencias, aUnidadBase, bloquearArticulos, tomarFolio } from "@/lib/movimientos/primitivas";
 import { ErrorDeDominio, traducirErrorDeBase } from "./errores";
 import {
-  asegurarYBloquearExistencias,
-  bloquearArticulos,
   bloquearContrapartes,
   calcularCostosBase,
   crearCapasDeEntrada,
   incrementarExistencias,
   recalcularCostosYTotales,
-  tomarFolio,
   verificarCapacidadDeExistencias,
 } from "./primitivas";
 
@@ -99,32 +98,15 @@ async function normalizar(tx: Tx, datos: DatosBorrador, hoy = hoyEnMexico()): Pr
   const normalizadas = partidas.map((p): PartidaNormalizada => {
     const articulo = articulos.get(p.articuloId);
     if (!articulo?.activo) throw new ErrorDeDominio("catalogo", "Un artículo de la entrada no existe o está dado de baja.");
-    if (!Number.isInteger(p.cantidadCapturada) || p.cantidadCapturada <= 0) {
-      throw new ErrorDeDominio("partidas", `${articulo.clave}: la cantidad tiene que ser un entero positivo.`);
-    }
+    const base = aUnidadBase(articulo.clave, p.presentacion, p.cantidadCapturada, articulo.piezasPorCaja);
+    if ("error" in base) throw new ErrorDeDominio("partidas", base.error);
     if (!DECIMAL_4.test(p.costoUnitarioCapturado)) {
       throw new ErrorDeDominio("partidas", `${articulo.clave}: el costo unitario no es válido (hasta cuatro decimales).`);
     }
     if (!TASA_IVA.test(p.tasaIva)) {
       throw new ErrorDeDominio("partidas", `${articulo.clave}: la tasa de IVA va de 0 a 1 (0.16 para 16 %).`);
     }
-
-    // El factor sale del catálogo, nunca del navegador (11 §5).
-    let factorConversion = 1;
-    if (p.presentacion === "CAJA") {
-      if (!articulo.piezasPorCaja) {
-        throw new ErrorDeDominio("partidas", `${articulo.clave} no se maneja por caja: captúralo en su unidad.`);
-      }
-      factorConversion = articulo.piezasPorCaja;
-    } else if (p.presentacion !== "UNIDAD") {
-      throw new ErrorDeDominio("partidas", `${articulo.clave}: la presentación tiene que ser UNIDAD o CAJA.`);
-    }
-
-    const cantidad = p.cantidadCapturada * factorConversion;
-    if (cantidad > 2_147_483_647) {
-      throw new ErrorDeDominio("partidas", `${articulo.clave}: la cantidad en unidades base es demasiado grande.`);
-    }
-    return { ...p, factorConversion, cantidad };
+    return { ...p, ...base };
   });
 
   return {
@@ -190,15 +172,6 @@ function exigirBorrador(m: Encabezado) {
 }
 
 // ────────────────────────────── Borradores ───────────────────────────────────
-
-function chocaCon(error: unknown, columna: string): boolean {
-  if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") return false;
-  const meta = error.meta as
-    | { target?: string[]; driverAdapterError?: { cause?: { constraint?: { fields?: string[] } } } }
-    | undefined;
-  const campos = meta?.driverAdapterError?.cause?.constraint?.fields ?? meta?.target ?? [];
-  return campos.some((c) => c.replaceAll('"', "") === columna);
-}
 
 export type ResultadoAlta = { id: string; repetido: boolean };
 

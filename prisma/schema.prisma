@@ -592,6 +592,8 @@ model ConsumoCapa {
   partida MovimientoPartida @relation(fields: [partidaId], references: [id], onDelete: Cascade)
   capa    CapaCosto         @relation(fields: [capaId], references: [id])
 
+  /// Una partida consume cada capa una sola vez: un consumo duplicado descontaría dos veces.
+  @@unique([partidaId, capaId])
   @@index([partidaId])
   @@index([capaId])
   @@schema("public")

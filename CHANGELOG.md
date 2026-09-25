@@ -15,9 +15,14 @@ puede hacer ahora que antes no se podía.
 - La fase no genera vale imprimible. `RETIRADA` distingue la salida física de
   `RECIBIDA`, que conserva quién y cuándo confirmó la llegada.
 - Permisos de salidas y verificación de la facultad de autorizar en cada petición.
-- Restricciones SQL iniciales contra transiciones inválidas, retiro sin autorización
-  o sin consumos, cambios a partidas autorizadas y borrado de salidas. El servicio y
-  las pantallas siguen pendientes.
+- Restricciones SQL contra transiciones inválidas, retiro sin autorización o sin
+  consumos, cambios a partidas autorizadas, consumos duplicados y borrado de salidas.
+- Dominio transaccional de salidas y lecturas: solicitud idempotente, autorización,
+  rechazo, cancelación, retiro PEPS, recepción y valuación desde PostgreSQL.
+- Conciliación diferida en PostgreSQL entre consumos, capas y existencia, con
+  comprobación de datos existentes antes de instalar los triggers.
+- Seis Server Actions protegidas con pruebas de acceso y revocación concurrente.
+  La interfaz de Salidas sigue pendiente; el flujo aún no está disponible en pantalla.
 
 ---
 

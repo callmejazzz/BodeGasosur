@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import { hoyEnMexico } from "../fechas";
 import {
   erroresDe,
+  erroresDeAlta,
   esquemaAlta,
   esquemaBorrador,
   esquemaDescarte,
@@ -172,6 +173,25 @@ describe("leerFormulario", () => {
     const sinLlave = esquemaAlta.safeParse(leerAlta(fd));
     expect(sinLlave.success).toBe(false);
     if (!sinLlave.success) expect(erroresDe(sinLlave.error)).toHaveProperty("llaveIdempotencia");
+  });
+
+  it("erroresDeAlta usa la ruta del formulario, sin el prefijo del borrador, y deja la llave aparte", () => {
+    const fd = formData({
+      llaveIdempotencia: "no-soy-uuid",
+      "encabezado.proveedorId": PROVEEDOR,
+      "encabezado.bodegaDestinoId": BODEGA,
+      "encabezado.fecha": "2099-01-01",
+      "encabezado.moneda": "MXN",
+      "partidas.0.articuloId": ARTICULO,
+      "partidas.0.presentacion": "UNIDAD",
+      "partidas.0.cantidadCapturada": "1.5",
+      "partidas.0.costoUnitarioCapturado": "1",
+      "partidas.0.tasaIva": "0.16",
+    });
+    const r = esquemaAlta.safeParse(leerAlta(fd));
+    expect(r.success).toBe(false);
+    if (r.success) return;
+    expect(Object.keys(erroresDeAlta(r.error)).sort()).toEqual(["encabezado.fecha", "llaveIdempotencia", "partidas.0.cantidadCapturada"]);
   });
 
   it("erroresDe aplana con ruta y se queda con el primer mensaje por campo", () => {

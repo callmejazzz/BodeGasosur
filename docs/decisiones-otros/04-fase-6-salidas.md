@@ -1,6 +1,6 @@
 # BodeGasosur — contrato de la fase 6: Salidas
 
-**Estado:** contrato de desarrollo. La matriz de permisos, su puerta de autorización y la primera migración de restricciones SQL ya están implementadas y aplicadas en la base local de desarrollo y la base aislada de pruebas; el servicio transaccional, las Server Actions y las pantallas aún no lo están. Este documento define la meta y distingue los puntos que dependen de una respuesta operativa. Complementa el [modelo de datos](../02-modelo-de-datos.md) y el [contrato de Entradas](02-fase-5-entradas.md).
+**Estado:** contrato de desarrollo. La matriz de permisos, las restricciones y conciliación SQL, el dominio transaccional y las seis Server Actions con pruebas están implementados. Faltan las pantallas de Salidas. Complementa el [modelo de datos](../02-modelo-de-datos.md) y el [contrato de Entradas](02-fase-5-entradas.md).
 
 ## 1. Resultado y alcance
 
@@ -35,7 +35,7 @@ stateDiagram-v2
     CANCELADO --> [*]
 ```
 
-El servicio tratará la solicitud como inmutable desde el alta. Para corregir una captura, se cancela y se crea otra con nueva llave. La base permite escribir partidas mientras está `SOLICITADA` porque el encabezado debe insertarse antes de sus partidas; desde `AUTORIZADA` las congela. La autorización cubre exactamente ese conjunto final.
+El servicio trata la solicitud como inmutable desde el alta. Para corregir una captura, se cancela y se crea otra con nueva llave. La base permite escribir partidas mientras está `SOLICITADA` porque el encabezado debe insertarse antes de sus partidas; desde `AUTORIZADA` las congela. La autorización cubre exactamente ese conjunto final.
 En `SOLICITADA` y `AUTORIZADA` no hay folio, consumos ni efecto en existencia.
 `RECHAZADA` y `CANCELADO` son terminales, también sin efecto en inventario.
 `RETIRADA` conserva partidas, folio, costos, consumos y existencia descontada; solo
@@ -59,7 +59,9 @@ reserva inventario.
 
 Todas las mutaciones pasan por `accionProtegida()` y las consultas por `consultar()`.
 La identidad de cada actor sale de la sesión activa, jamás de un campo del formulario.
-La bandera se vuelve a leer de PostgreSQL al autorizar o rechazar; haber tenido la
+La puerta común relee `activo`, `rol` y `puedeAutorizar` bajo `FOR SHARE` al final de
+cada transacción de escritura, antes de confirmarla. Así una revocación ya confirmada
+revierte la operación; una revocación posterior espera al commit. Haber tenido la
 facultad en el pasado no habilita una acción nueva. La revocación posterior **no borra
 una autorización histórica**. Si el negocio necesita invalidar autorizaciones previas,
 Compras debe cancelar las solicitudes autorizadas todavía no entregadas.
@@ -73,9 +75,10 @@ ni se genera acuse imprimible.
 
 ## 4. Captura y validación
 
-- `fecha` es el día operativo de la salida, entre `2000-01-01` y hoy en México. Para
-  evitar antedatar un consumo PEPS, la fecha se fija al entregar; el día de la
-  solicitud está en `createdAt`. Si se espera una fecha de entrega futura, se registra
+- `fecha` es el día operativo de la salida. Al solicitar se guarda provisionalmente
+  el día actual en México; al retirar se fija el día real de la salida, sin aceptar
+  una fecha enviada por el cliente. El día de la solicitud también está en
+  `createdAt`. Si se espera una fecha de entrega futura, se registra
   cuando ocurra. Una fecha anterior al día de entrega requiere una política explícita
   de Compras y una prueba de recálculo PEPS antes de habilitarla.
 - Bodega origen, estación y artículos deben existir y estar activos en la entrega.
@@ -131,25 +134,25 @@ de bloqueos sobre `Existencia`; la entrega lee las capas después de adquirir es
 candado. Así ve el conjunto ya confirmado, no una mezcla de capas nuevas y stock
 anterior.
 
-## 6. Fronteras de seguridad que faltan
+## 6. Fronteras de seguridad implementadas
 
 La primera migración de esta fase ya obliga llave de idempotencia, secuencia de estados,
 datos propios de cada estado, partidas antes de autorizar, consumo completo antes de
 entregar y congelación de partidas después de autorizar. Las pruebas escriben directo
 contra PostgreSQL. La migración incremental sustituye el valor del enum por
 `RETIRADA`, retira la restricción transitoria de `RECIBIDA` y actualiza el trigger.
-Las migraciones no sustituyen el servicio PEPS: el trigger no puede
-demostrar por sí solo que `Existencia` y `CapaCosto.cantidadRestante` se descontaron en
-la misma cantidad. Antes de exponer la fase:
+El servicio PEPS descuenta capas y existencia en una transacción. El trigger diferido
+`85-conciliacion.sql` comprueba al confirmar que cada descuento de capa corresponda a
+sus consumos, que cada existencia coincida con sus capas y que los consumos cubran
+exactamente las partidas de salidas `RETIRADA` o `RECIBIDA`. Además impide editar o
+borrar capas y consumos ya escritos. La migración revisa los datos existentes antes
+de instalar los triggers; `BG606` y `BG607` se traducen a mensajes seguros.
 
-1. Completar las defensas SQL que relacionen el consumo con la disminución efectiva
-   de capas y existencias, o acotar explícitamente las credenciales de escritura a
-   servicios que ejecuten la transacción completa. Verificar además que una misma
-   pareja `(partidaId, capaId)` no se consuma dos veces.
-2. Agregar servicios y Server Actions con validación Zod y `accionProtegida()` en cada
-   mutación. La UI solo muestra botones permitidos; la puerta real sigue en el servidor.
-3. Traducir errores de PostgreSQL a mensajes seguros sin exponer SQL, igual que en
-   Entradas. La bitácora ya recibe `app.usuario_id` desde la transacción protegida.
+Las seis Server Actions usan Zod dentro de `accionProtegida()`, después de comprobar
+sesión y permiso. El `FormData` se lee dentro de esa puerta. Las pruebas de acceso
+cubren sesión ausente, usuario inactivo, rol sin permiso, autorizador sin bandera y
+revocaciones concurrentes. La bitácora actual recibe `app.usuario_id` desde la
+transacción protegida. La interfaz aún debe conectarse a estas acciones y lecturas.
 
 ## 7. Pruebas de aceptación
 
@@ -177,8 +180,9 @@ la misma cantidad. Antes de exponer la fase:
 
 1. Matriz tipada de permisos y comprobación de `puedeAutorizar` en la puerta común. ✅
 2. Primera migración de invariantes de salidas y pruebas SQL contra PostgreSQL real. ✅
-3. Servicio de solicitud, autorización, rechazo y cancelación; pruebas de idempotencia y carreras.
-4. Consumo PEPS y entrega en una transacción; pruebas de concurrencia e invariantes.
-5. Confirmación de recepción con idempotencia y actor de sesión; listados,
-   formularios, detalle y bandeja de pendientes de autorización, retiro o recepción.
-6. Server Actions y pruebas de frontera real; navegación, lint y build.
+3. Servicio de solicitud, autorización, rechazo y cancelación; pruebas de idempotencia y carreras. ✅
+4. Consumo PEPS y retiro en una transacción; pruebas de concurrencia e invariantes. ✅
+5. Confirmación de recepción con idempotencia y actor de sesión; repositorio de listados,
+   formulario, detalle y bandeja de pendientes. ✅
+6. Server Actions y pruebas de frontera real, lint y build. ✅ Interfaz y navegación pendientes.
+7. Trigger diferido de conciliación de consumos, capas y existencias. ✅

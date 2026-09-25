@@ -120,16 +120,18 @@ describe("frontera SQL de salidas", () => {
     await prisma.movimiento.update({ where: { id: m.id }, data: {
       estatus: "AUTORIZADA", autorizadoPorId: autorizadorId, autorizadoEn: new Date(),
     } });
-    // La prueba prepara el mínimo consumo que exige la frontera SQL actual.
-    const capa = await prisma.capaCosto.create({ data: {
-      movimientoId: m.id, bodegaId, articuloId, fecha: m.fecha, fechaOriginal: m.fecha,
-      cantidadInicial: 2, cantidadRestante: 0,
-    } });
-    await prisma.consumoCapa.create({ data: { partidaId: p.id, capaId: capa.id, cantidad: 2 } });
-    await prisma.movimiento.update({ where: { id: m.id }, data: {
-      estatus: "RETIRADA", folio: `S-${randomUUID().slice(0, 8)}`,
-      entregadoA: "Mensajero", entregadoPorId: capturistaId, entregadoEn: new Date(),
-    } });
+    // El mínimo retiro conciliado: capa ya consumida, su consumo y la transición, juntos.
+    await prisma.$transaction(async (tx) => {
+      const capa = await tx.capaCosto.create({ data: {
+        movimientoId: m.id, bodegaId, articuloId, fecha: m.fecha, fechaOriginal: m.fecha,
+        cantidadInicial: 2, cantidadRestante: 0,
+      } });
+      await tx.consumoCapa.create({ data: { partidaId: p.id, capaId: capa.id, cantidad: 2 } });
+      await tx.movimiento.update({ where: { id: m.id }, data: {
+        estatus: "RETIRADA", folio: `S-${randomUUID().slice(0, 8)}`,
+        entregadoA: "Mensajero", entregadoPorId: capturistaId, entregadoEn: new Date(),
+      } });
+    });
     await expect(prisma.movimiento.update({ where: { id: m.id }, data: {
       estatus: "CANCELADO", canceladoPorId: capturistaId, canceladoEn: new Date(),
       motivoCancelacion: "El material ya salió",
@@ -157,6 +159,21 @@ describe("frontera SQL de salidas", () => {
       estatus: "CANCELADO", canceladoPorId: capturistaId, canceladoEn: new Date(),
       motivoCancelacion: "No procede",
     } })).rejects.toThrow();
+  });
+
+  it("una partida no consume dos veces la misma capa", async () => {
+    const m = await solicitud();
+    const p = await prisma.movimientoPartida.findUniqueOrThrow({
+      where: { movimientoId_articuloId: { movimientoId: m.id, articuloId } },
+    });
+    await expect(prisma.$transaction(async (tx) => {
+      const capa = await tx.capaCosto.create({ data: {
+        movimientoId: m.id, bodegaId, articuloId, fecha: m.fecha, fechaOriginal: m.fecha,
+        cantidadInicial: 2, cantidadRestante: 0,
+      } });
+      await tx.consumoCapa.create({ data: { partidaId: p.id, capaId: capa.id, cantidad: 1 } });
+      await tx.consumoCapa.create({ data: { partidaId: p.id, capaId: capa.id, cantidad: 1 } });
+    })).rejects.toMatchObject({ code: "P2002" });
   });
 
   it("congela encabezado y partidas autorizadas; rechazo y cancelación son terminales", async () => {

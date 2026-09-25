@@ -2,15 +2,14 @@ import { detalleDePostgres, esErrorDePrisma } from "@/lib/movimientos/errores";
 
 export type CodigoDeDominio =
   | "no-encontrado"
-  | "no-es-entrada"
-  | "ya-confirmado"
-  | "cancelado"
+  | "estado"
+  | "conflicto"
   | "conflicto-idempotencia"
-  | "fecha"
-  | "moneda"
+  | "datos"
   | "partidas"
   | "catalogo"
   | "factor-desactualizado"
+  | "existencia"
   | "concurrencia"
   | "invariante"
   | "base-de-datos";
@@ -29,29 +28,31 @@ export class ErrorDeDominio extends Error {
 
 const MENSAJE_SEGURO = "No se pudo guardar. Revisa los datos e inténtalo de nuevo.";
 
+// SQLSTATE propios cuyo texto se escribió para mostrarse (80-salidas.sql,
+// 85-conciliacion.sql y 30-inmutabilidad.sql, BG506 en partidas por caja).
 const CODIGOS_PROPIOS: Record<string, CodigoDeDominio> = {
-  BG501: "ya-confirmado",
-  BG502: "invariante",
-  BG503: "partidas",
-  BG504: "factor-desactualizado",
-  BG505: "partidas",
-  BG506: "partidas",
+  BG601: "estado",
+  BG602: "invariante",
+  BG603: "partidas",
+  BG604: "estado",
+  BG605: "invariante",
   BG606: "invariante",
+  BG607: "invariante",
+  BG506: "partidas",
 };
 
 const MENSAJES_FIJOS: Record<string, [CodigoDeDominio, string]> = {
   "23505": ["invariante", "Ya existe un registro con ese valor único."],
-  "23503": ["catalogo", "El movimiento hace referencia a un dato que ya no existe."],
+  "23503": ["catalogo", "La salida hace referencia a un dato que ya no existe."],
   "23514": ["invariante", "Los datos no cumplen una regla del inventario."],
   "40P01": ["concurrencia", "Otro usuario está modificando lo mismo en este momento; inténtalo de nuevo."],
   "40001": ["concurrencia", "Otro usuario está modificando lo mismo en este momento; inténtalo de nuevo."],
 };
 
 /**
- * Convierte un error de Prisma o PostgreSQL en uno de dominio (11 §11) y
- * falla cerrado: todo error de la base produce un mensaje seguro, y solo los
- * códigos propios conservan su texto. El original va en `cause` y se registra
- * en el servidor. Lo que no viene de la base se relanza intacto.
+ * Falla cerrado, igual que en entradas: todo error de la base sale con un
+ * mensaje seguro y solo los códigos propios conservan su texto. El original
+ * va en `cause`. Lo que no viene de la base se relanza intacto.
  */
 export function traducirErrorDeBase(error: unknown): never {
   if (error instanceof ErrorDeDominio) throw error;
@@ -63,7 +64,7 @@ export function traducirErrorDeBase(error: unknown): never {
     throw new ErrorDeDominio(propio, detalle.mensaje, { cause: error });
   }
 
-  console.error("[entradas] error de base de datos", detalle?.sqlstate ?? error.name, error);
+  console.error("[salidas] error de base de datos", detalle?.sqlstate ?? error.name, error);
   const [codigo, mensaje] = (detalle && MENSAJES_FIJOS[detalle.sqlstate]) ?? ["base-de-datos", MENSAJE_SEGURO];
   throw new ErrorDeDominio(codigo, mensaje, { cause: error });
 }

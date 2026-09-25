@@ -1,32 +1,18 @@
 import { z } from "zod";
 import { FECHA_MINIMA_OPERATIVA, hoyEnMexico, motivoFechaNoOperativa } from "@/lib/fechas";
+import {
+  enteroPositivo,
+  erroresDe,
+  leerFormulario,
+  textoOpcional,
+  uuid,
+  type ErroresFormulario,
+} from "@/lib/movimientos/formulario";
 import type { DatosBorrador } from "./servicio";
 
+export { erroresDe, leerFormulario, uuid, type ErroresFormulario } from "@/lib/movimientos/formulario";
+
 // ─────────────────────────────── Piezas ──────────────────────────────────────
-
-/** Todo identificador y la llave de idempotencia son UUID canónicos (minúsculas); nada más entra al SQL. */
-export const uuid = z
-  .string()
-  .trim()
-  .uuid("Identificador inválido")
-  .transform((id) => id.toLowerCase());
-
-/** Piezas o cajas enteras, escritas como dígitos: ni «1.5», ni «3.0», ni «1e3». */
-const enteroPositivo = z
-  .string()
-  .trim()
-  .regex(/^\d{1,7}$/, "Solo cantidades enteras, sin decimales")
-  .transform(Number)
-  .refine((n) => n > 0, "La cantidad debe ser mayor que cero")
-  .refine((n) => n <= 1_000_000, "Cantidad demasiado grande");
-
-const textoOpcional = (max: number) =>
-  z
-    .string()
-    .trim()
-    .max(max, `Máximo ${max} caracteres`)
-    .optional()
-    .transform((v) => (v && v.length > 0 ? v : null));
 
 /** Decimal capturado como texto: se conserva tal cual para que numeric lo lea sin pasar por float. */
 const decimal = (enteros: number, decimales: number, mensaje: string) =>
@@ -108,6 +94,11 @@ export const esquemaBorrador = z
 /** Lo que viaja en el alta: la llave generada al abrir el formulario más el borrador. */
 export const esquemaAlta = z.object({ llaveIdempotencia: uuid, borrador: esquemaBorrador });
 
+/** El guardado de un borrador existente: su id más lo capturado. */
+export const esquemaGuardado = z.object({ id: uuid, borrador: esquemaBorrador });
+
+export const esquemaId = z.object({ id: uuid });
+
 export const esquemaDescarte = z.object({
   id: uuid,
   motivo: z.string().trim().min(1, "Di por qué se descarta").max(300, "Máximo 300 caracteres"),
@@ -121,33 +112,17 @@ export function leerAlta(formData: FormData): unknown {
   return { llaveIdempotencia: typeof llave === "string" ? llave : "", borrador: leerFormulario(formData) };
 }
 
-export function leerFormulario(formData: FormData): unknown {
-  const encabezado: Record<string, string> = {};
-  const partidas = new Map<number, Record<string, string>>();
-  const CAMPO_PARTIDA = /^partidas\.(\d{1,3})\.([A-Za-z]+)$/;
+/** El guardado: el id de la ruta más el borrador, en la forma de `esquemaGuardado`. */
+export function leerGuardado({ id, formData }: { id: string; formData: FormData }): unknown {
+  return { id, borrador: leerFormulario(formData) };
+}
 
-  for (const [nombre, valor] of formData.entries()) {
-    if (typeof valor !== "string") continue;
-    const m = CAMPO_PARTIDA.exec(nombre);
-    if (m) {
-      const i = Number(m[1]);
-      if (!partidas.has(i)) partidas.set(i, {});
-      partidas.get(i)![m[2]] = valor;
-    } else if (nombre.startsWith("encabezado.")) {
-      encabezado[nombre.slice("encabezado.".length)] = valor;
-    }
-  }
-
-  return {
-    encabezado,
-    partidas: [...partidas.entries()].sort(([a], [b]) => a - b).map(([, p]) => p),
-  };
+/** Errores del alta o del guardado con la ruta del formulario (`encabezado.fecha`), sin el prefijo `borrador.`. */
+export function erroresDeAlta(error: z.ZodError): ErroresFormulario {
+  return Object.fromEntries(Object.entries(erroresDe(error)).map(([ruta, mensaje]) => [ruta.replace(/^borrador\./, ""), mensaje]));
 }
 
 // ───────────────────────────── Estado del formulario ─────────────────────────
-
-/** Errores por campo, con la ruta plana del formulario: `encabezado.fecha`, `partidas.2.cantidadCapturada`. */
-export type ErroresFormulario = Record<string, string>;
 
 export type ValoresPartida = {
   articuloId: string;
@@ -192,14 +167,4 @@ export function valoresIniciales(hoy = hoyEnMexico()): ValoresEntrada {
     encabezado: { proveedorId: "", bodegaDestinoId: "", fecha: hoy, moneda: "MXN", tipoCambio: "", referencia: "", observaciones: "" },
     partidas: [{ ...PARTIDA_VACIA }],
   };
-}
-
-/** Aplana los issues de Zod a `ruta.plana → primer mensaje`. */
-export function erroresDe(error: z.ZodError): ErroresFormulario {
-  const errores: ErroresFormulario = {};
-  for (const issue of error.issues) {
-    const ruta = issue.path.map(String).join(".") || "_";
-    if (!errores[ruta]) errores[ruta] = issue.message;
-  }
-  return errores;
 }

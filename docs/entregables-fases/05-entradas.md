@@ -1,12 +1,12 @@
 # Fase 5 — Entradas
 
-| Campo | Referencia |
-|---|---|
-| Estado | Construida |
-| Versión | `v0.5.0` en `main` desde `d831f1e` |
-| Commit histórico | `4a46976`, retirado de `main`; entrega vigente `d831f1e` |
-| Etiqueta Git | Pendiente; no existe `v0.5.0` en el repositorio |
-| Contrato | [Fase 5: Entradas](../decisiones-otros/02-fase-5-entradas.md) |
+| Campo        | Referencia                                                    |
+| ------------ | ------------------------------------------------------------- |
+| Estado       | Construida                                                    |
+| Versión      | `v0.5.0`                                                      |
+| Commit       | `d831f1e`                                                     |
+| Etiqueta Git | `v0.5.0` → `d831f1e`                                          |
+| Contrato     | [Fase 5: Entradas](../decisiones-otros/02-fase-5-entradas.md) |
 
 ## Construido
 

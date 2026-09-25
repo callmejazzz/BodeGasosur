@@ -9,14 +9,8 @@ import { crearCliente } from "../../../prisma/comun";
 import { URL_PRUEBAS } from "../../../pruebas/base-de-pruebas";
 import { sembrarEntorno, type Entorno } from "../../../pruebas/semilla-entradas";
 import { aFechaDeBase } from "../fechas";
-import {
-  asegurarYBloquearExistencias,
-  calcularCostosBase,
-  crearCapasDeEntrada,
-  incrementarExistencias,
-  recalcularCostosYTotales,
-  tomarFolio,
-} from "./primitivas";
+import { asegurarYBloquearExistencias, tomarFolio } from "../movimientos/primitivas";
+import { calcularCostosBase, crearCapasDeEntrada, incrementarExistencias, recalcularCostosYTotales } from "./primitivas";
 
 const prisma = crearCliente(URL_PRUEBAS);
 let e: Entorno;

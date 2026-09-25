@@ -1,30 +1,12 @@
-import { Prisma, type TipoMovimiento } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { ErrorDeDominio } from "./errores";
 
-// Primitivas de PostgreSQL para confirmar un movimiento (11 §9).
+// Primitivas de PostgreSQL propias de la confirmación de entradas (11 §9).
+// Las compartidas con salidas viven en @/lib/movimientos/primitivas.
 
 type Tx = Prisma.TransactionClient;
 
 // ─────────────────────────────── Existencia ──────────────────────────────────
-
-export async function asegurarYBloquearExistencias(
-  tx: Tx,
-  bodegaId: string,
-  articuloIds: readonly string[],
-): Promise<{ articuloId: string; cantidad: number }[]> {
-  if (articuloIds.length === 0) return [];
-  const ids = [...new Set(articuloIds)].sort();
-
-  await tx.$executeRaw`
-    INSERT INTO "Existencia" ("bodegaId", "articuloId", cantidad, "actualizadoEn")
-    SELECT ${bodegaId}::uuid, a, 0, now() FROM unnest(${ids}::uuid[]) AS a
-    ON CONFLICT DO NOTHING`;
-
-  return tx.$queryRaw<{ articuloId: string; cantidad: number }[]>`
-    SELECT "articuloId", cantidad FROM "Existencia"
-    WHERE "bodegaId" = ${bodegaId}::uuid AND "articuloId" = ANY(${ids}::uuid[])
-    ORDER BY "articuloId" FOR UPDATE`;
-}
 
 export async function verificarCapacidadDeExistencias(tx: Tx, movimientoId: string, bodegaId: string): Promise<void> {
   const fuera = await tx.$queryRaw<{ clave: string; existencia: number; entra: number }[]>`
@@ -63,31 +45,6 @@ export async function incrementarExistencias(tx: Tx, movimientoId: string, bodeg
 export async function bloquearContrapartes(tx: Tx, proveedorId: string, bodegaId: string): Promise<void> {
   await tx.$queryRaw`SELECT id FROM "Proveedor" WHERE id = ${proveedorId}::uuid FOR SHARE`;
   await tx.$queryRaw`SELECT id FROM "Bodega" WHERE id = ${bodegaId}::uuid FOR SHARE`;
-}
-
-// ─────────────────────────────── Artículos ───────────────────────────────────
-
-/**
- * FOR SHARE sobre los artículos, ordenados por id: nadie cambia piezasPorCaja
- * ni da de baja un artículo mientras se confirma. Va después del encabezado y
- * antes de las existencias, siempre.
- */
-export async function bloquearArticulos(tx: Tx, articuloIds: readonly string[]): Promise<void> {
-  if (articuloIds.length === 0) return;
-  const ids = [...new Set(articuloIds)].sort();
-  await tx.$queryRaw`SELECT id FROM "Articulo" WHERE id = ANY(${ids}::uuid[]) ORDER BY id FOR SHARE`;
-}
-
-// ───────────────────────────────── Folio ─────────────────────────────────────
-
-export async function tomarFolio(tx: Tx, tipo: TipoMovimiento): Promise<string> {
-  const filas = await tx.$queryRaw<{ prefijo: string; numero: number }[]>`
-    UPDATE "Folio" SET siguiente = siguiente + 1
-    WHERE tipo = ${tipo}::"TipoMovimiento"
-    RETURNING prefijo, siguiente - 1 AS numero`;
-  const fila = filas[0];
-  if (!fila) throw new Error(`No hay consecutivo configurado para ${tipo}.`);
-  return `${fila.prefijo}-${String(fila.numero).padStart(6, "0")}`;
 }
 
 // ───────────────────────────────── Dinero ────────────────────────────────────

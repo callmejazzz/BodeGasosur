@@ -1,10 +1,10 @@
 # Fase 4 — Migración de catálogos (Plan B)
 
-| Campo | Referencia |
-|---|---|
-| Estado | Construida |
-| Versión | `v0.4.0` |
-| Commit | `9ea85b5` |
+| Campo        | Referencia           |
+| ------------ | -------------------- |
+| Estado       | Construida           |
+| Versión      | `v0.4.0`             |
+| Commit       | `9ea85b5`            |
 | Etiqueta Git | `v0.4.0` → `9ea85b5` |
 
 ## Construido

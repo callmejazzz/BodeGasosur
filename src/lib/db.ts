@@ -4,7 +4,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { Prisma, PrismaClient, type Rol } from "@prisma/client";
 import { headers } from "next/headers";
 import { cache } from "react";
-import { usuarioTienePermiso, type Permiso } from "@/lib/permisos";
+import { usuarioTienePermiso, type Permiso, type SujetoDePermisos } from "@/lib/permisos";
 
 // Prisma 7 exige un driver adapter explícito.
 const createPrismaClient = () =>
@@ -80,15 +80,18 @@ export const sesionActual = cache(async (): Promise<Sesion> => {
 });
 
 export class SinAcceso extends Error {
-  constructor() {
-    super("Sin acceso: la sesión no tiene un usuario activo en el sistema.");
+  constructor(opciones?: ErrorOptions) {
+    super("Sin acceso: la sesión no tiene un usuario activo en el sistema.", opciones);
     this.name = "SinAcceso";
   }
 }
 
 export class SinPermiso extends Error {
-  constructor(readonly permiso: Permiso) {
-    super(`Sin permiso: se requiere ${permiso}.`);
+  constructor(
+    readonly permiso: Permiso,
+    opciones?: ErrorOptions,
+  ) {
+    super(`Sin permiso: se requiere ${permiso}.`, opciones);
     this.name = "SinPermiso";
   }
 }
@@ -98,6 +101,33 @@ async function exigir(permiso: Permiso): Promise<UsuarioSesion> {
   if (sesion.estado !== "activa") throw new SinAcceso();
   if (!usuarioTienePermiso(sesion.usuario, permiso)) throw new SinPermiso(permiso);
   return sesion.usuario;
+}
+
+type Vigencia = (SujetoDePermisos & { activo: boolean }) | null | undefined;
+
+/** La negativa que corresponde a como está el usuario ahora; null si conserva el permiso. */
+function negativa(usuario: Vigencia, permiso: Permiso, causa?: unknown): SinAcceso | SinPermiso | null {
+  const opciones = causa === undefined ? undefined : { cause: causa };
+  if (!usuario?.activo) return new SinAcceso(opciones);
+  if (!usuarioTienePermiso(usuario, permiso)) return new SinPermiso(permiso, opciones);
+  return null;
+}
+
+/**
+ * La sesión se leyó antes de abrir la transacción. Antes de confirmar se
+ * relee el usuario bajo FOR SHARE: una revocación ya confirmada revierte la
+ * acción entera, y una posterior espera a este commit.
+ *
+ * Va al final y no al principio para no sostener el candado mientras la
+ * acción toma los suyos: la administración de usuarios bloquea a todos los
+ * superadmins, y dos superadmins con su propia fila tomada se esperarían
+ * entre sí.
+ */
+async function exigirVigente(tx: Prisma.TransactionClient, id: string, permiso: Permiso): Promise<void> {
+  const [usuario] = await tx.$queryRaw<Vigencia[]>`
+    SELECT rol, "puedeAutorizar", activo FROM "Usuario" WHERE id = ${id}::uuid FOR SHARE`;
+  const error = negativa(usuario, permiso);
+  if (error) throw error;
 }
 
 // ──────────────────── Las dos puertas de la aplicación ───────────────────────
@@ -140,7 +170,9 @@ export async function consultar<T>(
  * Converge lo que de otro modo habría que recordar por separado: lee la
  * sesión, verifica el permiso, abre la transacción y fija `app.usuario_id`,
  * que es lo que el trigger de bitácora está esperando para no anotar la
- * escritura como «escritura-directa».
+ * escritura como «escritura-directa». Antes de confirmar vuelve a exigir el
+ * permiso dentro de la transacción (exigirVigente). `fn` no debe tener
+ * efectos fuera de la transacción: si el permiso ya no está, todo se revierte.
  *
  * El permiso puede ser fijo o derivarse de los argumentos: `guardarCatalogo`
  * necesita lo segundo, porque escribir Empresa no exige lo mismo que escribir
@@ -158,12 +190,26 @@ export function accionProtegida<Args extends unknown[], T>(
     const requerido = typeof permiso === "function" ? permiso(args) : permiso;
     const usuario = await exigir(requerido);
 
-    return prisma.$transaction(async (tx) => {
-      // set_config con is_local = true equivale a SET LOCAL, pero admite
-      // parámetro en vez de interpolar el id dentro del SQL.
-      await tx.$executeRaw`SELECT set_config('app.usuario_id', ${usuario.id}, true)`;
-      return fn(tx, usuario, ...args);
-    });
+    try {
+      return await prisma.$transaction(async (tx) => {
+        // set_config con is_local = true equivale a SET LOCAL, pero admite
+        // parámetro en vez de interpolar el id dentro del SQL.
+        await tx.$executeRaw`SELECT set_config('app.usuario_id', ${usuario.id}, true)`;
+        const resultado = await fn(tx, usuario, ...args);
+        await exigirVigente(tx, usuario.id, requerido);
+        return resultado;
+      });
+    } catch (error) {
+      if (error instanceof SinAcceso || error instanceof SinPermiso) throw error;
+      // Falló antes de llegar a exigirVigente (un trigger que ya vio la
+      // revocación, por ejemplo): si el permiso ya no está, se responde con la
+      // negativa y no con el síntoma.
+      const ahora = await prisma.usuario.findUnique({
+        where: { id: usuario.id },
+        select: { rol: true, puedeAutorizar: true, activo: true },
+      });
+      throw negativa(ahora, requerido, error) ?? error;
+    }
   };
 }
 

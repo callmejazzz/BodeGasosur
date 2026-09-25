@@ -12,8 +12,10 @@
 //      Clerk configurado, terminal interactiva, y que BODEGASOSUR_FIXTURES no
 //      esté definida —si está, esto es una máquina de desarrollo—. Nada de
 //      esto necesita conexión, y por eso va antes de `migrate deploy`.
-//   2. Aplica las migraciones pendientes con `prisma migrate deploy`. Nunca
-//      `migrate dev`, que puede resetear.
+//   2. Aplica las migraciones pendientes con `prisma migrate deploy`, como el
+//      dueño del esquema (DATABASE_URL_MIGRACIONES). Nunca `migrate dev`, que
+//      puede resetear. Después crea o actualiza el usuario de ejecución de
+//      DATABASE_URL, sin propiedad, con el que se escribe todo lo demás.
 //   3. Rechaza una base que ya opera: movimientos, existencias, artículos o
 //      proveedores.
 //   4. Rechaza divergencias entre los CSV y lo que ya exista en la base: este
@@ -37,6 +39,7 @@ import {
 import { formatearDivergencia, migrar } from "../prisma/migracion-datos/migrar";
 import { VARIABLE_DE_AUTORIZACION, contarDatosOperativos, crearCliente } from "../prisma/comun";
 import { arrancarSuperadmin, describirArranque } from "./arranque-superadmin";
+import { asegurarUsuarioDeEjecucion } from "./usuario-ejecucion";
 
 function detener(mensaje: string): never {
   throw new Error(mensaje);
@@ -56,6 +59,9 @@ function validarEntorno(): { correo: string; secretKey: string; base: string; se
     if (base === "") throw new Error();
   } catch {
     detener("DATABASE_URL no es una URL de PostgreSQL válida con nombre de base.");
+  }
+  if (!process.env.DATABASE_URL_MIGRACIONES) {
+    detener("Falta DATABASE_URL_MIGRACIONES: las migraciones corren como el dueño del esquema, no como la aplicación.");
   }
   if (base.endsWith("_prueba")) {
     detener(`La base «${base}» es de pruebas (termina en _prueba). El bootstrap de producción no corre ahí.`);
@@ -90,6 +96,8 @@ async function main() {
   // ── 2. Migraciones pendientes ───────────────────────────────────────────
   console.log("Aplicando migraciones pendientes (prisma migrate deploy)…");
   execFileSync("npx", ["prisma", "migrate", "deploy"], { stdio: "inherit" });
+  const ejecucion = await asegurarUsuarioDeEjecucion(process.env.DATABASE_URL_MIGRACIONES, process.env.DATABASE_URL);
+  console.log(`Usuario de ejecución ${ejecucion.usuario} ${ejecucion.creado ? "creado" : "actualizado"}.`);
 
   const prisma = crearCliente();
 

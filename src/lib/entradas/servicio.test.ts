@@ -11,6 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { crearCliente } from "../../../prisma/comun";
 import { URL_PRUEBAS } from "../../../pruebas/base-de-pruebas";
 import { articuloNuevo, sembrarEntorno, type Entorno } from "../../../pruebas/semilla-entradas";
+import { sembrarCapa } from "../../../pruebas/semilla-inventario";
 import type { UsuarioSesion } from "../db";
 import { deFechaDeBase, hoyEnMexico } from "../fechas";
 import { rolTienePermiso, type Permiso } from "../permisos";
@@ -461,7 +462,7 @@ describe("límites de la base, comprobados antes de escribir", () => {
   it("existencia al límite: la entrada que lo rebasa no cambia existencia ni folio; la que cabe, sí", async () => {
     const bodega = await prisma.bodega.create({ data: { nombre: `Bodega tope ${randomUUID().slice(0, 8)}` } });
     const articulo = await articuloNuevo(prisma, e.unidadId, null);
-    await prisma.existencia.create({ data: { bodegaId: bodega.id, articuloId: articulo.id, cantidad: TOPE - 10 } });
+    await sembrarCapa(prisma, e, { bodegaId: bodega.id, articuloId: articulo.id, cantidad: TOPE - 10, fechaOriginal: "2026-09-01", costo: null });
     const entradaDe = (n: number) =>
       crear(datos({ bodegaDestinoId: bodega.id }, [{ articuloId: articulo.id, presentacion: "UNIDAD", cantidadCapturada: n, costoUnitarioCapturado: "1", tasaIva: "0" }]));
 

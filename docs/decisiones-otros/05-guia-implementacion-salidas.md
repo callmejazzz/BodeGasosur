@@ -1,27 +1,26 @@
 # Guía de construcción — `src/lib/salidas/`
 
-Esta guía convierte el [contrato de la fase 6](04-fase-6-salidas.md) en pasos de código y pruebas. `RETIRADA` registra la salida física y descuenta inventario; `RECIBIDA` guarda quién y cuándo confirmó la llegada a la estación y cierra la salida. No se genera vale imprimible.
+Esta guía convierte el [contrato de la fase 6](04-fase-6-salidas.md) en pasos de código y pruebas. El dominio, el trigger diferido, las Server Actions y sus pruebas están construidos; falta la interfaz. `RETIRADA` registra la salida física y descuenta inventario; `RECIBIDA` guarda quién y cuándo confirmó la llegada a la estación y cierra la salida. No se genera vale imprimible.
 
-## 1. Estructura propuesta
+## 1. Estructura del dominio
 
 | Archivo | Responsabilidad |
 |---|---|
 | `formulario.ts` | Zod y conversión de `FormData`; UUID, texto, cantidades y presentación. |
-| `errores.ts` | Errores de dominio y traducción segura de `BG601`–`BG605`, `23514`, `40P01` y `40001`. |
+| `errores.ts` | Errores de dominio y traducción segura de `BG601`–`BG607`, `BG506`, `23505`, `23503`, `23514`, `40P01` y `40001`. |
 | `repo.ts` | Lecturas para lista, detalle, bandeja y opciones de captura; solo recibe el `TransactionClient` de `consultar()`. |
-| `primitivas.ts` | Bloqueos, verificación de stock, consumo PEPS, descuento y folio; SQL parametrizado. |
+| `primitivas.ts` | Bloqueos de contrapartes y capas, verificación de stock, consumo PEPS y descuento; SQL parametrizado. El folio y los bloqueos comunes están en `src/lib/movimientos/primitivas.ts`. |
 | `servicio.ts` | Solicitar, autorizar, rechazar, cancelar, retirar y confirmar recepción; recibe `tx` y `usuario` de `accionProtegida()`. |
-| `*.test.ts` | Integración con PostgreSQL real, incluida concurrencia y acceso por Server Action. |
+| `*.test.ts` | Integración con PostgreSQL real, incluida concurrencia y conciliación. Las pruebas de acceso de las Actions están en `src/app/(sistema)/salidas/`. |
 
-Extraer a un módulo compartido únicamente las primitivas de Entradas que ambos flujos
-usen de verdad —por ejemplo, bloqueo ordenado de artículos y existencias y conversión a
-unidad base—. Mantener las pruebas de Entradas verdes durante esa extracción. Salidas
-no debe importar funciones privadas de `entradas/servicio.ts` ni calcular costos con
-punto flotante de JavaScript.
+`src/lib/movimientos/` reúne las primitivas compartidas de Entradas y Salidas:
+bloqueo ordenado de artículos y existencias, folio, conversión a unidad base, lectura
+de formularios y errores. Salidas no importa funciones privadas de
+`entradas/servicio.ts` ni calcula costos con punto flotante de JavaScript.
 
 ## 2. Solicitud
 
-1. Definir los datos capturados: bodega, estación, solicitante y área opcionales,
+1. Definir los datos capturados: bodega y estación obligatorias; solicitante y área opcionales,
    préstamo, observaciones y una lista no vacía de partidas. El formulario genera un
    UUID de idempotencia y lo conserva durante reintentos.
 2. Validar forma con Zod y repetir en el servicio las reglas de negocio. El servidor
@@ -39,7 +38,7 @@ punto flotante de JavaScript.
 ## 3. Autorización, rechazo y cancelación
 
 1. Cada operación toma `Movimiento FOR UPDATE` antes de leer su estado. Repetir una transición ya hecha devuelve el resultado original sin cambiar actor ni instante; repetirla con motivo distinto produce conflicto.
-2. Para autorizar o rechazar, bloquear el `Usuario` actor con `FOR SHARE` y releer `activo` y `puedeAutorizar` **dentro de la transacción**. La lectura inicial de la sesión ocurre antes de la transacción; esta segunda comprobación cierra la carrera con la revocación de la facultad. Usar siempre `usuario.id`, nunca un ID del cliente.
+2. `accionProtegida()` comprueba sesión y permiso antes de leer los datos y, al final de la transacción, relee `activo`, `rol` y `puedeAutorizar` bajo `FOR SHARE`. La revocación ya confirmada revierte la operación; la que llega después espera. Usar siempre `usuario.id`, nunca un ID del cliente.
 3. Autorizar exige `SOLICITADA` y al menos una partida; guarda `autorizadoPorId`/`autorizadoEn`. Rechazar exige `SOLICITADA` y motivo no vacío; guarda `rechazadoPorId`/`rechazadoEn`. Cancelar exige `SOLICITADA` o `AUTORIZADA`, motivo y actor. Ninguna de estas operaciones mueve inventario.
 
 ## 4. Retiro y PEPS
@@ -79,11 +78,10 @@ flowchart LR
    una fila, fallar y revertir todo. El trigger ya exige consumos completos antes
    de permitir la transición.
 
-La migración actual verifica que los consumos cubran las partidas y procedan de las
-capas correctas. Aún permite a un escritor SQL privilegiado fabricar consumos sin
-descontar capas y existencia. Antes de exponer la entrega, agregar defensas que
-relacionen ambos cambios o limitar las credenciales de escritura a las rutas
-transaccionales; añadir unicidad a `(partidaId, capaId)` para impedir duplicados.
+La unicidad de `(partidaId, capaId)` impide duplicados. El trigger diferido de
+`85-conciliacion.sql` exige al confirmar que consumos, descuentos de capas y
+existencias concilien; la migración hace un preflight sobre datos existentes.
+`BG606` informa un descuadre y `BG607` protege capas y consumos ya escritos.
 
 ## 5. Confirmación de recepción
 
@@ -109,9 +107,10 @@ stateDiagram-v2
    que no haya importes ni cantidades duplicados.
 4. Probar `RETIRADA → RECIBIDA`, reintento idempotente, actor/instante y estado
    terminal; comprobar que la recepción no vuelve a tocar inventario.
-5. Crear Server Actions con `accionProtegida()` y páginas con `consultar()`.
-   Invocar las acciones directamente en pruebas con sesión ausente, usuario inactivo,
-   rol sin permiso y autorizador sin bandera. La UI se añade después del servicio.
+5. Las seis Server Actions usan `accionProtegida()` y Zod después de la comprobación
+   de acceso. Sus pruebas directas cubren sesión ausente, usuario inactivo, rol sin
+   permiso, autorizador sin bandera y revocaciones concurrentes. Las páginas con
+   `consultar()` y la UI siguen pendientes.
 6. Ejecutar `npm test`, `npm run lint`, `npx tsc --noEmit` y el build de producción.
    El cierre de la fase exige que `RECIBIDA` sea terminal tanto en el servicio
    como en SQL.
