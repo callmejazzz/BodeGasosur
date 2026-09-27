@@ -15,7 +15,9 @@
 //   2. Aplica las migraciones pendientes con `prisma migrate deploy`, como el
 //      dueño del esquema (DATABASE_URL_MIGRACIONES). Nunca `migrate dev`, que
 //      puede resetear. Después crea o actualiza el usuario de ejecución de
-//      DATABASE_URL, sin propiedad, con el que se escribe todo lo demás.
+//      DATABASE_URL, sin propiedad, que usará la aplicación, y carga las
+//      llaves públicas de Clerk con las que la base verifica al actor. Los
+//      datos iniciales se escriben como el dueño, login de confianza.
 //   3. Rechaza una base que ya opera: movimientos, existencias, artículos o
 //      proveedores.
 //   4. Rechaza divergencias entre los CSV y lo que ya exista en la base: este
@@ -37,8 +39,9 @@ import {
   aplicarConfiguracion,
 } from "../prisma/configuracion";
 import { formatearDivergencia, migrar } from "../prisma/migracion-datos/migrar";
-import { VARIABLE_DE_AUTORIZACION, contarDatosOperativos, crearCliente } from "../prisma/comun";
+import { VARIABLE_DE_AUTORIZACION, contarDatosOperativos, crearClienteDelDueno } from "../prisma/comun";
 import { arrancarSuperadmin, describirArranque } from "./arranque-superadmin";
+import { cargarLlavesDeClerk, emisorDeLlavePublicable } from "./llaves-clerk";
 import { asegurarUsuarioDeEjecucion } from "./usuario-ejecucion";
 
 function detener(mensaje: string): never {
@@ -46,7 +49,7 @@ function detener(mensaje: string): never {
 }
 
 /** Todo lo que se puede comprobar sin conectarse. Falla antes de `migrate deploy`. */
-function validarEntorno(): { correo: string; secretKey: string; base: string; servidor: string } {
+function validarEntorno(): { correo: string; secretKey: string; emisor: string; base: string; servidor: string } {
   const url = process.env.DATABASE_URL;
   if (!url) detener("Falta DATABASE_URL.");
   let base: string;
@@ -75,6 +78,10 @@ function validarEntorno(): { correo: string; secretKey: string; base: string; se
   if (secretKey.startsWith("sk_test_")) {
     detener("CLERK_SECRET_KEY es una llave de prueba (sk_test_). Producción exige la llave de la instancia de producción de Clerk.");
   }
+  const emisor = emisorDeLlavePublicable(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+  if (!emisor || !process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.startsWith("pk_live_")) {
+    detener("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY tiene que ser la llave publicable de producción (pk_live_).");
+  }
   if (process.env[VARIABLE_DE_AUTORIZACION] !== undefined) {
     detener(
       `${VARIABLE_DE_AUTORIZACION} está definida: este entorno es de desarrollo. ` +
@@ -85,12 +92,12 @@ function validarEntorno(): { correo: string; secretKey: string; base: string; se
     detener("El bootstrap de producción exige una terminal interactiva para confirmar. No corre desatendido.");
   }
 
-  return { correo, secretKey, base, servidor };
+  return { correo, secretKey, emisor, base, servidor };
 }
 
 async function main() {
   // ── 1. Entorno, antes de tocar nada ─────────────────────────────────────
-  const { correo, secretKey, base, servidor } = validarEntorno();
+  const { correo, secretKey, emisor, base, servidor } = validarEntorno();
   console.log(`Entorno válido. Base: ${base} en ${servidor}. Superadmin: ${correo}.`);
 
   // ── 2. Migraciones pendientes ───────────────────────────────────────────
@@ -98,8 +105,11 @@ async function main() {
   execFileSync("npx", ["prisma", "migrate", "deploy"], { stdio: "inherit" });
   const ejecucion = await asegurarUsuarioDeEjecucion(process.env.DATABASE_URL_MIGRACIONES, process.env.DATABASE_URL);
   console.log(`Usuario de ejecución ${ejecucion.usuario} ${ejecucion.creado ? "creado" : "actualizado"}.`);
+  const llaves = await cargarLlavesDeClerk(process.env.DATABASE_URL_MIGRACIONES!, emisor);
+  for (const { kid, estado } of llaves) console.log(`Llave de Clerk ${kid}: ${estado}.`);
+  if (!llaves.some((l) => !l.estado.startsWith("rechazada"))) detener(`El JWKS de ${emisor} no trae ninguna llave aceptable.`);
 
-  const prisma = crearCliente();
+  const prisma = crearClienteDelDueno();
 
   try {
     // ── 3. La base tiene que estar sin operar ────────────────────────────

@@ -4,6 +4,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { Prisma, PrismaClient, type Rol } from "@prisma/client";
 import { headers } from "next/headers";
 import { cache } from "react";
+import { detalleDePostgres, esErrorDePrisma } from "@/lib/movimientos/errores";
 import { usuarioTienePermiso, type Permiso, type SujetoDePermisos } from "@/lib/permisos";
 
 // Prisma 7 exige un driver adapter explícito.
@@ -86,6 +87,18 @@ export class SinAcceso extends Error {
   }
 }
 
+/**
+ * La base no pudo verificar el token de identidad: firma, emisor, llave sin
+ * cargar o token ya usado. No es una negativa de permiso; se registra y la
+ * pantalla muestra un error genérico.
+ */
+export class IdentidadNoVerificable extends Error {
+  constructor(motivo: string, opciones?: ErrorOptions) {
+    super(`No se pudo verificar la identidad: ${motivo}`, opciones);
+    this.name = "IdentidadNoVerificable";
+  }
+}
+
 export class SinPermiso extends Error {
   constructor(
     readonly permiso: Permiso,
@@ -113,6 +126,41 @@ function negativa(usuario: Vigencia, permiso: Permiso, causa?: unknown): SinAcce
   return null;
 }
 
+// ─────────────────────── El actor, verificado por la base ────────────────────
+
+/** La plantilla JWT de Clerk que verifica seguridad.fijar_actor(). */
+const PLANTILLA_DE_ACTOR = "bodegasosur-db";
+
+/** Un token nuevo por escritura. Es una petición a Clerk: va fuera de la transacción. */
+async function tokenDeActor(): Promise<string> {
+  const { getToken } = await auth();
+  const token = await getToken({ template: PLANTILLA_DE_ACTOR });
+  if (!token) throw new SinAcceso();
+  return token;
+}
+
+/** Las llaves públicas cargadas, por emisor: identificadores públicos, para la alerta de rotación. */
+export async function kidsCargados(): Promise<{ kid: string; emisor: string }[]> {
+  return prisma.$queryRaw<{ kid: string; emisor: string }[]>`SELECT kid, emisor FROM seguridad.kids_cargados()`;
+}
+
+/**
+ * Traduce lo que rechazan las funciones de `seguridad`. Una llave sin cargar
+ * deja una línea propia en el log: es la alerta de que Clerk rotó su llave.
+ */
+function rechazoDeIdentidad(error: unknown): Error | null {
+  if (!esErrorDePrisma(error)) return null;
+  const detalle = detalleDePostgres(error);
+  if (!detalle?.sqlstate.startsWith("BG70")) return null;
+  if (detalle.sqlstate === "BG705") return new SinAcceso({ cause: error });
+  if (detalle.sqlstate === "BG702") {
+    console.error(`[seguridad] kid desconocido: ${detalle.mensaje} Carga la llave con npm run db:llaves-clerk.`);
+  } else {
+    console.error(`[seguridad] token rechazado (${detalle.sqlstate}): ${detalle.mensaje}`);
+  }
+  return new IdentidadNoVerificable(detalle.mensaje, { cause: error });
+}
+
 /**
  * La sesión se leyó antes de abrir la transacción. Antes de confirmar se
  * relee el usuario bajo FOR SHARE: una revocación ya confirmada revierte la
@@ -128,6 +176,15 @@ async function exigirVigente(tx: Prisma.TransactionClient, id: string, permiso: 
     SELECT rol, "puedeAutorizar", activo FROM "Usuario" WHERE id = ${id}::uuid FOR SHARE`;
   const error = negativa(usuario, permiso);
   if (error) throw error;
+}
+
+/**
+ * Solo la sesión y el permiso, sin abrir transacción. Para el trabajo previo
+ * que no cabe dentro de la puerta —una petición HTTP a Clerk—: se comprueba
+ * antes de procesar nada, y accionProtegida() lo vuelve a exigir al escribir.
+ */
+export async function comprobarPermiso(permiso: Permiso): Promise<UsuarioSesion> {
+  return exigir(permiso);
 }
 
 // ──────────────────── Las dos puertas de la aplicación ───────────────────────
@@ -168,9 +225,9 @@ export async function consultar<T>(
  * Escribir. Único camino de escritura de la capa de aplicación (01 §4.1).
  *
  * Converge lo que de otro modo habría que recordar por separado: lee la
- * sesión, verifica el permiso, abre la transacción y fija `app.usuario_id`,
- * que es lo que el trigger de bitácora está esperando para no anotar la
- * escritura como «escritura-directa». Antes de confirmar vuelve a exigir el
+ * sesión, verifica el permiso, pide a Clerk un token para la base, abre la
+ * transacción y lo liga con seguridad.fijar_actor(), que verifica la firma y
+ * de ahí toma la bitácora al actor. Antes de confirmar vuelve a exigir el
  * permiso dentro de la transacción (exigirVigente). `fn` no debe tener
  * efectos fuera de la transacción: si el permiso ya no está, todo se revierte.
  *
@@ -189,12 +246,13 @@ export function accionProtegida<Args extends unknown[], T>(
   return async (...args: Args) => {
     const requerido = typeof permiso === "function" ? permiso(args) : permiso;
     const usuario = await exigir(requerido);
+    const token = await tokenDeActor();
 
     try {
       return await prisma.$transaction(async (tx) => {
-        // set_config con is_local = true equivale a SET LOCAL, pero admite
-        // parámetro en vez de interpolar el id dentro del SQL.
-        await tx.$executeRaw`SELECT set_config('app.usuario_id', ${usuario.id}, true)`;
+        // Primera sentencia: sin liga, la base rechaza toda escritura.
+        const [{ actor }] = await tx.$queryRaw<{ actor: string }[]>`SELECT seguridad.fijar_actor(${token}) AS actor`;
+        if (actor !== usuario.id) throw new SinAcceso();
         const resultado = await fn(tx, usuario, ...args);
         await exigirVigente(tx, usuario.id, requerido);
         return resultado;
@@ -208,7 +266,7 @@ export function accionProtegida<Args extends unknown[], T>(
         where: { id: usuario.id },
         select: { rol: true, puedeAutorizar: true, activo: true },
       });
-      throw negativa(ahora, requerido, error) ?? error;
+      throw negativa(ahora, requerido, error) ?? rechazoDeIdentidad(error) ?? error;
     }
   };
 }
@@ -228,11 +286,17 @@ type OrigenSistema = "clerk-webhook";
  * 01 §4.1 dice que el webhook «solo puede escribir tres tablas». Escrito como
  * comentario sería una convención; escrito como tipo, tocar `Movimiento` desde
  * el webhook no compila. Es el mismo criterio que el READ ONLY de consultar().
+ * Los eventos de sesión se registran por su función en la base: el usuario de
+ * ejecución ya no inserta en `EventoAcceso`.
  */
-export type ClienteWebhook = Pick<
-  Prisma.TransactionClient,
-  "eventoWebhook" | "usuario" | "eventoAcceso"
->;
+export type ClienteWebhook = Pick<Prisma.TransactionClient, "eventoWebhook" | "usuario"> & {
+  registrarEventoDeSesion(evento: {
+    clerkUserId: string;
+    tipo: "SESION_INICIADA" | "SESION_TERMINADA" | "SESION_REMOVIDA" | "SESION_REVOCADA";
+    ip: string | null;
+    agente: string | null;
+  }): Promise<void>;
+};
 
 /**
  * La segunda puerta de 01 §4.1: llega de fuera, sin sesión, y escribe.
@@ -252,7 +316,13 @@ export async function escrituraDeSistema<T>(
 ): Promise<T> {
   return prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT set_config('app.origen', ${origen}, true)`;
-    return fn(tx);
+    return fn({
+      eventoWebhook: tx.eventoWebhook,
+      usuario: tx.usuario,
+      async registrarEventoDeSesion({ clerkUserId, tipo, ip, agente }) {
+        await tx.$queryRaw`SELECT seguridad.registrar_evento_de_sesion(${clerkUserId}, ${tipo}, ${ip}, ${agente})`;
+      },
+    });
   });
 }
 
@@ -261,35 +331,20 @@ export async function escrituraDeSistema<T>(
  * poder entrar. Vive aquí y no en el layout porque escribe, y el cliente ya no
  * sale de este módulo.
  *
- * Es la única escritura que no pasa por `accionProtegida`, y no puede pasar:
- * por definición la dispara quien no tiene permiso de nada. Por eso escribe una
- * sola tabla, de registro, y nada más. La bitácora no la alcanza a propósito
- * —`EventoAcceso` no lleva trigger: son registros, no datos—.
- *
- * Se limita a un renglón cada quince minutos por identidad: sin eso, quien
- * recarga veinte veces deja veinte renglones y vuelve inútil la tabla justo
- * cuando haya que consultarla.
+ * Es la única escritura de usuario que no pasa por `accionProtegida`, y no
+ * puede pasar: la dispara quien no tiene permiso de nada. La identidad sale
+ * del token de Clerk, y la base solo registra si el acceso de verdad está
+ * denegado —sin Usuario, o con uno inactivo—, un renglón cada quince minutos
+ * por identidad (seguridad.registrar_acceso_denegado). Es un registro: si
+ * falla, se anota en el log y la persona igual ve la página de acceso denegado.
  */
-export async function registrarAccesoDenegado(clerkUserId: string, usuarioId: string | null) {
-  const reciente = await prisma.eventoAcceso.findFirst({
-    where: {
-      clerkUserId,
-      tipo: "ACCESO_DENEGADO",
-      ocurridoEn: { gte: new Date(Date.now() - 15 * 60 * 1000) },
-    },
-    select: { id: true },
-  });
-
-  if (reciente) return;
-
-  const cabeceras = await headers();
-  await prisma.eventoAcceso.create({
-    data: {
-      clerkUserId,
-      usuarioId,
-      tipo: "ACCESO_DENEGADO",
-      ip: cabeceras.get("x-forwarded-for") ?? undefined,
-      agente: cabeceras.get("user-agent") ?? undefined,
-    },
-  });
+export async function registrarAccesoDenegado() {
+  try {
+    const token = await tokenDeActor();
+    const cabeceras = await headers();
+    await prisma.$queryRaw`SELECT seguridad.registrar_acceso_denegado(
+      ${token}, ${cabeceras.get("x-forwarded-for")}, ${cabeceras.get("user-agent")})`;
+  } catch (error) {
+    console.error("[seguridad] no se registró el acceso denegado:", rechazoDeIdentidad(error) ?? error);
+  }
 }

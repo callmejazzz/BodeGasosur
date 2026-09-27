@@ -51,7 +51,7 @@ v0.3.0        fase 3 — usuarios y permisos
 v0.8.0        fase 8 — reportes
 v1.0.0-rc.1   se le presenta a Gasosur para aprobación
 v1.0.0-rc.2   correcciones de esa revisión
-v1.0.0        aprobado y desplegado en Vercel + Supabase
+v1.0.0        aprobado y desplegado en el destino elegido
 ```
 
 El orden de las fases está en [entregables por fase](entregables-fases/README.md).
@@ -129,8 +129,8 @@ migración ocurre cuando Gasosur apruebe el sistema, en `v1.0.0`.
 
 > **La auditoría reabrió esta decisión (`D1`) y sigue abierta.** El argumento es que para
 > diez usuarios en una oficina de Acapulco, el serverless cobra complejidad —el pooler, dos
-> URLs de conexión, la advertencia de IPv6, Skew Protection, arranques en frío sobre
-> transacciones con locks y `migrate deploy` metido en el build— a cambio de un escalado
+> URLs de conexión, la advertencia de IPv6, Skew Protection y arranques en frío sobre
+> transacciones con locks— a cambio de un escalado
 > elástico y una presencia global que nadie necesita. Media sección de las que siguen existe
 > para administrar complejidad que el propio despliegue introduce.
 >
@@ -154,27 +154,42 @@ Supabase es PostgreSQL de verdad, lo cual importa porque el esquema `catalogo_ga
 
 ### Lo que hay que dejar bien configurado el día del despliegue
 
-**Dos URLs de conexión.** `DATABASE_URL` apunta al pooler en modo transacción para la
-aplicación; `DIRECT_URL` va en modo sesión para `prisma migrate`, porque las migraciones
-usan locks y sentencias preparadas que el modo transacción no soporta. En proyectos nuevos
-de Supabase la conexión directa es solo IPv6, así que las migraciones también salen por el
-pooler.
+**Dos usuarios y dos URLs de conexión.** `DATABASE_URL` usa el usuario de ejecución,
+sin propiedad del esquema ni permiso para cambiar triggers. `DATABASE_URL_MIGRACIONES`
+usa el dueño para migraciones, carga manual de llaves públicas y scripts de datos. Si el
+destino ofrece pooler, se elegirá para cada URL un modo compatible con esas operaciones;
+la configuración definitiva se valida antes de desplegar.
 
 **Las variables de entorno tienen ámbito.** La `DATABASE_URL` de producción va marcada
 **solo como Production**. Si queda en «All Environments», cualquier vista previa de
 cualquier rama escribe en la base real — y siendo el movimiento un libro contable
 ([01-arquitectura.md](01-arquitectura.md) §3.1), eso no se limpia después.
 
-**Las migraciones son parte del despliegue.** El build de producción corre
-`prisma migrate deploy`. Nunca `migrate dev`, que es interactivo y puede resetear.
+**Las migraciones son parte del despliegue, no del build.** Se ejecuta
+`prisma migrate deploy` con `DATABASE_URL_MIGRACIONES`; nunca `migrate dev`, que es
+interactivo y puede resetear. El despliegue a producción del actor verificable se hará
+al cerrar los entregables. Si ya hay una versión en servicio, se despliega en dos
+etapas: primero funciones, llaves y aplicación que liga actores; después la migración
+que exige la liga y las correcciones posteriores. La carga y rotación de llaves son
+manuales; el monitor solo avisa si falta un `kid`.
+
+**Rotación manual de llaves.** Al aparecer un `kid` nuevo en el JWKS o en una alerta
+`BG702`, quien tenga `DATABASE_URL_MIGRACIONES` ejecuta `npm run db:llaves-clerk`.
+Después verifica un token real de la plantilla con `npm run db:probar-token`, sin
+ponerlo en argumentos ni registros. Una vez que Clerk deje de firmar con la llave
+anterior y hayan transcurrido al menos 60 segundos desde su último uso posible,
+puede desactivarla con `npm run db:llaves-clerk -- --desactivar <kid>`. El monitor no
+carga ni desactiva llaves por su cuenta.
 
 **La primera vez, la base se levanta a mano con `npm run prod:bootstrap`** —desde una
 terminal, nunca desde el build ni el arranque de Next.js—. Antes de `migrate deploy` valida
 el entorno sin conectarse: `DATABASE_URL` válida y que no sea una base `*_prueba`, Clerk
 configurado con una llave que no sea `sk_test_`, terminal interactiva, y que
-`BODEGASOSUR_FIXTURES` no esté definida. Después aplica la migración, rechaza una base que
-ya opere, muestra el resumen y exige teclear el nombre de la base para confirmar. Ver
-[10-plan-b-produccion.md](decisiones-otros/10-plan-b-produccion.md).
+`BODEGASOSUR_FIXTURES` no esté definida. Después aplica las migraciones como dueño,
+crea el usuario de ejecución y carga las llaves públicas de Clerk, rechaza una base que
+ya opere, muestra el resumen y exige teclear el nombre de la base para confirmar. La
+plantilla `bodegasosur-db` usa RS256 y dura 30 segundos; la base acepta hasta 60.
+Ver [Plan B](decisiones-otros/01-plan-b-produccion.md).
 
 **Skew Protection encendido.** Cuando se promueve una versión, alguien puede llevar horas
 con la pantalla de captura abierta: su navegador tiene el JavaScript anterior, que invoca
@@ -193,9 +208,10 @@ tres roles y la bandera *puede autorizar*, leídos de PostgreSQL en cada petici�
 ([01 §3.6](01-arquitectura.md)). Ningún proveedor externo decide quién puede autorizar una
 salida, y por eso quitarle el permiso a alguien surte efecto de inmediato.
 
-Si se conserva Supabase, su autenticación y su RLS no entran en esa decisión: Prisma se
-conecta con un rol privilegiado, así que RLS no protegería nada por sí solo. De Supabase se
-usaría el PostgreSQL administrado con respaldos.
+Si se conserva Supabase, su autenticación no entra en esa decisión. La aplicación usa
+un usuario de PostgreSQL sin propiedad y con permisos de fila; el esquema actual no
+define políticas RLS y no debe atribuirles una protección que no está implementada.
+De Supabase se usaría PostgreSQL administrado con respaldos.
 
 Lo que sí se delega a la base son los **invariantes** —`CHECK` y triggers—, y esa es la
 diferencia con la versión anterior de esta sección: la autorización se verifica en

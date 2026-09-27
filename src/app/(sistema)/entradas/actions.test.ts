@@ -18,7 +18,7 @@ import { formDataEspia } from "../../../../pruebas/formulario-espia";
 import { sembrarCapa, sinDefensas } from "../../../../pruebas/semilla-inventario";
 import { ESTADO_INICIAL } from "@/lib/entradas/formulario";
 
-const sesion = vi.hoisted(() => ({ userId: null as string | null }));
+const sesion = vi.hoisted(() => ({ userId: null as string | null, token: undefined as ((userId: string) => string | null) | undefined }));
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
@@ -31,7 +31,7 @@ vi.mock("next/navigation", () => ({
     throw new Error("NOT_FOUND");
   },
 }));
-vi.mock("@clerk/nextjs/server", () => ({ auth: async () => ({ userId: sesion.userId }) }));
+vi.mock("@clerk/nextjs/server", async () => ({ auth: (await import("../../../../pruebas/clerk-simulado")).authSimulado(sesion) }));
 
 // db.ts abre su propio cliente con DATABASE_URL: se apunta a la base de pruebas
 // con el usuario de ejecución, sin propiedad, igual que en producción.

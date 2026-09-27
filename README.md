@@ -39,8 +39,9 @@ La aplicación queda en <http://localhost:3000>.
 |---|---|
 | `npm run dev` | Servidor de desarrollo |
 | `npm run db:up` / `db:down` | Levanta o baja PostgreSQL |
-| `npm run db:reset` | **Desarrollo.** Borra todo, remigra, y encadena configuración, catálogos reales, fixtures y Superadmin |
-| `npm run prod:bootstrap` | **Producción.** Manual y con confirmación: `migrate deploy`, configuración, catálogos reales y Superadmin. Sin fixtures — ver [Plan B](docs/decisiones-otros/01-plan-b-produccion.md) |
+| `npm run db:reset` | **Desarrollo.** Borra todo, remigra, crea el usuario de ejecución, carga las llaves públicas de Clerk y encadena configuración, catálogos reales, fixtures y Superadmin |
+| `npm run prod:bootstrap` | **Producción.** Manual y con confirmación: migraciones, usuario de ejecución, llaves de Clerk, configuración, catálogos reales y Superadmin. Sin fixtures — ver [Plan B](docs/decisiones-otros/01-plan-b-produccion.md) |
+| `npm run db:usuario-app` / `db:llaves-clerk` | Crea el usuario de ejecución sin propiedad y carga manualmente las llaves públicas de Clerk |
 | `npm run db:configuracion` | Bodegas, áreas, unidad `PZA` y folios. Solo crea lo que falta |
 | `npm run datos:migrar` | Empresas, estaciones y personas desde `prisma/migracion-datos/`. Se detiene ante divergencias; `-- --sincronizar` sobrescribe, `-- --simular` solo muestra |
 | `npm run db:fixtures` | Datos demostrativos para probar movimientos. Exigen `BODEGASOSUR_FIXTURES=permitidos` y una base sin operación |
@@ -62,9 +63,10 @@ El script junta `prisma/sql/antes/`, el DDL que genera Prisma desde `schema.pris
 ## Qué hay construido
 
 - **Nueve catálogos** con alta, edición, búsqueda y baja lógica: empresas, bodegas, estaciones, áreas, unidades de medida, categorías, artículos, proveedores y personas.
-- **Modelo de datos completo** — 19 modelos en dos esquemas de PostgreSQL, con los invariantes escritos en la base: existencia nunca negativa, autorización verificada en el instante del acto y de escritura única, claves de negocio inmutables, y una bitácora alimentada por trigger que registra todo cambio a cualquier dato.
+- **Modelo de datos completo** — 19 modelos en dos esquemas de PostgreSQL, con los invariantes escritos en la base: existencia nunca negativa, autorización verificada en el instante del acto y de escritura única, claves de negocio inmutables, y una bitácora alimentada por trigger para los cambios de negocio en las tablas auditadas.
 - **Entradas completas en el trabajo local** — listado, captura y edición de borradores, confirmación con folio, capas de costo, existencias y Server Actions protegidas. Los importes se calculan en PostgreSQL.
 - **Salidas en desarrollo** — solicitud, autorización, rechazo, cancelación, retiro PEPS y recepción, con lecturas, Server Actions protegidas, conciliación SQL y pruebas contra PostgreSQL. Faltan las pantallas para usar el flujo desde la aplicación.
+- **Actor verificable en desarrollo** — cada escritura protegida de un usuario liga en PostgreSQL un JWT RS256 de Clerk a su transacción. La bitácora y las columnas de actor usan esa identidad; las escrituras ordinarias sin liga se rechazan. Producción se desplegará al cerrar los entregables.
 - **Tablero** con el avance por fases y los datos base cargados.
 
 Las pantallas de salidas y traspasos siguen pendientes; sus tablas ya existen. El [contrato de la fase 6](docs/decisiones-otros/04-fase-6-salidas.md) describe el flujo y las pruebas necesarias antes de habilitar una entrega.

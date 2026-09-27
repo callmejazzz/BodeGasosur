@@ -1,8 +1,11 @@
 /*
-  accionProtegida() vuelve a exigir el permiso dentro de la transacción, bajo
-  FOR SHARE del usuario y antes de confirmar. La sesión se leyó antes; aquí se
-  prueba la carrera con la revocación, contra PostgreSQL y con el usuario de
-  ejecución. Solo se sustituye la sesión de Clerk y lo que existe dentro de Next.
+  Las puertas de escritura de db.ts, contra PostgreSQL y con el usuario de
+  ejecución. accionProtegida() liga el actor con el token de Clerk y vuelve a
+  exigir el permiso dentro de la transacción, bajo FOR SHARE del usuario y antes
+  de confirmar; aquí se prueba la carrera con la revocación y lo que pasa con
+  un token ausente, ajeno o alterado. También el webhook y el acceso denegado.
+  Solo se sustituye la sesión de Clerk (que firma tokens de verdad) y lo que
+  existe dentro de Next.
 */
 
 import { randomUUID } from "node:crypto";
@@ -10,16 +13,18 @@ import { afterAll, beforeAll, describe, expect, inject, it, vi } from "vitest";
 import { crearCliente } from "../../prisma/comun";
 import { URL_PRUEBAS } from "../../pruebas/base-de-pruebas";
 import { bloqueadaPor, conexion, desenlace, type Conexion } from "../../pruebas/concurrencia";
+import { firmarToken } from "../../pruebas/tokens";
 import type { Permiso } from "./permisos";
 
-const sesion = vi.hoisted(() => ({ userId: null as string | null }));
+const sesion = vi.hoisted(() => ({ userId: null as string | null, token: undefined as ((userId: string) => string | null) | undefined }));
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
-vi.mock("@clerk/nextjs/server", () => ({ auth: async () => ({ userId: sesion.userId }) }));
+vi.mock("@clerk/nextjs/server", async () => ({ auth: (await import("../../pruebas/clerk-simulado")).authSimulado(sesion) }));
 
 process.env.DATABASE_URL = inject("urlEjecucionPruebas");
-const { accionProtegida, SinAcceso, SinPermiso } = await import("./db");
+const { accionProtegida, escrituraDeSistema, IdentidadNoVerificable, registrarAccesoDenegado, SinAcceso, SinPermiso } = await import("./db");
+const { guardarAcceso } = await import("./usuarios/repo");
 
 const prisma = crearCliente(URL_PRUEBAS);
 let observador: Conexion;
@@ -54,7 +59,7 @@ const escribir = (permiso: Permiso) =>
     return nombre;
   });
 
-async function usuario(datos: { rol: "COMPRAS" | "JEFE"; puedeAutorizar?: boolean }) {
+async function usuario(datos: { rol: "SUPERADMIN" | "COMPRAS" | "JEFE"; puedeAutorizar?: boolean }) {
   const u = await prisma.usuario.create({
     data: { clerkUserId: `user_vig_${randomUUID().slice(0, 8)}`, correo: `vig.${randomUUID().slice(0, 8)}@prueba.test`, ...datos },
   });
@@ -212,6 +217,107 @@ describe("accionProtegida relee el usuario bajo candado antes de confirmar", () 
       await expect(escribir("salidas:autorizar")(`vigencia ${randomUUID()}`, null)).rejects.toBeInstanceOf(SinPermiso);
     } finally {
       await candado.end();
+    }
+  });
+});
+
+describe("el token de Clerk que liga al actor", () => {
+  const escribirComoCompras = async () => {
+    const u = await usuario({ rol: "COMPRAS" });
+    return { u, accion: escribir("entradas:capturar") };
+  };
+
+  it("sin token, o con el de otra persona, la respuesta es la negativa y no se escribe nada", async () => {
+    const { accion } = await escribirComoCompras();
+    const otro = await prisma.usuario.create({
+      data: { clerkUserId: `user_otro_${randomUUID().slice(0, 8)}`, correo: `otro.${randomUUID().slice(0, 8)}@prueba.test`, rol: "COMPRAS" },
+    });
+    try {
+      for (const token of [() => null, () => firmarToken(inject("llavePruebas"), otro.clerkUserId)]) {
+        sesion.token = token;
+        const nombre = `vigencia ${randomUUID()}`;
+        await expect(accion(nombre, null)).rejects.toBeInstanceOf(SinAcceso);
+        await expect(existe(nombre)).resolves.toBe(0);
+      }
+    } finally {
+      sesion.token = undefined;
+    }
+  });
+
+  it("un token que la base no verifica no escribe, y deja una línea propia en el log; un kid sin cargar, la suya", async () => {
+    const { accion } = await escribirComoCompras();
+    const errores = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const casos = [
+        { token: (id: string) => firmarToken(inject("llavePruebas"), id, { carga: { aud: "otra" } }), linea: /\[seguridad\] token rechazado \(BG701\)/ },
+        { token: (id: string) => firmarToken(inject("llavePruebas"), id, { encabezado: { kid: "rotada" } }), linea: /\[seguridad\] kid desconocido: La llave rotada/ },
+      ];
+      for (const { token, linea } of casos) {
+        sesion.token = token;
+        errores.mockClear();
+        const nombre = `vigencia ${randomUUID()}`;
+        await expect(accion(nombre, null)).rejects.toBeInstanceOf(IdentidadNoVerificable);
+        expect(errores.mock.calls.map((c) => String(c[0])).some((l) => linea.test(l))).toBe(true);
+        await expect(existe(nombre)).resolves.toBe(0);
+      }
+    } finally {
+      sesion.token = undefined;
+      errores.mockRestore();
+    }
+  });
+
+  it("un superadmin guarda accesos por la puerta, con su actor en la bitácora", async () => {
+    const superadmin = await usuario({ rol: "SUPERADMIN" });
+    const objetivo = await prisma.usuario.create({
+      data: { clerkUserId: `user_obj_${randomUUID().slice(0, 8)}`, correo: `obj.${randomUUID().slice(0, 8)}@prueba.test`, rol: "COMPRAS" },
+    });
+    const guardar = accionProtegida("usuarios:administrar", (tx, _u, datos: Parameters<typeof guardarAcceso>[1]) => guardarAcceso(tx, datos));
+    sesion.userId = superadmin.clerkUserId;
+    await guardar({ clerkUserId: objetivo.clerkUserId, correo: objetivo.correo, rol: "JEFE", puedeAutorizar: true, activo: true });
+    await expect(prisma.usuario.findUniqueOrThrow({ where: { id: objetivo.id } })).resolves.toMatchObject({ rol: "JEFE", puedeAutorizar: true });
+    await expect(
+      prisma.bitacora.findFirstOrThrow({ where: { tabla: "Usuario", registroId: objetivo.id, accion: "ACTUALIZAR" }, orderBy: { ocurridoEn: "desc" } }),
+    ).resolves.toMatchObject({ usuarioId: superadmin.id, verificacion: "liga" });
+  });
+});
+
+describe("las escrituras sin sesión de usuario", () => {
+  it("el webhook sincroniza correo y bajas, registra sesiones y no puede tocar un rol", async () => {
+    const u = await prisma.usuario.create({
+      data: { clerkUserId: `user_wh_${randomUUID().slice(0, 8)}`, correo: `wh.${randomUUID().slice(0, 8)}@prueba.test`, rol: "COMPRAS" },
+    });
+    const correo = `nuevo.${randomUUID().slice(0, 8)}@prueba.test`;
+    await escrituraDeSistema("clerk-webhook", async (db) => {
+      await db.eventoWebhook.create({ data: { eventoId: `msg_${randomUUID()}`, tipo: "user.updated", payload: {} } });
+      await db.usuario.updateMany({ where: { clerkUserId: u.clerkUserId }, data: { correo } });
+      await db.registrarEventoDeSesion({ clerkUserId: u.clerkUserId, tipo: "SESION_INICIADA", ip: "10.0.0.2", agente: null });
+    });
+    await expect(prisma.usuario.findUniqueOrThrow({ where: { id: u.id } })).resolves.toMatchObject({ correo });
+    await expect(prisma.eventoAcceso.findFirstOrThrow({ where: { usuarioId: u.id } })).resolves.toMatchObject({ tipo: "SESION_INICIADA", ip: "10.0.0.2" });
+    await expect(
+      prisma.bitacora.findFirstOrThrow({ where: { tabla: "Usuario", registroId: u.id }, orderBy: { ocurridoEn: "desc" } }),
+    ).resolves.toMatchObject({ origen: "clerk-webhook", verificacion: "declarada", usuarioId: null });
+
+    await expect(
+      escrituraDeSistema("clerk-webhook", (db) => db.usuario.updateMany({ where: { clerkUserId: u.clerkUserId }, data: { rol: "SUPERADMIN" } })),
+    ).rejects.toThrow(/BG710|solo cambia el correo/);
+    await expect(prisma.usuario.findUniqueOrThrow({ where: { id: u.id } })).resolves.toMatchObject({ rol: "COMPRAS" });
+  });
+
+  it("el acceso denegado se registra con la identidad del token, y el de un usuario activo no", async () => {
+    const errores = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const sinCuenta = `user_denegado_${randomUUID().slice(0, 8)}`;
+      sesion.userId = sinCuenta;
+      await registrarAccesoDenegado();
+      await expect(prisma.eventoAcceso.count({ where: { clerkUserId: sinCuenta, tipo: "ACCESO_DENEGADO" } })).resolves.toBe(1);
+
+      const activo = await usuario({ rol: "COMPRAS" });
+      await registrarAccesoDenegado();
+      await expect(prisma.eventoAcceso.count({ where: { clerkUserId: activo.clerkUserId } })).resolves.toBe(0);
+      expect(errores.mock.calls.some((c) => String(c[0]).startsWith("[seguridad] no se registró el acceso denegado"))).toBe(true);
+    } finally {
+      errores.mockRestore();
     }
   });
 });

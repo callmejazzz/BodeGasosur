@@ -26,6 +26,17 @@ export function crearCliente(url = process.env.DATABASE_URL): PrismaClient {
   return new PrismaClient({ adapter: new PrismaPg({ connectionString: url }) });
 }
 
+/**
+ * Los scripts escriben como el dueño del esquema, que la base reconoce como
+ * login de confianza: el usuario de ejecución ya no escribe sin un token de
+ * Clerk (prisma/sql/despues/96-actor-exigido.sql).
+ */
+export function crearClienteDelDueno(): PrismaClient {
+  const url = process.env.DATABASE_URL_MIGRACIONES;
+  if (!url) throw new Error("Falta DATABASE_URL_MIGRACIONES: los scripts de datos escriben como el dueño del esquema.");
+  return crearCliente(url);
+}
+
 /** `true` cuando el archivo se corrió con `tsx archivo.ts`, y no se importó. */
 export function esEjecucionDirecta(urlDelModulo: string): boolean {
   const principal = process.argv[1];

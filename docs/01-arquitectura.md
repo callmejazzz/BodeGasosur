@@ -17,7 +17,7 @@ a qué costo unitario, a qué área se destina y con qué observaciones.
 | Autenticación   | **Clerk**                                                                  | Identidad delegada: contraseñas, sesiones y bloqueo por intentos dejan de ser código nuestro (§3.6)      |
 | Autorización    | **PostgreSQL**, con tres roles y la bandera `puedeAutorizar`               | Los permisos se leen de la base en cada petición, así que revocar surte efecto de inmediato (§3.3, §3.6) |
 | Invariantes     | **En la base**, como `CHECK` y triggers                                    | La capa de servicios no es el único escritor y nunca lo será (§3.7)                                      |
-| Entorno         | **Local durante el desarrollo**; el destino se decide antes de la `v1.0.0` | Ver [05](05-versionado-y-despliegue.md) §8 y el hallazgo **D1** de la [auditoría](cimientos-word/09-auditoria-arquitectura.docx)       |
+| Entorno         | **Local durante el desarrollo**; el destino se decide antes de la `v1.0.0` | Ver [05](05-versionado-y-despliegue.md) §8 y el hallazgo **D1** de la [auditoría](cimientos-word/04-auditoria-arquitectura.docx)       |
 | Identificadores | **UUIDv7** nativo como llave primaria                                      | El catálogo de estaciones es global; los ids no pueden chocar entre proyectos (§3.5)                     |
 | URLs            | Por **clave de negocio**, no por id                                        | `/estaciones/ES05588`, no un UUID que nadie puede dictar por teléfono                                    |
 | Cantidades      | **Unidades base enteras**, normalizadas desde `UNIDAD` o `CAJA`            | Existencia y PEPS nunca operan con cajas; el factor usado queda congelado en cada partida                 |
@@ -35,8 +35,10 @@ con un movimiento de reverso que deja rastro. Si Compras pregunta «¿por qué e
 cambió de 40 a 10 piezas?», el sistema tiene la respuesta.
 
 Y desde la fase 2 responde también **quién** y **cuándo**: cada transición guarda su actor
-y su marca de tiempo, y una tabla `Bitacora` alimentada por trigger guarda todo cambio a
-cualquier dato, incluido quitarle a alguien la facultad de autorizar.
+y su marca de tiempo. Una tabla `Bitacora` alimentada por trigger guarda los cambios de
+negocio de las tablas auditadas, incluido quitarle a alguien la facultad de autorizar.
+Un `UPDATE` que solo toca `updatedAt` exige actor, pero no crea un renglón sin contenido
+de negocio.
 
 En una `ENTRADA`, esos actores no se confunden: `creadoPor` identifica a quien capturó el
 borrador y `confirmadoPor` a quien recibió o verificó físicamente el material y decidió
@@ -67,7 +69,7 @@ Lo que sí se conserva es la herramienta de diagnóstico: si el stock no cuadra,
 desde el libro y se compara pieza por pieza.
 
 *(Corrige una promesa anterior de este documento. Ver **B3**, **F2** y **F3** de la
-[auditoría](cimientos-word/09-auditoria-arquitectura.docx).)*
+[auditoría](cimientos-word/04-auditoria-arquitectura.docx).)*
 
 ### 3.3 La autorización es un permiso, y la lista de quién lo tiene es un dato
 
@@ -249,33 +251,44 @@ aplicación.** Exporta `consultar()` para leer y `accionProtegida()` para escrib
 regla de ESLint impide importar el cliente desde `src/app/`. No hay forma de escribir sin
 pasar por el permiso porque no hay a qué llamarle.
 
-`accionProtegida` es además el único lugar donde convergen tres cosas que de otro modo
-habría que recordar por separado:
+`accionProtegida` reúne la comprobación de acceso y la identidad que verifica la base:
 
 ```ts
-export const guardarCatalogo = accionProtegida(
+const guardarCatalogo = accionProtegida(
   ([slug]) => catalogoPorSlug(slug)?.permisoEscritura
     ?? "catalogos:globales:escribir",
-  async (tx, usuario, slug, id, datos) => { /* … */ },
+  async (tx, usuario, slug, id, formData) => { /* … */ },
 );
 
 // Por dentro, una sola vez para todo el sistema:
 //   1. lee la sesión de Clerk y el Usuario local
 //   2. verifica el permiso contra Record<Rol, Permiso[]>
-//   3. abre la transacción
-//   4. SET LOCAL app.usuario_id = …   ← lo lee el trigger de la bitácora
+//   3. pide un JWT nuevo de la plantilla bodegasosur-db
+//   4. abre la transacción y llama a seguridad.fijar_actor(token)
 //   5. antes del commit relee activo, rol y puedeAutorizar con FOR SHARE
 ```
 
-Las Actions de Entradas y Salidas leen el `FormData` y ejecutan Zod dentro del
-callback protegido, después de comprobar sesión y permiso. La relectura final de
-`Usuario` es común a todas las escrituras hechas con `accionProtegida()`.
+Clerk firma el JWT con RS256. `seguridad.fijar_actor()` verifica firma, emisor, audiencia,
+vigencia y usuario local activo; liga su identidad a la transacción y exige un `jti`
+distinto por uso confirmado. La plantilla dura 30 segundos y la base admite como máximo
+60. El usuario de ejecución no puede leer las llaves ni la liga, escribir directamente
+en `Bitacora` o `EventoAcceso`, ni declarar otro actor con `app.usuario_id`. Las llaves
+públicas se cargan y rotan manualmente; una revisión periódica avisa si aparece un `kid`
+desconocido. La autorización funcional continúa en `src/lib/permisos.ts`, no en una
+matriz SQL.
+
+Las Actions de Entradas, Salidas y Catálogos leen el `FormData` dentro de la puerta,
+después de comprobar sesión y permiso. Usuarios hace una comprobación previa antes de
+leerlo o consultar a Clerk, y `accionProtegida()` vuelve a comprobar el acceso al
+escribir. La relectura transaccional final de `Usuario` es común a estas escrituras.
 
 **Hay una segunda puerta, y se declara en vez de descubrirse.** El webhook de Clerk llega
 de fuera, sin sesión, y escribe. Verifica su firma antes de tocar la base, fija
-`app.origen = 'clerk-webhook'` en vez de un usuario, y solo puede escribir tres tablas.
-Cuando nadie fijó ninguna de las dos variables, la bitácora dice `escritura-directa` — que
-es una respuesta honesta, y hoy no existe ninguna.
+`app.origen = 'clerk-webhook'` en vez de un usuario, y su cliente se limita a
+`Usuario`, `EventoWebhook` y el registro de eventos de sesión. Este origen sigue siendo
+una declaración en PostgreSQL; la firma Svix se verifica en la ruta de la aplicación.
+Los scripts y las migraciones que entran con el login de confianza pueden declarar
+`app.usuario_id` o `app.origen`. Las demás escrituras sin liga se rechazan con `BG706`.
 
 **Confirmar un movimiento es un único acto transaccional.** Para una entrada, el candado
 `FOR UPDATE` del encabezado es el reclamo principal; después se bloquean con `FOR SHARE`,
@@ -285,7 +298,7 @@ las existencias por `articuloId` y, al final, el folio. La transición condicion
 juntas. El alta lleva una llave de idempotencia única y compara toda la captura antes de
 revalidar catálogos; una existencia ausente se crea en cero con
 `INSERT … ON CONFLICT DO NOTHING` antes de bloquearla. El contrato ejecutable está en
-[`11-fase-5-entradas.md`](decisiones-otros/11-fase-5-entradas.md).
+[`02-fase-5-entradas.md`](decisiones-otros/02-fase-5-entradas.md).
 
 ### 4.2 Stack concreto
 
@@ -335,6 +348,7 @@ BodeGasosur/
 ├─ scripts/
 │  ├─ armar-migracion.sh          # Junta prisma/sql/ con el DDL generado
 │  ├─ arranque-superadmin.ts      # El primer Superadmin, desde su identidad en Clerk
+│  ├─ llaves-clerk.ts              # Carga manual de llaves públicas de Clerk
 │  └─ bootstrap-produccion.ts     # Plan B: producción limpia, manual y con confirmación
 ├─ prisma.config.ts               # Prisma 7 lee aquí la URL de conexión
 ├─ src/
@@ -363,6 +377,7 @@ BodeGasosur/
 │     │  └─ formulario.ts         # Tipos compartidos del formulario
 │     ├─ entradas/                # Formulario, filtros, lecturas, primitivas y servicio transaccional
 │     ├─ movimientos/             # Primitivas, validación y errores compartidos
+│     ├─ seguridad/               # Revisión periódica de las llaves públicas de Clerk
 │     └─ salidas/                 # Formulario, lecturas, PEPS, servicio y pruebas
 ├─ docker-compose.yml             # PostgreSQL local
 └─ .env.example
@@ -423,7 +438,7 @@ para decidir el día—, la validación de una fecha calendario `YYYY-MM-DD`, su
 valor de Prisma sin desplazarla y las dos funciones de formato. Del lado de SQL, ninguna
 consulta calcula «hoy» por su cuenta: nada de `CURRENT_DATE`, que depende de cómo esté
 configurado el servidor que toque. El contrato y sus casos límite están en
-[`11-fase-5-entradas.md`](decisiones-otros/11-fase-5-entradas.md#10-fechas-de-negocio).
+[`02-fase-5-entradas.md`](decisiones-otros/02-fase-5-entradas.md#10-fechas-de-negocio).
 
 ## 5. Entorno local
 
@@ -471,7 +486,7 @@ Comandos útiles:
 | `npm run dev` | Servidor de desarrollo |
 | `npm run db:up` / `db:down` | Levanta o baja PostgreSQL |
 | `npm run db:reset` | Desarrollo: borra todo y encadena configuración, catálogos reales, fixtures y Superadmin |
-| `npm run prod:bootstrap` | Producción: manual y con confirmación, sin fixtures ([Plan B](decisiones-otros/10-plan-b-produccion.md)) |
+| `npm run prod:bootstrap` | Producción: manual y con confirmación, sin fixtures ([Plan B](decisiones-otros/01-plan-b-produccion.md)) |
 | `npm run test` | Pruebas de integración contra PostgreSQL |
 | `npm run db:studio` | Explorador visual de la base de datos |
 
@@ -480,7 +495,7 @@ Comandos útiles:
 No se resuelven ahora, pero la arquitectura les deja lugar:
 
 - **Dónde se despliega.** Estaba decidido —Vercel Pro + Supabase Pro— y la
-  [auditoría](cimientos-word/09-auditoria-arquitectura.docx) lo reabrió en **D1**: para diez usuarios en una oficina de
+  [auditoría](cimientos-word/04-auditoria-arquitectura.docx) lo reabrió en **D1**: para diez usuarios en una oficina de
   Acapulco, el serverless cobra complejidad —pooler, dos URLs de conexión, arranques en
   frío sobre transacciones con locks— a cambio de un escalado elástico que nadie necesita.
   Se decide antes de la `v1.0.0`. La elección no ata nada: Next.js corre igual en un

@@ -35,7 +35,7 @@ import type { PrismaClient } from "@prisma/client";
 import { FORMA_RFC, normalizarRfc } from "../../src/lib/rfc";
 import {
   buscarPorNombre,
-  crearCliente,
+  crearClienteDelDueno,
   esEjecucionDirecta,
   nombreNormalizado,
   type Tx,
@@ -355,7 +355,7 @@ async function main() {
   const desconocido = args.find((a) => a !== "--sincronizar" && a !== "--simular");
   if (desconocido) throw new Error(`Opción desconocida: ${desconocido}. Se aceptan --sincronizar y --simular.`);
 
-  const prisma = crearCliente();
+  const prisma = crearClienteDelDueno();
   try {
     console.log(
       `Migrando catálogos de Gasosur${simular ? " (simulación, no se escribe nada)" : ""}${sincronizar ? " con --sincronizar" : ""}…`,

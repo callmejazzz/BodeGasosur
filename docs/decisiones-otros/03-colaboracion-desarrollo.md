@@ -32,7 +32,8 @@ POSTGRES_PORT="5434"
 POSTGRES_DB="bodegasosur_ana"
 POSTGRES_USER="bodegasosur"
 POSTGRES_PASSWORD="bodegasosur"
-DATABASE_URL="postgresql://bodegasosur:bodegasosur@localhost:5434/bodegasosur_ana?schema=public"
+DATABASE_URL_MIGRACIONES="postgresql://bodegasosur:bodegasosur@localhost:5434/bodegasosur_ana?schema=public"
+DATABASE_URL="postgresql://bodegasosur_ana_app:contrasena-propia@localhost:5434/bodegasosur_ana?schema=public"
 DATABASE_URL_PRUEBAS="postgresql://bodegasosur:bodegasosur@localhost:5434/bodegasosur_ana_prueba?schema=public"
 BODEGASOSUR_FIXTURES="permitidos"
 ```
@@ -50,8 +51,10 @@ npm run db:reset
 npm run dev
 ```
 
-`db:reset` migra, carga la configuración, los catálogos y fixtures de desarrollo, y
-arranca el Superadmin de **esa** base. No comparte registros con otra base ni otro volumen.
+`DATABASE_URL_MIGRACIONES` corresponde al dueño; `DATABASE_URL`, a un usuario distinto
+sin propiedad. `db:reset` migra, crea el usuario de ejecución, carga las llaves públicas
+de Clerk, configura la base, carga los catálogos y fixtures de desarrollo y arranca el
+Superadmin de **esa** base. No comparte registros con otra base ni otro volumen.
 
 ## 3. Entrar y ver todas las pantallas
 
@@ -68,6 +71,11 @@ NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="pk_test_..."
 CLERK_SECRET_KEY="sk_test_..."
 CLERK_SUPERADMIN_CORREO="correo-del-colaborador@ejemplo.com"
 ```
+
+La instancia de desarrollo necesita la plantilla JWT `bodegasosur-db`, RS256, con vida
+de 30 segundos y el claim `aud` configurado como `bodegasosur-db`. Las llaves privadas
+permanecen en Clerk; `db:reset` carga únicamente las públicas en PostgreSQL. Si Clerk
+rota su llave, `npm run db:llaves-clerk` la carga manualmente antes de seguir escribiendo.
 
 Primero debe existir esa identidad en Clerk (por registro de desarrollo o por invitación).
 Después `npm run db:reset` la enlaza como Superadmin en la base aislada. Esto le concede

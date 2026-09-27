@@ -26,9 +26,8 @@ export default async function LayoutSistema({ children }: { children: ReactNode 
   if (sesion.estado === "sin-sesion") redirect("/sign-in");
 
   if (sesion.estado === "sin-acceso") {
-    // `usuarioId` distingue las dos formas de no tener acceso: nunca dado de
-    // alta (nulo) o desactivado (su fila).
-    await registrarAccesoDenegado(sesion.clerkUserId, sesion.usuarioId);
+    // La identidad y el usuarioId los resuelve la base a partir del token.
+    await registrarAccesoDenegado();
     redirect("/acceso-denegado");
   }
 

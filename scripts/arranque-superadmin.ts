@@ -19,7 +19,7 @@
 
 import { createClerkClient } from "@clerk/backend";
 import type { PrismaClient } from "@prisma/client";
-import { crearCliente, esEjecucionDirecta } from "../prisma/comun";
+import { crearClienteDelDueno, esEjecucionDirecta } from "../prisma/comun";
 
 export type ResultadoArranque =
   | { estado: "creado"; clerkUserId: string }
@@ -110,7 +110,7 @@ async function main() {
     return;
   }
 
-  const prisma = crearCliente();
+  const prisma = crearClienteDelDueno();
   try {
     console.log(`Buscando ${correo} en Clerk…`);
     const r = await arrancarSuperadmin(prisma, { correo, secretKey });

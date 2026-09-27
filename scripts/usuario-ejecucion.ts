@@ -63,6 +63,11 @@ export async function asegurarUsuarioDeEjecucion(urlMigraciones: string | undefi
       [app.usuario],
     );
     if (propiedades.rowCount! > 0) throw new Error(`${app.usuario} es dueño de la base o de sus tablas; usa otro usuario para la aplicación.`);
+    // Miembro de quien migra podría tomar sus privilegios con SET ROLE.
+    if (existe) {
+      const { rows: miembro } = await cliente.query<{ es: boolean }>("SELECT pg_has_role($1, current_user, 'MEMBER') AS es", [app.usuario]);
+      if (miembro[0].es) throw new Error(`${app.usuario} es miembro del rol dueño; usa un usuario sin esa pertenencia.`);
+    }
 
     // DDL no admite parámetros: format() cita en el servidor el nombre y la contraseña.
     const atributos = "LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS INHERIT";

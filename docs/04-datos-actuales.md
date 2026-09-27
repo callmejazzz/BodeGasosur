@@ -95,7 +95,7 @@ distintas. Si entrara sin capa, la primera salida de un artículo no valuado enc
 existencia 40 y capas 0, y el sistema tendría que elegir entre bloquear una salida que sí
 tiene existencia —contra lo que Compras pidió por escrito— o descontar existencia sin
 consumir capa y dejar que las dos cifras divergieran en silencio. Ver **A1** de la
-[auditoría](cimientos-word/09-auditoria-arquitectura.docx).
+[auditoría](cimientos-word/04-auditoria-arquitectura.docx).
 
 Lo mismo aplica al proveedor, el área destino y la moneda de las entradas históricas:
 reconstruirlos sería trabajo manual de semanas. Las facturas y remisiones de ese periodo
@@ -203,7 +203,7 @@ tiene solo 20 valores capturados, entre ellos *Refacciones*, *Papelería*, *Lumi
 *Uniformes*, *Imprenta*, *Cerrajería*, *Paquetería*, *Extintores* y *Equipos de cómputo*:
 sirve como semilla de un catálogo de giros, no como dato confiable.
 
-> **No se migran.** Por el [Plan B](decisiones-otros/10-plan-b-produccion.md), Compras crea los proveedores
+> **No se migran.** Por el [Plan B](decisiones-otros/01-plan-b-produccion.md), Compras crea los proveedores
 > desde la aplicación. Lo de abajo queda como análisis de la hoja, y hay un dato que
 > conviene tener a la mano al capturarlos: el renglón **`ALCARAZ SOBERANIS, S.A. DE C.V.
 > (CHILPO 4)`** trae `MAS-950425-A11`, que es el RFC de **Muller y Asociados**; su correo,
@@ -219,7 +219,7 @@ Boulevard (2)…
 No es un error: entre empresas del grupo se factura, y por eso están ahí. Durante un
 tiempo esto justificó que `Proveedor` apuntara a la tabla `Empresa` global; **se
 revirtió**: `Empresa` es exclusivamente Gasosur y el proveedor lleva su propia razón
-social y RFC ([10-plan-b-produccion.md](decisiones-otros/10-plan-b-produccion.md)).
+social y RFC ([01-plan-b-produccion.md](decisiones-otros/01-plan-b-produccion.md)).
 
 Además, **12 RFC están repetidos dentro de la propia hoja**, en parte porque se escriben
 con y sin guiones (`MAS950425A11` frente a `MAS-950425-A11`). La normalización de §4 de
@@ -227,7 +227,7 @@ ese documento resuelve las dos cosas a la vez.
 
 ## 7. Plan de migración
 
-> **Superado por el [Plan B](decisiones-otros/10-plan-b-produccion.md)** (2026-09-11): de esta lista se
+> **Superado por el [Plan B](decisiones-otros/01-plan-b-produccion.md)** (2026-09-11): de esta lista se
 > hicieron el paso 1 y las dos personas confirmadas del paso 4 —en
 > [`prisma/migracion-datos/`](../prisma/migracion-datos/README.md)—. Los pasos 2, 3, 5 y 6
 > no se hacen mientras Compras no entregue una normalización confiable; si la entrega,

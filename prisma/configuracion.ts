@@ -12,7 +12,7 @@
 //
 // Uso:  npm run db:configuracion
 
-import { buscarPorNombre, crearCliente, esEjecucionDirecta, type Tx } from "./comun";
+import { buscarPorNombre, crearClienteDelDueno, esEjecucionDirecta, type Tx } from "./comun";
 
 export const BODEGAS = [{ nombre: "Magallanes" }, { nombre: "Servi Fer" }] as const;
 
@@ -64,7 +64,7 @@ export async function aplicarConfiguracion(tx: Tx): Promise<ResumenConfiguracion
 }
 
 async function main() {
-  const prisma = crearCliente();
+  const prisma = crearClienteDelDueno();
   try {
     console.log("Aplicando la configuración mínima…");
     const r = await prisma.$transaction((tx) => aplicarConfiguracion(tx));

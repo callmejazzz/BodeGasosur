@@ -23,6 +23,12 @@ puede hacer ahora que antes no se podía.
   comprobación de datos existentes antes de instalar los triggers.
 - Seis Server Actions protegidas con pruebas de acceso y revocación concurrente.
   La interfaz de Salidas sigue pendiente; el flujo aún no está disponible en pantalla.
+- La base verifica con una llave pública el actor firmado por Clerk en cada escritura
+  protegida de un usuario.
+  El usuario de ejecución no puede atribuir cambios a otra persona ni insertar registros
+  de bitácora. Se mantienen el historial y la protección frente a revocaciones mientras
+  se autoriza o administra usuarios. Las pantallas de Usuarios y Catálogos comprueban
+  el acceso antes de procesar formularios.
 
 ---
 
@@ -201,7 +207,7 @@ autorización si el sistema no sabe quién captura.
 Cierra la fase 2: los cimientos corregidos. Es una versión de estructura — casi nada de lo
 que trae se ve en pantalla todavía, y ese es el punto: son las decisiones que después no se
 pueden cambiar barato. Sale de la auditoría de arquitectura
-([09-auditoria-arquitectura.docx](docs/cimientos-word/04-auditoria-arquitectura.docx)) y de las decisiones que se tomaron sobre ella.
+([04-auditoria-arquitectura.docx](docs/cimientos-word/04-auditoria-arquitectura.docx)) y de las decisiones que se tomaron sobre ella.
 
 **Lo que cambia para quien va a usar el sistema**
 
@@ -209,9 +215,9 @@ pueden cambiar barato. Sale de la auditoría de arquitectura
   ahora esas dos reglas estaban escritas en los documentos; ahora la base de datos las
   rechaza, aunque el error venga de un programa mal hecho o de una corrección a mano.
 - **Queda registro de quién hace cada cosa.** Cada movimiento guarda quién lo creó, quién
-  lo autorizó, quién lo entregó y a qué hora, y una bitácora aparte guarda todo cambio a
-  cualquier dato — incluido quitarle a alguien la facultad de autorizar, que hasta ahora
-  era el único permiso sin historia.
+  lo autorizó, quién lo entregó y a qué hora, y una bitácora aparte guarda los cambios de
+  negocio en las tablas auditadas — incluido quitarle a alguien la facultad de
+  autorizar, que hasta ahora era el único permiso sin historia.
 - **Las fechas dejan de correrse un día.** Un movimiento capturado a las seis de la tarde
   en Acapulco se guardaba con la fecha del día siguiente. Ya no.
 - **Las cantidades son piezas enteras** y la unidad de medida describe la presentación —una

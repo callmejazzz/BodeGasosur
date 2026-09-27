@@ -1,6 +1,6 @@
 # BodeGasosur — Contrato de la Fase 5: Entradas
 
-Este documento fija el comportamiento vigente de la Fase 5. Complementa el [modelo de datos](../02-modelo-de-datos.md), la [arquitectura](../01-arquitectura.md), los [hallazgos del levantamiento](../cimientos-word/05-hallazgos-levantamiento.docx) y las decisiones de concurrencia de la [auditoría](../cimientos-word/09-auditoria-arquitectura.docx). Si una descripción anterior contradice este contrato, manda este documento y el resumen de [entregables por fase](../entregables-fases/README.md).
+Este documento fija el comportamiento vigente de la Fase 5. Complementa el [modelo de datos](../02-modelo-de-datos.md), la [arquitectura](../01-arquitectura.md), los [hallazgos del levantamiento](../cimientos-word/03-hallazgos-levantamiento.docx) y las decisiones de concurrencia de la [auditoría](../cimientos-word/04-auditoria-arquitectura.docx). Si una descripción anterior contradice este contrato, manda este documento y el resumen de [entregables por fase](../entregables-fases/README.md).
 
 **Estado de implementación:** los pasos 1 a 9 están construidos y verificados contra
 PostgreSQL real. Las Server Actions de las pantallas pasan por las puertas de lectura y
@@ -278,7 +278,9 @@ fechas inválidas y conversión de ida y vuelta sin desplazamiento.
   canónicos desde la captura y el artículo; al confirmar compara el factor vigente con la fotografía guardada y rechaza una diferencia. Nunca confía en valores derivados enviados por el navegador ni recalcula silenciosamente un borrador
 - La llave de idempotencia no sustituye autenticación ni autorización
 - El SQL de locks, folios y dinero usa parámetros; ningún identificador se interpola
-- La bitácora recibe el actor mediante `app.usuario_id`
+- La bitácora recibe el actor de la liga transaccional del JWT de Clerk verificado
+  por PostgreSQL. `app.usuario_id` queda reservado para scripts y migraciones que
+  entran con el login de confianza
 - La traducción de errores falla cerrada: todo error de Prisma o PostgreSQL produce un
   mensaje seguro por omisión. Solo los SQLSTATE propios `BG501`–`BG506`, asignados a los
   `RAISE` controlados de esta fase, conservan su texto; el error original queda como `cause`

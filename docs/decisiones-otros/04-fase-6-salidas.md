@@ -151,8 +151,11 @@ de instalar los triggers; `BG606` y `BG607` se traducen a mensajes seguros.
 Las seis Server Actions usan Zod dentro de `accionProtegida()`, después de comprobar
 sesión y permiso. El `FormData` se lee dentro de esa puerta. Las pruebas de acceso
 cubren sesión ausente, usuario inactivo, rol sin permiso, autorizador sin bandera y
-revocaciones concurrentes. La bitácora actual recibe `app.usuario_id` desde la
-transacción protegida. La interfaz aún debe conectarse a estas acciones y lecturas.
+revocaciones concurrentes. `accionProtegida()` liga a cada transacción un JWT RS256 de
+Clerk mediante `seguridad.fijar_actor()`; la bitácora obtiene de esa liga al actor y el
+`jti`, y la base rechaza escrituras ordinarias sin ella. El trigger de autorización lee
+`puedeAutorizar` bajo `FOR SHARE` para cubrir también SQL directo. La interfaz aún debe
+conectarse a estas acciones y lecturas.
 
 ## 7. Pruebas de aceptación
 

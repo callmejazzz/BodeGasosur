@@ -1,9 +1,11 @@
 import "dotenv/config";
 import { execFileSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { generateKeyPairSync, randomBytes } from "node:crypto";
 import { Client } from "pg";
 import type { TestProject } from "vitest/node";
+import { AUDIENCIA, cargarJwk, type JwkRsa } from "../scripts/llaves-clerk";
 import { asegurarUsuarioDeEjecucion } from "../scripts/usuario-ejecucion";
+import type { LlaveDePrueba } from "./tokens";
 
 /** La base de pruebas vista por su dueño: la recrea, la migra y siembra. */
 export const URL_PRUEBAS =
@@ -15,8 +17,12 @@ export const URL_PRUEBAS =
 declare module "vitest" {
   export interface ProvidedContext {
     urlEjecucionPruebas: string;
+    llavePruebas: LlaveDePrueba;
   }
 }
+
+/** El emisor de los tokens de prueba; nunca coincide con una instancia de Clerk. */
+export const EMISOR_PRUEBAS = "https://clerk.bodegasosur.test";
 
 const USUARIO_DE_EJECUCION = "bodegasosur_prueba_app";
 
@@ -51,4 +57,22 @@ export default async function prepararBaseDePruebas(project: TestProject) {
   ejecucion.password = randomBytes(18).toString("hex");
   await asegurarUsuarioDeEjecucion(URL_PRUEBAS, ejecucion.toString());
   project.provide("urlEjecucionPruebas", ejecucion.toString());
+
+  // Un par RSA por corrida: la pública se carga como la de Clerk, la privada
+  // firma los tokens de prueba y nunca sale de la memoria.
+  const { publicKey, privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const llave: LlaveDePrueba = {
+    kid: `prueba-${randomBytes(6).toString("hex")}`,
+    emisor: EMISOR_PRUEBAS,
+    audiencia: AUDIENCIA,
+    privadaPem: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+  };
+  const dueno = new Client({ connectionString: URL_PRUEBAS });
+  await dueno.connect();
+  try {
+    await cargarJwk(dueno, { ...(publicKey.export({ format: "jwk" }) as JwkRsa), kid: llave.kid }, llave.emisor);
+  } finally {
+    await dueno.end();
+  }
+  project.provide("llavePruebas", llave);
 }

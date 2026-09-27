@@ -1,9 +1,9 @@
 # BodeGasosur — Modelo de datos
 
-Recoge lo acordado con Compras en los [hallazgos del levantamiento](cimientos-word/05-hallazgos-levantamiento.docx), el
+Recoge lo acordado con Compras en los [hallazgos del levantamiento](cimientos-word/03-hallazgos-levantamiento.docx), el
 catálogo global de [03-estaciones](03-estaciones.md), el análisis del Excel vigente en
 [04-datos-actuales](04-datos-actuales.md) y las correcciones de la
-[auditoría de arquitectura](cimientos-word/09-auditoria-arquitectura.docx).
+[auditoría de arquitectura](cimientos-word/04-auditoria-arquitectura.docx).
 
 > **Este documento ya describe el código, no un destino.** El esquema vive en
 > [`prisma/schema.prisma`](../prisma/schema.prisma) y los invariantes que la base hace
@@ -154,7 +154,7 @@ la ficha del artículo y lo lleva a capas:
 **PEPS está confirmado.** Compras lo eligió deliberadamente aunque contabilidad no exija
 método alguno: da mejor control que un promedio, porque cada salida conserva el costo real
 de la compra de la que salió. Encaja además con lo ya decidido: al no rastrearse la serie
-([B5](cimientos-word/05-hallazgos-levantamiento.docx)), no hay forma de saber de
+([B5](cimientos-word/03-hallazgos-levantamiento.docx)), no hay forma de saber de
 qué factura salió una pieza concreta, y PEPS es la aproximación más cercana.
 
 ### El inventario migrado entra con capa y sin costo
@@ -268,7 +268,7 @@ candado del encabezado es el reclamo principal de la confirmación; el `UPDATE` 
 condicionado a `estatus = 'BORRADOR'` es una defensa adicional. Repetir la misma operación
 devuelve el mismo movimiento; nunca crea capas, existencia o folios adicionales. El
 contrato completo está en
-[`11-fase-5-entradas.md`](decisiones-otros/11-fase-5-entradas.md).
+[`02-fase-5-entradas.md`](decisiones-otros/02-fase-5-entradas.md).
 
 ## 6. Normalización a unidades base enteras
 
@@ -316,7 +316,7 @@ costoUnitarioBaseMxn = redondear4(
 Los totales de factura se calculan desde la captura original y se redondean por renglón; no
 se reconstruyen desde el costo base redondeado. El contrato completo, incluidos IVA,
 validaciones y ejemplos, está en
-[`11-fase-5-entradas.md`](decisiones-otros/11-fase-5-entradas.md#5-normalización-a-la-unidad-base).
+[`02-fase-5-entradas.md`](decisiones-otros/02-fase-5-entradas.md#5-normalización-a-la-unidad-base).
 
 ## 7. Usuarios, permisos y el catálogo compartido
 
@@ -376,10 +376,15 @@ Dos tablas responden dos preguntas distintas, y por eso son dos:
 - **`Bitacora`** — *«¿quién cambió este dato?»*. Append-only, con `antes` y `despues` en
   `jsonb`. La escribe un **trigger**, no los servicios: la extensión de Prisma conocería al
   usuario pero no vería lo que escriben `prisma studio`, los scripts de migración ni una
-  consulta directa. El actor llega por variable de sesión (`app.usuario_id`), y cuando
-  nadie la fijó, `app.origen` dice quién escribió.
+  consulta directa. Para la aplicación, el actor sale de un JWT RS256 de Clerk verificado
+  por `seguridad.fijar_actor()` y ligado a la transacción; el trigger guarda
+  `verificacion = 'liga'` y su `jti`. Solo los logins de migración y scripts de confianza
+  pueden declarar `app.usuario_id` o `app.origen`. El webhook conserva un origen
+  declarado, verificado con Svix en la ruta. Una escritura ordinaria sin liga se rechaza.
 - **`EventoAcceso`** — *«quién entró»*, incluido quien tocó la puerta y no abrió: una
   identidad de Clerk sin fila en `Usuario` deja `usuarioId` nulo y `clerkUserId` lleno.
+  Las funciones de `seguridad` registran eventos de sesión y accesos realmente denegados;
+  el usuario de ejecución no inserta registros directamente.
 
 Mezclarlas habría llenado el libro de cambios de ruido de inicios de sesión hasta volverlo
 inservible justo cuando alguien lo necesitara.
@@ -404,7 +409,7 @@ Si ya estaba, no se vuelve a procesar; si la transacción falla, el reintento la
 | Se eliminan `transportista` y `vehiculo`; `recibidoPor` pasa a `entregadoA` libre | D4 |
 | Tipo `DEVOLUCION` y bandera `esPrestamo` | D7 y B6 |
 | Estados de salida con autorización; `RETIRADA` registra salida física y `RECIBIDA` cierra desde 2026-09-23 | D2 y D6, ajustados por decisión de alcance posterior |
-| `Proveedor` lleva su propia razón social y RFC; **no** apunta a `Empresa` | `Empresa` es exclusivamente Gasosur ([10](decisiones-otros/10-plan-b-produccion.md)). Si una empresa del grupo debe ser proveedora, se decide como caso de negocio |
+| `Proveedor` lleva su propia razón social y RFC; **no** apunta a `Empresa` | `Empresa` es exclusivamente Gasosur ([10](decisiones-otros/01-plan-b-produccion.md)). Si una empresa del grupo debe ser proveedora, se decide como caso de negocio |
 | `autorizadoPor` apunta a `Usuario`, con `autorizadoEn` y escritura única | **A2** |
 | Actor y marca de tiempo por transición, más `Bitacora` | **A3** |
 | `fecha` como `@db.Date`; los instantes con `@db.Timestamptz(3)` | **E4** |

@@ -228,8 +228,9 @@ model EventoWebhook {
 }
 
 /// Append-only. La escribe un trigger, no los servicios: escribirla a mano garantiza
-/// que se olvide justo en la operación que importaba. El actor sale de la variable
-/// de sesión app.usuario_id; cuando nadie la fijó, app.origen dice quién escribió.
+/// que se olvide justo en la operación que importaba. El actor sale de la liga que
+/// deja seguridad.fijar_actor() con el token de Clerk; los logins de confianza
+/// (migraciones y scripts) lo declaran con app.usuario_id o app.origen.
 model Bitacora {
   id         String         @id @default(uuid(7)) @db.Uuid
   tabla      String
@@ -241,6 +242,11 @@ model Bitacora {
   antes      Json?
   despues    Json?
   ocurridoEn DateTime       @default(now()) @db.Timestamptz(3)
+  /// De dónde salió el actor: liga (token verificado), dueño (login de
+  /// confianza), declarada (webhook) o heredada (solo en la fase A).
+  verificacion String?
+  /// El jti del token de Clerk cuando hubo liga.
+  jti          String?
 
   usuario Usuario? @relation(fields: [usuarioId], references: [id])
 

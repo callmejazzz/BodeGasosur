@@ -49,30 +49,21 @@ function correoPrincipal(datos: IdentidadClerk): string | null {
   return principal?.email_address ?? datos.email_addresses[0]?.email_address ?? null;
 }
 
+/**
+ * Sin fila local la base no registra nada: `EventoAcceso` responde «quién
+ * entró al sistema», no «quién inició sesión en Clerk»; de esas identidades
+ * ya queda el ACCESO_DENEGADO del momento en que tocan la puerta.
+ */
 async function registrarSesion(
   db: ClienteWebhook,
   evento: Extract<WebhookEvent, { type: keyof typeof TIPO_POR_EVENTO }>,
 ) {
-  const clerkUserId = evento.data.user_id;
-  const usuario = await db.usuario.findUnique({
-    where: { clerkUserId },
-    select: { id: true },
-  });
-
-  // Sin fila local no se registra. `EventoAcceso` responde «quién entró al
-  // sistema», no «quién inició sesión en Clerk»: de esas identidades ya queda
-  // el ACCESO_DENEGADO del momento en que tocan la puerta.
-  if (!usuario) return;
-
   const http = evento.event_attributes?.http_request;
-  await db.eventoAcceso.create({
-    data: {
-      clerkUserId,
-      usuarioId: usuario.id,
-      tipo: TIPO_POR_EVENTO[evento.type],
-      ip: http?.client_ip || undefined,
-      agente: http?.user_agent || undefined,
-    },
+  await db.registrarEventoDeSesion({
+    clerkUserId: evento.data.user_id,
+    tipo: TIPO_POR_EVENTO[evento.type],
+    ip: http?.client_ip || null,
+    agente: http?.user_agent || null,
   });
 }
 

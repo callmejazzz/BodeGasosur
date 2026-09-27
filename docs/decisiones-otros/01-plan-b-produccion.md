@@ -26,6 +26,8 @@ los separa es un mecanismo, no un nombre:
 | | Desarrollo — `npm run db:reset` | Producción — `npm run prod:bootstrap` |
 |---|---|---|
 | Esquema | `migrate reset` (destruye y recrea) | `migrate deploy` (solo aplica lo pendiente) |
+| Acceso a la base | Dueño para migraciones y datos; usuario de ejecución separado para la aplicación | Los mismos dos usuarios, con contraseñas propias |
+| Actor verificable | Carga manual de llaves públicas de Clerk, encadenada en `db:reset` | Carga manual de llaves públicas después de migrar, antes de operar |
 | Configuración mínima | `prisma/configuracion.ts` | `prisma/configuracion.ts` |
 | Catálogos reales | `prisma/migracion-datos/` | `prisma/migracion-datos/` |
 | Fixtures | `prisma/fixtures.ts` | **Nunca** |
@@ -40,9 +42,11 @@ movimientos ni existencias.
 start`. Valida el entorno **antes** de `migrate deploy` y sin conectarse —`DATABASE_URL`
 válida y no `*_prueba`, Clerk con llave de producción, terminal interactiva, y
 `BODEGASOSUR_FIXTURES` sin definir, porque si está es una máquina de desarrollo—. Después
-de migrar rechaza una base que ya tenga datos operativos, rechaza divergencias entre los
-CSV y la base —nunca sobrescribe ni reactiva nada—, muestra qué va a escribir y a dónde, y
-exige teclear el nombre de la base para confirmar.
+de migrar crea el usuario de ejecución de `DATABASE_URL` y carga las llaves públicas de
+Clerk como dueño (`DATABASE_URL_MIGRACIONES`). La plantilla `bodegasosur-db` usa RS256 y
+dura 30 segundos. Después rechaza una base que ya tenga datos operativos o divergencias
+entre los CSV y la base —nunca sobrescribe ni reactiva nada—, muestra qué va a escribir y
+a dónde, y exige teclear el nombre de la base para confirmar.
 
 ## Lo que esta decisión cambió en el modelo
 

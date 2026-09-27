@@ -19,7 +19,7 @@ import {
   VARIABLE_DE_AUTORIZACION,
   buscarPorNombre,
   contarDatosOperativos,
-  crearCliente,
+  crearClienteDelDueno,
   describirBase,
   esEjecucionDirecta,
   type Tx,
@@ -217,7 +217,7 @@ export async function aplicarFixtures(tx: Tx): Promise<ResumenFixtures> {
 }
 
 async function main() {
-  const prisma = crearCliente();
+  const prisma = crearClienteDelDueno();
   try {
     const { base, servidor } = describirBase();
     console.log(`Aplicando fixtures de desarrollo en ${base} (${servidor})…`);

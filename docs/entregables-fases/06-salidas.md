@@ -64,6 +64,11 @@ las capas PEPS que el servicio de Salidas consume al retirar.
 - Las seis Server Actions comprueban sesión y permiso antes de leer o validar datos.
   La puerta común relee usuario y permiso con `FOR SHARE` antes de confirmar la
   transacción. Las pruebas cubren acceso, revocación concurrente y errores seguros.
+- El actor de cada escritura protegida se liga en PostgreSQL a un JWT RS256 de Clerk.
+  Las migraciones 95–99 exigen la liga, protegen bitácora y columnas de actor y bloquean
+  las lecturas de facultad y rol frente a revocaciones concurrentes. La plantilla dura
+  30 segundos y la base admite hasta 60. Está implementado y probado en desarrollo;
+  el despliegue a producción queda para el cierre de los entregables.
 - La aplicación aún no presenta las pantallas de Salidas; la fase sigue abierta.
 
 ## Criterio de cierre

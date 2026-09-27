@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { accionProtegida, SinAcceso, SinPermiso } from "@/lib/db";
+import { accionProtegida, comprobarPermiso, SinAcceso, SinPermiso } from "@/lib/db";
 import { obtenerIdentidad } from "@/lib/usuarios/clerk";
 import type { EstadoAcceso } from "@/lib/usuarios/formulario";
 import {
@@ -82,10 +82,25 @@ const guardar = accionProtegida(
   },
 );
 
+function negativa(error: unknown): EstadoAcceso | null {
+  if (error instanceof SinPermiso) return { mensaje: "No tienes permiso para administrar usuarios.", tono: "error" };
+  if (error instanceof SinAcceso) return { mensaje: "No tienes acceso al sistema.", tono: "error" };
+  return null;
+}
+
 export async function guardarAcceso(
   _estadoPrevio: EstadoAcceso,
   formData: FormData,
 ): Promise<EstadoAcceso> {
+  // Sesión y permiso antes de leer el formulario y de preguntarle nada a Clerk.
+  try {
+    await comprobarPermiso("usuarios:administrar");
+  } catch (error) {
+    const r = negativa(error);
+    if (r) return r;
+    throw error;
+  }
+
   const resultado = esquema.safeParse(Object.fromEntries(formData.entries()));
   if (!resultado.success) {
     return { mensaje: "Revisa el rol seleccionado.", tono: "error" };
@@ -100,12 +115,8 @@ export async function guardarAcceso(
     if (error instanceof ReglaDeAcceso) {
       return { mensaje: error.message, tono: "error" };
     }
-    if (error instanceof SinPermiso) {
-      return { mensaje: "No tienes permiso para administrar usuarios.", tono: "error" };
-    }
-    if (error instanceof SinAcceso) {
-      return { mensaje: "No tienes acceso al sistema.", tono: "error" };
-    }
+    const r = negativa(error);
+    if (r) return r;
     if (
       typeof error === "object" &&
       error !== null &&
