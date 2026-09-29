@@ -8,27 +8,83 @@ puede hacer ahora que antes no se podía.
 
 ---
 
-## En desarrollo — Fase 6
+## v0.6.0 — 2026-09-28
 
-- Contrato de salidas: solicitud, autorización o rechazo, retiro con PEPS y
-  confirmación de recepción que cierra la salida.
-- La fase no genera vale imprimible. `RETIRADA` distingue la salida física de
-  `RECIBIDA`, que conserva quién y cuándo confirmó la llegada.
-- Permisos de salidas y verificación de la facultad de autorizar en cada petición.
-- Restricciones SQL contra transiciones inválidas, retiro sin autorización o sin
-  consumos, cambios a partidas autorizadas, consumos duplicados y borrado de salidas.
-- Dominio transaccional de salidas y lecturas: solicitud idempotente, autorización,
-  rechazo, cancelación, retiro PEPS, recepción y valuación desde PostgreSQL.
-- Conciliación diferida en PostgreSQL entre consumos, capas y existencia, con
-  comprobación de datos existentes antes de instalar los triggers.
-- Seis Server Actions protegidas con pruebas de acceso y revocación concurrente.
-  La interfaz de Salidas sigue pendiente; el flujo aún no está disponible en pantalla.
-- La base verifica con una llave pública el actor firmado por Clerk en cada escritura
-  protegida de un usuario.
-  El usuario de ejecución no puede atribuir cambios a otra persona ni insertar registros
-  de bitácora. Se mantienen el historial y la protección frente a revocaciones mientras
-  se autoriza o administra usuarios. Las pantallas de Usuarios y Catálogos comprueban
-  el acceso antes de procesar formularios.
+Cierra la fase 6: salidas. Con esta versión el inventario también baja: el material sale de
+una bodega hacia una estación con autorización, se descuenta con el costo de las capas más
+antiguas y queda registrado quién lo pidió, quién lo autorizó, quién lo entregó, quién se
+lo llevó y cuándo llegó.
+
+**Lo que cambia para quien va a usar el sistema**
+
+- **Ya se solicitan salidas.** Compras captura bodega de origen, estación destino, quién lo
+  pide, área, si es préstamo y una partida por artículo, por unidad o por caja. La solicitud
+  no lleva folio ni toca la existencia. Mientras se captura, cada partida muestra cuánto hay
+  en la bodega elegida y avisa si no alcanza.
+- **Alguien facultado la autoriza o la rechaza.** Lo puede hacer cualquier rol con la
+  facultad de autorizar marcada en Usuarios; rechazar pide motivo. Autorizar no aparta
+  material ni asigna folio. Una solicitud ya no se edita: para corregirla se cancela, con
+  motivo, y se pide otra.
+- **Registrar el retiro es cuando el material sale.** Se indica quién se lo lleva; el sistema
+  asigna el folio (`S-000001`, `S-000002`…), descuenta la existencia y toma el costo de las
+  capas más antiguas primero (PEPS). Si no alcanza, no se retira nada ni se gasta folio.
+  Antes de retirar, la pantalla muestra lo que hay en la bodega y avisa si un artículo, la
+  bodega o la estación se dieron de baja, o si un artículo cambió de piezas por caja.
+- **Confirmar la recepción cierra la salida**, con quién y cuándo confirmó que llegó a la
+  estación. No vuelve a mover inventario.
+- **Pendientes.** Una pantalla junta lo que espera a cada quien —por autorizar, por retirar
+  y por confirmar recepción—, lo más antiguo primero. Cada persona ve solo lo que puede
+  atender.
+- **Detalle de cada salida** con su historial (quién capturó, autorizó, rechazó, retiró,
+  recibió o canceló, y cuándo), de qué entrada salió cada pieza y a qué costo, y el importe
+  con y sin IVA.
+- **Lista de salidas** con búsqueda por folio, bodega, estación, solicitante o quién se lo
+  llevó, filtro por estatus, y recorrido completo aunque haya más de 200.
+- **Un doble clic no duplica nada:** ni la solicitud, ni el folio, ni el descuento. Registrar
+  otra vez un retiro con otro nombre en «quién se lo lleva» avisa que ya se retiró y quién
+  se lo llevó.
+- **Si otra persona ya movió la salida**, la pantalla lo dice y muestra dónde quedó en vez
+  de dejar botones que ya no aplican.
+- **Quién ve qué.** Compras y Superadmin solicitan, cancelan, retiran y confirman
+  recepción; el Jefe consulta; autoriza quien tenga la facultad. El servidor lo exige en
+  cada envío, y quitar un permiso surte efecto en la siguiente acción.
+- Un select obligatorio sin elegir ahora dice «No se seleccionó nada», también en Entradas.
+
+**Por dentro**
+
+- Estados `SOLICITADA` → `AUTORIZADA` → `RETIRADA` → `RECIBIDA`, con `RECHAZADA` y
+  `CANCELADO` terminales. La base impide saltar estados, retirar sin autorización o sin
+  consumos, cambiar partidas autorizadas y borrar salidas, también por SQL directo.
+- El retiro bloquea encabezado, catálogos, existencias y capas en orden fijo y consume PEPS
+  en una sola sentencia. Un trigger diferido concilia consumos, capas y existencia antes de
+  confirmar cada transacción.
+- **Actor verificable.** Cada escritura protegida lleva un token RS256 de Clerk (plantilla
+  `bodegasosur-db`, 30 segundos) que PostgreSQL verifica con la llave pública cargada por
+  el dueño. La bitácora toma de ahí al actor: el usuario de ejecución ya no puede atribuir
+  cambios a otra persona ni escribir en la bitácora, y nadie puede escalar su rol ni cambiar
+  el `clerkUserId` de una cuenta.
+- Rol, actividad y facultad de autorizar se releen bajo candado antes de confirmar: una
+  revocación concurrente revierte la acción o la espera.
+- Usuarios y Catálogos comprueban sesión y permiso antes de leer el formulario, y las
+  pantallas de Salidas no consultan lo que el usuario no puede ver.
+- Los scripts de datos y de arranque escriben con la conexión del dueño. Scripts nuevos:
+  `db:llaves-clerk`, `db:probar-token` y `clerk:medir-token`.
+- 344 pruebas contra PostgreSQL real, con los vectores Wycheproof para la firma y pruebas
+  de concurrencia para retiro, autorización y revocación.
+
+**Por saber**
+
+- **Cada base necesita la llave pública de Clerk.** La plantilla JWT `bodegasosur-db` tiene
+  que existir en Clerk y su llave cargarse con `npm run db:llaves-clerk`; sin ella no pasa
+  ninguna escritura. `db:reset` ya la carga. Las migraciones son incrementales: una base de
+  la `v0.5.0` se actualiza sin recrearse.
+- En producción el actor verificable se despliega en dos etapas, y la rotación de llaves de
+  Clerk es manual: el servidor avisa si aparece una llave sin cargar.
+- No hay vale imprimible de salida, por decisión del 2026-09-23.
+- Devolver un préstamo, revertir una salida ya retirada y los traspasos son de la fase 7.
+  El histórico de salidas no se importa.
+
+*Migración: `20260927130000_facultad_bajo_candado`*
 
 ---
 

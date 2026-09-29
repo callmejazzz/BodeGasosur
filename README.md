@@ -4,7 +4,7 @@ Sistema de control de inventario para las bodegas del grupo gasolinero **Gasosur
 
 Controla la entrada y salida de material entre bodegas y estaciones, registrando hacia qué estación se envía, quién lo autoriza, quién lo entrega, cuándo, en qué cantidad, a qué costo unitario, a qué área se destina y con qué observaciones.
 
-**Versión actual: `v0.5.0`** - ver [CHANGELOG.md](CHANGELOG.md).
+**Versión actual: `v0.6.0`** - ver [CHANGELOG.md](CHANGELOG.md).
 
 **Estado:** fases 0 a 6 construidas en desarrollo. Salidas ya tiene pantallas, dominio transaccional, conciliación SQL y Server Actions con pruebas; siguen los traspasos de la fase 7. Ver [entregables por fase](docs/entregables-fases/README.md).
 

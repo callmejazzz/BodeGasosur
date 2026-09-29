@@ -95,9 +95,9 @@ Al cerrar una fase, cuando su criterio de aceptación se cumple:
 3. `git tag -a v0.2.0 -m "Fase 2 — cimientos corregidos"`
 4. `git push --follow-tags`
 
-**Cierre funcional de la fase 6:** por decisión del proyecto se registra primero el
-commit de Salidas sin cambiar `package.json`, actualizar el CHANGELOG, crear la etiqueta
-`v0.6.0` ni hacer push. La publicación de esa versión queda para un paso posterior.
+**Fase 6:** por decisión del proyecto, el cierre funcional de Salidas se registró sin
+cambiar `package.json` ni el CHANGELOG. La `v0.6.0` se publicó después en un commit de
+versión aparte, que agrupa los cuatro commits de la fase, y la etiqueta apunta a él.
 
 Los mensajes de commit siguen siendo prosa en español que describe decisiones. **No se
 adopta Conventional Commits:** con ocho fases y un desarrollador, el changelog a mano sale
