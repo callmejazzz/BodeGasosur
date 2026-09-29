@@ -4,6 +4,7 @@ import {
   enteroPositivo,
   erroresDe,
   leerFormulario,
+  seleccion,
   textoOpcional,
   uuid,
   type ErroresFormulario,
@@ -39,7 +40,7 @@ export const fechaOperativa = z
   });
 
 export const esquemaPartida = z.object({
-  articuloId: uuid,
+  articuloId: seleccion,
   presentacion: z.enum(["UNIDAD", "CAJA"], { error: "Elige unidad o caja" }),
   cantidadCapturada: enteroPositivo,
   costoUnitarioCapturado: decimal(10, 4, "Costo inválido: hasta cuatro decimales, sin signo"),
@@ -49,8 +50,8 @@ export const esquemaPartida = z.object({
 });
 
 export const esquemaEncabezado = z.object({
-  proveedorId: uuid,
-  bodegaDestinoId: uuid,
+  proveedorId: seleccion,
+  bodegaDestinoId: seleccion,
   fecha: fechaOperativa,
   moneda: z.enum(["MXN", "USD"], { error: "Elige la moneda" }),
   tipoCambio: z

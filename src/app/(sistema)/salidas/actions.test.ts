@@ -123,7 +123,9 @@ describe("con permiso, la acción real llega a la base con el actor de la sesió
     await expect(autorizarSalida(id)).resolves.toEqual({ ok: true });
     await como(e.usuarios.COMPRAS);
     await expect(retirarSalida(id, " Juan Pérez ")).resolves.toEqual({ ok: true });
-    await expect(retirarSalida(id, "Otro")).resolves.toEqual({ ok: true });
+    await expect(retirarSalida(id, "Juan Pérez")).resolves.toEqual({ ok: true });
+    const { folio } = await prisma.movimiento.findUniqueOrThrow({ where: { id } });
+    await expect(retirarSalida(id, "Otro")).resolves.toEqual({ ok: false, mensaje: `Ya se retiró (${folio}) y se lo llevó Juan Pérez.` });
     await como(e.usuarios.SUPERADMIN);
     await expect(confirmarRecepcion(id)).resolves.toEqual({ ok: true });
 
@@ -332,6 +334,12 @@ describe("lo que llega manipulado no toca la base", () => {
     const r = await crearSalida(ESTADO_INICIAL, fd);
     expect(r.mensaje).toBe("Revisa los campos marcados.");
     expect(Object.keys(r.errores).sort()).toEqual(["encabezado.estacionId", "partidas.0.cantidadCapturada"]);
+
+    // La llave no tiene campo en pantalla: su error no puede pedir revisar campos marcados.
+    const alterada = formulario("no-soy-uuid");
+    await expect(crearSalida(ESTADO_INICIAL, alterada)).resolves.toMatchObject({
+      mensaje: "El formulario ya no es válido. Recarga la página y vuelve a capturar.",
+    });
   });
 
   it("un id de otro tipo de movimiento responde como inexistente, y los errores de dominio salen tal cual", async () => {

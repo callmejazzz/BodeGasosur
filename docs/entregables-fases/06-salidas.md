@@ -2,11 +2,10 @@
 
 | Campo            | Referencia                                                                                                                                                                                                      |
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Estado           | En desarrollo: dominio, conciliación SQL y Server Actions construidos; falta la interfaz                                                                                                                       |
-| Versión objetivo | `v0.6.0`                                                                                                                                                                                                        |
+| Estado           | Construida en desarrollo: dominio, conciliación SQL, Server Actions y pantallas probados                                                                                                                        |
+| Versión objetivo | `v0.6.0`, todavía sin publicar; `package.json` permanece en `0.5.0`                                                                                                                                           |
 | Contrato         | [Fase 6: Salidas](../decisiones-otros/04-fase-6-salidas.md)                                                                                                                                                     |
-| Guía técnica     | [Construcción de `src/lib/salidas/`](../decisiones-otros/05-guia-implementacion-salidas.md)                                                                                                                     |
-| Archivos propios | `src/lib/salidas/`, `src/lib/movimientos/`, `src/app/(sistema)/salidas/actions.ts`, `pruebas/semilla-salidas.ts`, `src/lib/permisos.ts`, `prisma/sql/despues/80-salidas.sql`, `prisma/sql/despues/85-conciliacion.sql`, `prisma/migrations/20260923160000_consumo_unico/`, `prisma/migrations/20260924100000_conciliacion_inventario/` |
+| Archivos propios | `src/lib/salidas/`, `src/components/salidas/`, `src/app/(sistema)/salidas/`, `src/lib/movimientos/`, `pruebas/semilla-salidas.ts`, `src/lib/permisos.ts`, `prisma/sql/despues/80-salidas.sql`, `prisma/sql/despues/85-conciliacion.sql` |
 
 ## Plan de desarrollo
 
@@ -21,15 +20,14 @@
 6. Construir solicitud, autorización/rechazo, retiro y confirmación de recepción en el
    dominio. ✅
 7. Agregar lectura de pendientes y normalización de captura por unidad o caja; conectar
-   ambas con la interfaz. Dominio ✅; interfaz pendiente.
+   ambas con la interfaz. ✅
 8. Probar concurrencia, existencia insuficiente, autorización, idempotencia y doble clic
    contra PostgreSQL real y desde las Server Actions. ✅
 9. Conservar fuera de alcance el vale imprimible, por decisión comunicada el
    2026-09-23. ✅
 10. Agregar un trigger diferido que concilie consumos, capas y existencias antes de
     exponer el retiro desde las Server Actions. ✅
-11. Conectar las lecturas y las seis Server Actions a las pantallas. Actions ✅;
-    interfaz pendiente.
+11. Conectar las lecturas y las seis Server Actions a las pantallas. ✅
 
 ## Base ya disponible
 
@@ -69,7 +67,10 @@ las capas PEPS que el servicio de Salidas consume al retirar.
   las lecturas de facultad y rol frente a revocaciones concurrentes. La plantilla dura
   30 segundos y la base admite hasta 60. Está implementado y probado en desarrollo;
   el despliegue a producción queda para el cierre de los entregables.
-- La aplicación aún no presenta las pantallas de Salidas; la fase sigue abierta.
+- La aplicación presenta lista con búsqueda, filtros y navegación por cursor; bandeja
+  ordenada por el inicio de cada espera; captura de solicitudes; detalle con acciones,
+  consumos PEPS, valuación e historial. Las vistas muestran solo las opciones que el
+  usuario puede usar, y cada acción comprueba de nuevo sesión y permiso.
 
 ## Criterio de cierre
 
@@ -77,3 +78,7 @@ Ninguna salida puede retirarse sin autorización válida registrada ni dejar una
 negativa. El consumo, la disminución de capas y la existencia deben conciliar también
 ante escrituras SQL directas. Repetir una acción debe devolver el mismo resultado sin duplicar consumo o folio.
 Confirmar recepción debe guardar actor e instante sin mover inventario otra vez.
+
+**Cumplido en desarrollo.** Las pruebas contra PostgreSQL, lint, tipos y build validan
+el flujo. La etiqueta `v0.6.0`, el CHANGELOG y el despliegue a producción se reservan
+para el paso de publicación; cerrar esta fase no los ejecuta.

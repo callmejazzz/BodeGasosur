@@ -4,7 +4,7 @@ import { Navegacion } from "@/components/navegacion";
 import { RefrescarAlEnfocar } from "@/components/refrescar-al-enfocar";
 import { ControlesSesion } from "@/components/sesion";
 import { registrarAccesoDenegado, sesionActual } from "@/lib/db";
-import { rolTienePermiso } from "@/lib/permisos";
+import { usuarioTienePermiso } from "@/lib/permisos";
 
 /**
  * El sistema. Dibuja la barra lateral y decide quién la ve.
@@ -39,7 +39,10 @@ export default async function LayoutSistema({ children }: { children: ReactNode 
           cruza un booleano: la matriz no viaja, y la barra lateral dibuja lo
           que le dicen en vez de decidir quién ve qué. */}
       <Navegacion
-        puedeAdministrarUsuarios={rolTienePermiso(sesion.usuario.rol, "usuarios:administrar")}
+        accesos={{
+          salidas: usuarioTienePermiso(sesion.usuario, "salidas:leer"),
+          usuarios: usuarioTienePermiso(sesion.usuario, "usuarios:administrar"),
+        }}
         sesion={<ControlesSesion rol={sesion.usuario.rol} />}
       />
       <main className="min-w-0 flex-1 px-8 py-7">{children}</main>

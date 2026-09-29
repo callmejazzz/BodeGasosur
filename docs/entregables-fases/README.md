@@ -13,16 +13,19 @@ no se construye— junto con sus archivos, commits y versión de referencia.
 | [3 — Usuarios y permisos](03-usuarios-y-permisos.md)                        | Construida | `v0.3.0`              | `7cc5203`            | Clerk, autorización en PostgreSQL y administración de usuarios |
 | [4 — Migración de catálogos](04-migracion-catalogos.md)                     | Construida | `v0.4.0`              | `9ea85b5`            | Catálogo global real e inicio limpio de producción             |
 | [5 — Entradas](05-entradas.md)                                              | Construida | `v0.5.0`              | `d831f1e` | Borradores, confirmación, costos, capas y existencias          |
-| [6 — Salidas](06-salidas.md)                                                | En desarrollo | objetivo `v0.6.0` | — | Dominio, conciliación SQL y Server Actions; falta la interfaz |
+| [6 — Salidas](06-salidas.md)                                                | Construida | `v0.6.0` pendiente de publicar | — | Solicitud, retiro PEPS, recepción y pantallas completas |
 | [7 — Traspasos, devoluciones y conteo](07-traspasos-devoluciones-conteo.md) | Pendiente  | objetivo `v0.7.0`     | —                    | Movimientos entre bodegas y reversas de inventario             |
 | [8 — Reportes](08-reportes.md)                                              | Pendiente  | objetivo `v0.8.0`     | —                    | Reportes operativos, kardex y exportación                      |
 | [9 — Acabado](09-acabado.md)                                                | Pendiente  | objetivo `v0.9.0`     | —                    | Tablero, alertas y experiencia responsiva                      |
 
 ## Qué falta
 
-El siguiente bloque funcional es la **fase 6**. Ya existen el servicio PEPS, el trigger
-diferido de conciliación y las Server Actions; falta la interfaz. `RETIRADA` registra la salida de bodega y `RECIBIDA` cierra
-la salida al confirmar la recepción, sin vale imprimible. Después siguen las fases 7, 8 y 9.
+El siguiente bloque funcional es la **fase 7**: traspasos, devoluciones y conteo.
+La fase 6 está construida en desarrollo: `RETIRADA` registra la salida de bodega y
+`RECIBIDA` cierra la salida al confirmar la recepción, sin vale imprimible. Su cierre
+funcional se registra sin cambiar todavía la versión `0.5.0`, el CHANGELOG ni la
+etiqueta `v0.6.0`; por eso su referencia de publicación sigue vacía en la tabla.
+Después siguen también las fases 8 y 9.
 
 También permanecen tareas transversales para antes de `v1.0.0`: CI, destino de despliegue,
 política de respaldos con prueba de restauración, observabilidad y cierre del registro de

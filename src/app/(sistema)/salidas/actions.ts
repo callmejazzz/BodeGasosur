@@ -99,7 +99,11 @@ export async function crearSalida(_previo: EstadoSalida, formData: FormData): Pr
   try {
     ({ id } = await solicitar(formData));
   } catch (error) {
-    if (error instanceof DatosInvalidos) return { errores: error.errores, mensaje: "Revisa los campos marcados." };
+    if (error instanceof DatosInvalidos) {
+      // La llave no se ve en el formulario: si no es válida, el formulario es otro o está alterado.
+      const mensaje = error.errores.llaveIdempotencia ? "El formulario ya no es válido. Recarga la página y vuelve a capturar." : "Revisa los campos marcados.";
+      return { errores: error.errores, mensaje };
+    }
     return { errores: {}, mensaje: mensajeSeguro(error) };
   }
   refrescar(id);

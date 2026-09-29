@@ -313,7 +313,7 @@ revalidar catálogos; una existencia ausente se crea en cero con
 | UI            | Tailwind CSS 4 + primitivas propias           | Un puñado de componentes en `src/components/ui`, sin dependencias de terceros que después estorben |
 | Formularios   | Acciones de servidor + `useActionState`       | Validación en el servidor sin duplicar reglas en el cliente                                        |
 | Fechas        | `Intl` nativo, encapsulado en `lib/fechas.ts` | Ver §4.5. No hace falta una biblioteca para esto                                                   |
-| Pruebas       | Vitest 4                                      | De integración contra el PostgreSQL de `docker-compose`, en una base `*_prueba` que se recrea en cada corrida. Cubren migración, formularios, repositorios, acciones de servidor y el contrato transaccional de Entradas; los demás movimientos incorporarán su cobertura en sus fases |
+| Pruebas       | Vitest 4                                      | De integración contra el PostgreSQL de `docker-compose`, en una base `*_prueba` que se recrea en cada corrida. Cubren migraciones, formularios, repositorios, acciones de servidor y los contratos transaccionales de Entradas y Salidas |
 
 Las cuatro pruebas que importan, y que van a CI cuando exista:
 
@@ -360,12 +360,13 @@ BodeGasosur/
 │  │  │  ├─ catalogos/            # Índice, listado, alta y edición genérica
 │  │  │  ├─ usuarios/             # Administración de acceso
 │  │  │  ├─ entradas/             # Listado, captura, detalle y Server Actions
-│  │  │  └─ salidas/actions.ts     # Seis Server Actions; pantallas pendientes
+│  │  │  └─ salidas/               # Lista, pendientes, captura, detalle y seis Server Actions
 │  │  └─ api/webhooks/clerk/       # Sincronización firmada desde Clerk
 │  ├─ components/
 │  │  ├─ ui/                      # Primitivas: botón, campos, tabla, tarjetas
 │  │  ├─ catalogos/               # Formulario genérico de catálogo
 │  │  ├─ entradas/                # Filtros, tabla, formulario, detalle y acciones
+│  │  ├─ salidas/                 # Filtros, tabla, formulario, pendientes, detalle y acciones
 │  │  └─ navegacion.tsx
 │  └─ lib/
 │     ├─ db.ts                    # Cliente Prisma + accionProtegida (§4.1)

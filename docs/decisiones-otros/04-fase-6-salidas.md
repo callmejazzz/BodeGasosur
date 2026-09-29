@@ -1,6 +1,6 @@
 # BodeGasosur — contrato de la fase 6: Salidas
 
-**Estado:** contrato de desarrollo. La matriz de permisos, las restricciones y conciliación SQL, el dominio transaccional y las seis Server Actions con pruebas están implementados. Faltan las pantallas de Salidas. Complementa el [modelo de datos](../02-modelo-de-datos.md) y el [contrato de Entradas](02-fase-5-entradas.md).
+**Estado:** fase 6 construida en desarrollo. La matriz de permisos, las restricciones y conciliación SQL, el dominio transaccional, las seis Server Actions y las pantallas de Salidas están implementados y probados. Complementa el [modelo de datos](../02-modelo-de-datos.md) y el [contrato de Entradas](02-fase-5-entradas.md).
 
 ## 1. Resultado y alcance
 
@@ -102,7 +102,7 @@ La llave no concede acceso. Cada transición bloquea el encabezado con
 `SELECT ... FOR UPDATE`, lee el estatus bajo el candado y cambia el estatus con un
 `UPDATE ... WHERE estatus = <origen>`. Una repetición de la transición ya realizada
 devuelve el resultado original sin reescribir actor ni instante. Repetir con un motivo
-distinto, o intentar una transición de otra rama, es conflicto.
+o un «entregado a» distinto, o intentar una transición de otra rama, es conflicto.
 
 ```mermaid
 sequenceDiagram
@@ -154,8 +154,10 @@ cubren sesión ausente, usuario inactivo, rol sin permiso, autorizador sin bande
 revocaciones concurrentes. `accionProtegida()` liga a cada transacción un JWT RS256 de
 Clerk mediante `seguridad.fijar_actor()`; la bitácora obtiene de esa liga al actor y el
 `jti`, y la base rechaza escrituras ordinarias sin ella. El trigger de autorización lee
-`puedeAutorizar` bajo `FOR SHARE` para cubrir también SQL directo. La interfaz aún debe
-conectarse a estas acciones y lecturas.
+`puedeAutorizar` bajo `FOR SHARE` para cubrir también SQL directo. La lista, la bandeja de
+pendientes, la captura y el detalle usan estas acciones y lecturas. La bandeja ordena
+cada sección por el instante en que comenzó a esperar; la lista recorre las salidas
+anteriores por cursor estable, incluso cuando supera 200 registros.
 
 ## 7. Pruebas de aceptación
 
@@ -178,6 +180,9 @@ conectarse a estas acciones y lecturas.
    descuento. `RECIBIDA` es terminal incluso para escrituras SQL directas.
 10. Las Server Actions directas rechazan falta de sesión, usuario inactivo, rol sin permiso, y autorizador sin bandera, aun si conoce la URL o el identificador.
 11. Una escritura SQL directa no puede retirar sin autorización ni cambiar partidas de una solicitud autorizada; la bitácora conserva cada transición permitida.
+12. La lista permite llegar a las salidas anteriores a las primeras 200 sin repetir ni omitir
+    filas, incluso con fechas de captura iguales. La bandeja ordena autorización, retiro
+    y recepción por el instante en que comenzó cada espera, no por la captura inicial.
 
 ## 8. Orden de construcción
 
@@ -187,5 +192,5 @@ conectarse a estas acciones y lecturas.
 4. Consumo PEPS y retiro en una transacción; pruebas de concurrencia e invariantes. ✅
 5. Confirmación de recepción con idempotencia y actor de sesión; repositorio de listados,
    formulario, detalle y bandeja de pendientes. ✅
-6. Server Actions y pruebas de frontera real, lint y build. ✅ Interfaz y navegación pendientes.
+6. Server Actions, interfaz y navegación, con pruebas de frontera real, lint y build. ✅
 7. Trigger diferido de conciliación de consumos, capas y existencias. ✅

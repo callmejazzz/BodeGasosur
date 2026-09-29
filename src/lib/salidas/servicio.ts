@@ -61,13 +61,14 @@ type Encabezado = {
   solicitadoPorId: string | null;
   motivoRechazo: string | null;
   motivoCancelacion: string | null;
+  entregadoA: string | null;
 };
 
 /** El reclamo de toda transición: FOR UPDATE del encabezado y, bajo el candado, su estatus. */
 async function bloquearSalida(tx: Tx, id: string): Promise<Encabezado> {
   const filas = await tx.$queryRaw<Encabezado[]>`
     SELECT id, tipo::text, estatus::text, folio, "bodegaOrigenId", "estacionId", "areaId", "solicitadoPorId",
-           "motivoRechazo", "motivoCancelacion"
+           "motivoRechazo", "motivoCancelacion", "entregadoA"
     FROM "Movimiento" WHERE id = ${id}::uuid FOR UPDATE`;
   const m = filas[0];
   // Otro tipo de movimiento responde igual que uno inexistente.
@@ -416,7 +417,8 @@ export async function cancelarSalida(tx: Tx, usuario: UsuarioSesion, id: string,
  * AUTORIZADA → RETIRADA en una transacción: valida catálogo y factor bajo sus
  * candados, consume capas PEPS, descuenta existencia, toma el folio y cambia
  * el estatus. Cualquier falla revierte todo, folio incluido. Un reintento
- * sobre RETIRADA o RECIBIDA devuelve el mismo folio sin escribir.
+ * sobre RETIRADA o RECIBIDA con el mismo «entregado a» devuelve el mismo folio
+ * sin escribir; con otro es conflicto, igual que un motivo distinto.
  */
 export async function retirarSalida(
   tx: Tx,
@@ -425,10 +427,13 @@ export async function retirarSalida(
   entregadoA: string,
 ): Promise<ResultadoRetiro> {
   try {
-    const m = await bloquearSalida(tx, id);
-    if (m.estatus === "RETIRADA" || m.estatus === "RECIBIDA") return { id, folio: m.folio!, repetido: true };
-    if (m.estatus !== "AUTORIZADA") throw estadoInvalido(m, "retirar");
     const quien = textoObligatorio(entregadoA, "Di quién se lleva el material.");
+    const m = await bloquearSalida(tx, id);
+    if (m.estatus === "RETIRADA" || m.estatus === "RECIBIDA") {
+      if (m.entregadoA === quien) return { id, folio: m.folio!, repetido: true };
+      throw new ErrorDeDominio("conflicto", `Ya se retiró (${m.folio}) y se lo llevó ${m.entregadoA}.`);
+    }
+    if (m.estatus !== "AUTORIZADA") throw estadoInvalido(m, "retirar");
 
     await bloquearContrapartes(tx, m);
     const articuloIds = (

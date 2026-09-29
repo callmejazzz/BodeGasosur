@@ -6,7 +6,7 @@ Controla la entrada y salida de material entre bodegas y estaciones, registrando
 
 **Versión actual: `v0.5.0`** - ver [CHANGELOG.md](CHANGELOG.md).
 
-**Estado:** fases 0 a 5 construidas. La fase 6 ya tiene dominio transaccional, conciliación SQL y Server Actions con pruebas; faltan las pantallas. Ver [entregables por fase](docs/entregables-fases/README.md).
+**Estado:** fases 0 a 6 construidas en desarrollo. Salidas ya tiene pantallas, dominio transaccional, conciliación SQL y Server Actions con pruebas; siguen los traspasos de la fase 7. Ver [entregables por fase](docs/entregables-fases/README.md).
 
 **Entorno:** local mientras dure el desarrollo. Dónde se despliega se decide antes de la
 `v1.0.0` — ver [versionado y despliegue](docs/05-versionado-y-despliegue.md) y el hallazgo
@@ -65,11 +65,11 @@ El script junta `prisma/sql/antes/`, el DDL que genera Prisma desde `schema.pris
 - **Nueve catálogos** con alta, edición, búsqueda y baja lógica: empresas, bodegas, estaciones, áreas, unidades de medida, categorías, artículos, proveedores y personas.
 - **Modelo de datos completo** — 19 modelos en dos esquemas de PostgreSQL, con los invariantes escritos en la base: existencia nunca negativa, autorización verificada en el instante del acto y de escritura única, claves de negocio inmutables, y una bitácora alimentada por trigger para los cambios de negocio en las tablas auditadas.
 - **Entradas completas en el trabajo local** — listado, captura y edición de borradores, confirmación con folio, capas de costo, existencias y Server Actions protegidas. Los importes se calculan en PostgreSQL.
-- **Salidas en desarrollo** — solicitud, autorización, rechazo, cancelación, retiro PEPS y recepción, con lecturas, Server Actions protegidas, conciliación SQL y pruebas contra PostgreSQL. Faltan las pantallas para usar el flujo desde la aplicación.
+- **Salidas completas en el trabajo local** — solicitud, autorización, rechazo, cancelación, retiro PEPS y recepción, con lista filtrable y paginada, bandeja de pendientes, captura y detalle. Las Server Actions, la conciliación SQL y las pruebas protegen el flujo.
 - **Actor verificable en desarrollo** — cada escritura protegida de un usuario liga en PostgreSQL un JWT RS256 de Clerk a su transacción. La bitácora y las columnas de actor usan esa identidad; las escrituras ordinarias sin liga se rechazan. Producción se desplegará al cerrar los entregables.
 - **Tablero** con el avance por fases y los datos base cargados.
 
-Las pantallas de salidas y traspasos siguen pendientes; sus tablas ya existen. El [contrato de la fase 6](docs/decisiones-otros/04-fase-6-salidas.md) describe el flujo y las pruebas necesarias antes de habilitar una entrega.
+Los traspasos, devoluciones y conteos siguen en la fase 7. El [contrato de la fase 6](docs/decisiones-otros/04-fase-6-salidas.md) documenta el flujo de salidas construido.
 
 **Empresas, estaciones y dos personas son las reales de Gasosur**, cargadas por [`prisma/migracion-datos/`](prisma/migracion-datos/README.md). **Artículos y proveedores son fixtures de desarrollo** (`prisma/fixtures.ts`) para probar movimientos, kardex y PEPS; producción arranca sin ellos, por el [Plan B](docs/decisiones-otros/01-plan-b-produccion.md).
 
@@ -89,7 +89,6 @@ Las pantallas de salidas y traspasos siguen pendientes; sus tablas ya existen. E
 | [Plan B para producción](docs/decisiones-otros/01-plan-b-produccion.md) | Producción arranca sin inventario; los dos perfiles de base |
 | [Contrato de la Fase 5](docs/decisiones-otros/02-fase-5-entradas.md) | Funcionamiento, decisiones, seguridad, pruebas y orden de implementación de entradas |
 | [Contrato de la Fase 6](docs/decisiones-otros/04-fase-6-salidas.md) | Estados, permisos, PEPS, seguridad y pruebas de salidas |
-| [Guía de construcción de Salidas](docs/decisiones-otros/05-guia-implementacion-salidas.md) | Orden de implementación del dominio y pruebas antes de habilitar entregas |
 | [Colaboración de desarrollo](docs/decisiones-otros/03-colaboracion-desarrollo.md) | Alta de desarrolladores, Clerk y bases locales aisladas |
 | [Cambios](CHANGELOG.md) | Qué trae cada versión, escrito para quien usa el sistema |
 | **[Entregables por fase](docs/entregables-fases/README.md)** | **Estado y plan de las fases** |

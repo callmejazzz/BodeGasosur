@@ -2,19 +2,9 @@
 
 import { Input, Select } from "@/components/ui/campos";
 import { useFiltrosEnUrl } from "@/components/ui/filtros-en-url";
-import { SelectorDeRango } from "@/components/ui/selector-rango";
-import {
-  aParametros,
-  ESTATUS,
-  hayFiltros,
-  REFERENCIA,
-  SIN_FILTROS,
-  type FiltroEntradas,
-  type FiltroEstatus,
-  type FiltroReferencia,
-} from "@/lib/entradas/filtros";
+import { aParametros, ESTATUS, hayFiltros, SIN_FILTROS, type FiltroEstatus, type FiltrosDeLista } from "@/lib/salidas/filtros";
 
-export function FiltrosEntradas({ filtros, total, hayMas }: { filtros: FiltroEntradas; total: number; hayMas: boolean }) {
+export function FiltrosSalidas({ filtros, total, hayMas, esTramoAnterior }: { filtros: FiltrosDeLista; total: number; hayMas: boolean; esTramoAnterior: boolean }) {
   const { actual, pendiente, aplicar, teclear } = useFiltrosEnUrl(filtros, aParametros);
 
   return (
@@ -24,21 +14,15 @@ export function FiltrosEntradas({ filtros, total, hayMas }: { filtros: FiltroEnt
           type="search"
           value={actual.busqueda}
           onChange={(ev) => teclear({ busqueda: ev.target.value })}
-          placeholder="Folio, referencia, proveedor o bodega…"
+          placeholder="Folio, bodega, estación, solicitante…"
           className="h-8 w-72"
-          aria-label="Buscar entradas"
+          aria-label="Buscar salidas"
         />
         <Select value={actual.estatus} onChange={(ev) => aplicar({ estatus: ev.target.value as FiltroEstatus })} className="h-8 w-36" aria-label="Estatus">
           {ESTATUS.map((f) => (
             <option key={f.valor} value={f.valor}>{f.etiqueta}</option>
           ))}
         </Select>
-        <Select value={actual.referencia} onChange={(ev) => aplicar({ referencia: ev.target.value as FiltroReferencia })} className="h-8 w-48" aria-label="Referencia">
-          {REFERENCIA.map((f) => (
-            <option key={f.valor} value={f.valor}>{f.etiqueta}</option>
-          ))}
-        </Select>
-        <SelectorDeRango valor={{ desde: actual.desde, hasta: actual.hasta }} onChange={(r) => aplicar(r)} />
         {hayFiltros(actual) && (
           <button type="button" onClick={() => aplicar(SIN_FILTROS)} className="text-sm text-primary hover:underline">
             Limpiar
@@ -46,7 +30,7 @@ export function FiltrosEntradas({ filtros, total, hayMas }: { filtros: FiltroEnt
         )}
       </div>
       <p className="text-sm text-muted tabular" aria-live="polite">
-        {pendiente ? "Buscando…" : hayMas ? `Más de ${total} entradas` : `${total} entrada${total === 1 ? "" : "s"}`}
+        {pendiente ? "Buscando…" : `${total} salida${total === 1 ? "" : "s"}${esTramoAnterior || hayMas ? " en este tramo" : ""}`}
       </p>
     </div>
   );

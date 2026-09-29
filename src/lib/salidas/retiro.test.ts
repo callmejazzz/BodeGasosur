@@ -350,7 +350,12 @@ describe("concurrencia", () => {
     const [r1, r2] = await Promise.all([retirar(id), retirar(id)]);
     expect(r1.folio).toBe(r2.folio);
     expect([r1.repetido, r2.repetido].sort()).toEqual([false, true]);
-    await expect(retirar(id, "Otra persona")).resolves.toEqual({ id, folio: r1.folio, repetido: true });
+    // Mismo «entregado a» (sin importar espacios): mismo folio. Otro: conflicto, sin reescribir nada.
+    await expect(retirar(id, "  Juan Pérez, mensajero ")).resolves.toEqual({ id, folio: r1.folio, repetido: true });
+    await expect(retirar(id, "Otra persona")).rejects.toMatchObject({
+      codigo: "conflicto",
+      message: `Ya se retiró (${r1.folio}) y se lo llevó Juan Pérez, mensajero.`,
+    });
     await expect(prisma.consumoCapa.count({ where: { partida: { movimientoId: id } } })).resolves.toBe(2);
     await expect(existencia(x.id)).resolves.toBe(2);
     await expect(prisma.movimiento.findUniqueOrThrow({ where: { id } })).resolves.toMatchObject({ entregadoA: "Juan Pérez, mensajero" });
@@ -480,6 +485,7 @@ describe("recepción", () => {
     await expect(como(jefe, "salidas:autorizar", (tx) => rechazarSalida(tx, jefe, id, "tarde"))).rejects.toMatchObject({ codigo: "estado" });
     await expect(como(jefe, "salidas:autorizar", (tx) => autorizarSalida(tx, jefe, id))).resolves.toMatchObject({ repetido: true });
     await expect(retirar(id)).resolves.toEqual({ id, folio, repetido: true });
+    await expect(retirar(id, "Otra persona")).rejects.toMatchObject({ codigo: "conflicto" });
     await expect(existencia(articuloId)).resolves.toBe(3);
     await expect(prisma.movimiento.update({ where: { id }, data: { recibidoPorId: jefe.id } })).rejects.toThrow();
   });

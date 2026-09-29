@@ -10,11 +10,16 @@ export const uuid = z
   .uuid("Identificador inválido")
   .transform((id) => id.toLowerCase());
 
+/** Un select obligatorio: vacío avisa que no se eligió; cualquier otra cosa tiene que ser UUID. */
+const NADA = "No se seleccionó nada";
+export const seleccion = z.string({ error: NADA }).trim().min(1, NADA).pipe(uuid);
+
 /** Piezas o cajas enteras, escritas como dígitos: ni «1.5», ni «3.0», ni «1e3». */
 export const enteroPositivo = z
   .string()
   .trim()
-  .regex(/^\d{1,7}$/, "Solo cantidades enteras, sin decimales")
+  .min(1, "Indica la cantidad")
+  .regex(/^\d+$/, "Solo cantidades enteras, sin decimales")
   .transform(Number)
   .refine((n) => n > 0, "La cantidad debe ser mayor que cero")
   .refine((n) => n <= 1_000_000, "Cantidad demasiado grande");

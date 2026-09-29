@@ -69,6 +69,21 @@ describe("esquemaSolicitud", () => {
     expect(errores(captura({}, [p, p]))).toHaveProperty(["partidas.1.articuloId"]);
   });
 
+  it("cada error dice qué corregir: un select vacío, la cantidad que falta o sobra", () => {
+    const cantidad = (c: string) => errores(captura({}, [{ articuloId: ARTICULO, presentacion: "UNIDAD", cantidadCapturada: c }]))["partidas.0.cantidadCapturada"];
+    expect(errores(captura({ bodegaOrigenId: "", estacionId: undefined }, [{ articuloId: " ", presentacion: "UNIDAD", cantidadCapturada: "1" }]))).toMatchObject({
+      "encabezado.bodegaOrigenId": "No se seleccionó nada",
+      "encabezado.estacionId": "No se seleccionó nada",
+      "partidas.0.articuloId": "No se seleccionó nada",
+    });
+    expect(errores(captura({ bodegaOrigenId: "1 OR 1=1" }))).toMatchObject({ "encabezado.bodegaOrigenId": "Identificador inválido" });
+    expect(cantidad(" ")).toBe("Indica la cantidad");
+    expect(cantidad("1.5")).toBe("Solo cantidades enteras, sin decimales");
+    expect(cantidad("99999999")).toBe("Cantidad demasiado grande");
+    expect(cantidad("9".repeat(400))).toBe("Cantidad demasiado grande");
+    expect(cantidad("0")).toBe("La cantidad debe ser mayor que cero");
+  });
+
   it("préstamo solo es verdadero si la casilla viene marcada", () => {
     for (const [valor, esperado] of [[undefined, false], ["", false], ["false", false], ["on", true], ["true", true], [true, true]] as const) {
       expect(esquemaSolicitud.parse(captura({ esPrestamo: valor })).encabezado.esPrestamo, String(valor)).toBe(esperado);

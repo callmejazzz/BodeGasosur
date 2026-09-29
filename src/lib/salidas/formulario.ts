@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { enteroPositivo, erroresDe, leerFormulario, textoOpcional, uuid, type ErroresFormulario } from "@/lib/movimientos/formulario";
+import { enteroPositivo, erroresDe, leerFormulario, seleccion, textoOpcional, uuid, type ErroresFormulario } from "@/lib/movimientos/formulario";
 import type { DatosSolicitud } from "./servicio";
 
 // La forma de lo que llega del navegador. Las reglas de negocio (catálogo
@@ -22,15 +22,15 @@ const casilla = z
 const motivo = (pregunta: string) => z.string().trim().min(1, pregunta).max(300, "Máximo 300 caracteres");
 
 export const esquemaPartida = z.object({
-  articuloId: uuid,
+  articuloId: seleccion,
   presentacion: z.enum(["UNIDAD", "CAJA"], { error: "Elige unidad o caja" }),
   cantidadCapturada: enteroPositivo,
   observaciones: textoOpcional(300),
 });
 
 export const esquemaEncabezado = z.object({
-  bodegaOrigenId: uuid,
-  estacionId: uuid,
+  bodegaOrigenId: seleccion,
+  estacionId: seleccion,
   solicitadoPorId: uuidOpcional,
   areaId: uuidOpcional,
   esPrestamo: casilla,

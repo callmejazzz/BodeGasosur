@@ -55,7 +55,7 @@ describe("esquemaBorrador", () => {
 
   it("identificadores y llave: solo UUID", () => {
     expect(errores(captura({ proveedorId: "1 OR 1=1" }))).toMatchObject({ "encabezado.proveedorId": "Identificador inválido" });
-    expect(errores(captura({ bodegaDestinoId: "" }))).toMatchObject({ "encabezado.bodegaDestinoId": "Identificador inválido" });
+    expect(errores(captura({ bodegaDestinoId: "" }))).toMatchObject({ "encabezado.bodegaDestinoId": "No se seleccionó nada" });
     expect(errores(captura({}, [{ ...captura().partidas[0], articuloId: "abc" }]))).toMatchObject({ "partidas.0.articuloId": "Identificador inválido" });
     expect(esquemaAlta.safeParse({ llaveIdempotencia: "no", borrador: captura() }).success).toBe(false);
     expect(esquemaAlta.safeParse({ llaveIdempotencia: randomUUID(), borrador: captura() }).success).toBe(true);

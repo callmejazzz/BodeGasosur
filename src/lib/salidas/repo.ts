@@ -1,5 +1,6 @@
 import "server-only";
 import type { Prisma } from "@prisma/client";
+import { usuarioTienePermiso, type Permiso, type SujetoDePermisos } from "@/lib/permisos";
 import type { EstatusSalida } from "./servicio";
 
 // Lecturas de salidas. Recibe el cliente: solo consultar() lo entrega.
@@ -26,13 +27,14 @@ const RESUMEN = {
 
 export type SalidaResumen = Prisma.MovimientoGetPayload<{ select: typeof RESUMEN }>;
 
-/** La lista se corta en 200: pasado eso, la pantalla avisa y pide afinar la búsqueda. */
+/** Cada tramo entrega hasta 200 salidas; el cursor permite consultar las anteriores. */
 export const TOPE_LISTA = 200;
 
 export type FiltroSalidas = {
   estatus: EstatusSalida | "todas";
   /** Folio, clave de bodega o número de estación (tolerante), alias, solicitante o quién retiró. */
   busqueda: string;
+  cursor?: string;
 };
 
 /** Ids cuyo folio, clave de bodega o número de estación coinciden ignorando guiones, ceros y mayúsculas. */
@@ -50,9 +52,10 @@ async function idsPorClave(db: Db, texto: string): Promise<string[]> {
   return filas.map((f) => f.id);
 }
 
-/** La más reciente arriba. Pide una fila de más para saber si el tope se quedó corto. */
-export async function listarSalidas(db: Db, filtro: FiltroSalidas): Promise<{ filas: SalidaResumen[]; hayMas: boolean }> {
+/** La más reciente arriba. El id desempata fechas iguales y hace estable el cursor. */
+export async function listarSalidas(db: Db, filtro: FiltroSalidas): Promise<{ filas: SalidaResumen[]; hayMas: boolean; cursorActual: string | null; cursorSiguiente: string | null }> {
   const q = filtro.busqueda.trim().slice(0, 80);
+  const cursor = filtro.cursor ? await db.movimiento.findFirst({ where: { id: filtro.cursor, tipo: "SALIDA" }, select: { id: true } }) : null;
   const filas = await db.movimiento.findMany({
     where: {
       tipo: "SALIDA",
@@ -67,10 +70,14 @@ export async function listarSalidas(db: Db, filtro: FiltroSalidas): Promise<{ fi
         : undefined,
     },
     select: RESUMEN,
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    cursor: cursor ? { id: cursor.id } : undefined,
+    skip: cursor ? 1 : undefined,
     take: TOPE_LISTA + 1,
   });
-  return { filas: filas.slice(0, TOPE_LISTA), hayMas: filas.length > TOPE_LISTA };
+  const hayMas = filas.length > TOPE_LISTA;
+  const visibles = filas.slice(0, TOPE_LISTA);
+  return { filas: visibles, hayMas, cursorActual: cursor?.id ?? null, cursorSiguiente: hayMas ? visibles.at(-1)!.id : null };
 }
 
 const DETALLE = {
@@ -146,25 +153,71 @@ export async function valuarSalida(db: Db, id: string): Promise<Valuacion> {
 
 const TOPE_BANDEJA = 50;
 
-export type Pendientes = { filas: SalidaResumen[]; total: number };
-export type Bandeja = { porAutorizar: Pendientes; porRetirar: Pendientes; porRecibir: Pendientes };
+/** Cada sección espera a quien tiene su permiso: autorizar, retirar o confirmar recepción. */
+export const SECCIONES = [
+  { clave: "porAutorizar", estatus: "SOLICITADA", permiso: "salidas:autorizar" },
+  { clave: "porRetirar", estatus: "AUTORIZADA", permiso: "salidas:retirar" },
+  { clave: "porRecibir", estatus: "RETIRADA", permiso: "salidas:recibir" },
+] as const satisfies readonly { clave: string; estatus: EstatusSalida; permiso: Permiso }[];
 
-/** Lo que espera a alguien, la más antigua primero: autorizar, retirar o confirmar recepción. */
-export async function bandejaDeSalidas(db: Db): Promise<Bandeja> {
-  const pendientes = async (estatus: EstatusSalida): Promise<Pendientes> => ({
-    filas: await db.movimiento.findMany({
+export type ClaveSeccion = (typeof SECCIONES)[number]["clave"];
+export type SeccionBandeja = { clave: ClaveSeccion; estatus: EstatusSalida; filas: SalidaResumen[]; total: number };
+
+const seccionesDe = (usuario: SujetoDePermisos) => SECCIONES.filter((s) => usuarioTienePermiso(usuario, s.permiso));
+
+function ordenDeBandeja(estatus: EstatusSalida): Prisma.MovimientoOrderByWithRelationInput[] {
+  if (estatus === "SOLICITADA") return [{ createdAt: "asc" }, { id: "asc" }];
+  if (estatus === "AUTORIZADA") return [{ autorizadoEn: "asc" }, { id: "asc" }];
+  return [{ entregadoEn: "asc" }, { id: "asc" }];
+}
+
+/** Lo que espera al usuario, la más antigua primero. Las secciones en las que no puede actuar no se consultan. */
+export async function bandejaDeSalidas(db: Db, usuario: SujetoDePermisos): Promise<SeccionBandeja[]> {
+  const bandeja: SeccionBandeja[] = [];
+  // Secuencial a propósito: dentro de una transacción hay una sola conexión.
+  for (const { clave, estatus } of seccionesDe(usuario)) {
+    const filas = await db.movimiento.findMany({
       where: { tipo: "SALIDA", estatus },
       select: RESUMEN,
-      orderBy: { createdAt: "asc" },
+      orderBy: ordenDeBandeja(estatus),
       take: TOPE_BANDEJA,
-    }),
-    total: await db.movimiento.count({ where: { tipo: "SALIDA", estatus } }),
+    });
+    const total = await db.movimiento.count({ where: { tipo: "SALIDA", estatus } });
+    bandeja.push({ clave, estatus, filas, total });
+  }
+  return bandeja;
+}
+
+/** Cuántas salidas esperan al usuario; null si no puede actuar en ninguna sección. */
+export async function contarPendientes(db: Db, usuario: SujetoDePermisos): Promise<number | null> {
+  const secciones = seccionesDe(usuario);
+  if (secciones.length === 0) return null;
+  return db.movimiento.count({ where: { tipo: "SALIDA", estatus: { in: secciones.map((s) => s.estatus) } } });
+}
+
+// ─────────────────────────────── Existencias ─────────────────────────────────
+// Informativas: el retiro las vuelve a comprobar bajo candado.
+
+/** Existencia en la bodega de origen de cada artículo de la salida. */
+export async function existenciasDeSalida(db: Db, id: string): Promise<Record<string, number>> {
+  const filas = await db.$queryRaw<{ articuloId: string; cantidad: number }[]>`
+    SELECT p."articuloId", coalesce(e.cantidad, 0) AS cantidad
+    FROM "MovimientoPartida" p
+    JOIN "Movimiento" m ON m.id = p."movimientoId"
+    LEFT JOIN "Existencia" e ON e."bodegaId" = m."bodegaOrigenId" AND e."articuloId" = p."articuloId"
+    WHERE m.id = ${id}::uuid AND m.tipo = 'SALIDA'`;
+  return Object.fromEntries(filas.map((f) => [f.articuloId, f.cantidad]));
+}
+
+/** bodegaId → articuloId → cantidad, solo catálogo activo y solo lo que hay. */
+async function existenciasActivas(db: Db): Promise<Record<string, Record<string, number>>> {
+  const filas = await db.existencia.findMany({
+    where: { cantidad: { gt: 0 }, bodega: { activa: true }, articulo: { activo: true } },
+    select: { bodegaId: true, articuloId: true, cantidad: true },
   });
-  // Secuencial a propósito: dentro de una transacción hay una sola conexión.
-  const porAutorizar = await pendientes("SOLICITADA");
-  const porRetirar = await pendientes("AUTORIZADA");
-  const porRecibir = await pendientes("RETIRADA");
-  return { porAutorizar, porRetirar, porRecibir };
+  const porBodega: Record<string, Record<string, number>> = {};
+  for (const f of filas) (porBodega[f.bodegaId] ??= {})[f.articuloId] = f.cantidad;
+  return porBodega;
 }
 
 // ─────────────────────────── Opciones de captura ─────────────────────────────
@@ -177,6 +230,8 @@ export type OpcionesCaptura = {
   areas: Opcion[];
   personas: Opcion[];
   articulos: OpcionArticulo[];
+  /** bodegaId → articuloId → cantidad; lo ausente es cero. */
+  existencias: Record<string, Record<string, number>>;
 };
 
 /** Solo catálogo activo: una solicitud no se edita, así que no hay asignaciones previas que conservar. */
@@ -196,5 +251,6 @@ export async function cargarOpcionesDeCaptura(db: Db): Promise<OpcionesCaptura> 
     areas,
     personas,
     articulos: articulos.map((a) => ({ id: a.id, clave: a.clave, descripcion: a.descripcion, unidad: a.unidad.clave, piezasPorCaja: a.piezasPorCaja })),
+    existencias: await existenciasActivas(db),
   };
 }

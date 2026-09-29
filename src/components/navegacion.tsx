@@ -8,13 +8,17 @@ import packageJson from "../../package.json";
 
 const { version } = packageJson;
 
-type Enlace = { href: string; etiqueta: string; proximamente?: boolean };
+/** Lo que el layout decidió en el servidor: la matriz no viaja al cliente. */
+export type Accesos = { salidas: boolean; usuarios: boolean };
 
-const ADMINISTRACION: Enlace[] = [{ href: "/usuarios", etiqueta: "Usuarios" }];
+type Enlace = { href: string; etiqueta: string; proximamente?: boolean; acceso?: keyof Accesos };
+
+const ADMINISTRACION: Enlace[] = [{ href: "/usuarios", etiqueta: "Usuarios", acceso: "usuarios" }];
 
 const OPERACION: Enlace[] = [
   { href: "/", etiqueta: "Tablero" },
   { href: "/entradas", etiqueta: "Entradas" },
+  { href: "/salidas", etiqueta: "Salidas", acceso: "salidas" },
   { href: "/movimientos", etiqueta: "Movimientos", proximamente: true },
   { href: "/existencias", etiqueta: "Existencias", proximamente: true },
   { href: "/kardex", etiqueta: "Kardex", proximamente: true },
@@ -59,18 +63,14 @@ function Item({ enlace, activo }: { enlace: Enlace; activo: boolean }) {
 
 /**
  * `sesion` llega desde el layout: son componentes de servidor incrustados en
- * la barra. `puedeAdministrarUsuarios` también viene decidido de allá — este
- * componente dibuja, no decide: ocultar un enlace es presentación, y la puerta
- * real sigue siendo `consultar()` en cada pantalla.
+ * la barra. `accesos` también viene decidido de allá — este componente dibuja,
+ * no decide: ocultar un enlace es presentación, y la puerta real sigue siendo
+ * `consultar()` en cada pantalla.
  */
-export function Navegacion({
-  sesion,
-  puedeAdministrarUsuarios,
-}: {
-  sesion?: React.ReactNode;
-  puedeAdministrarUsuarios: boolean;
-}) {
+export function Navegacion({ sesion, accesos }: { sesion?: React.ReactNode; accesos: Accesos }) {
   const ruta = usePathname();
+  const visibles = (enlaces: Enlace[]) => enlaces.filter((e) => !e.acceso || accesos[e.acceso]);
+  const administracion = visibles(ADMINISTRACION);
 
   return (
     <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col self-start overflow-y-auto bg-primary px-3 py-5 text-white">
@@ -80,7 +80,7 @@ export function Navegacion({
       </Link>
 
       <Seccion titulo="Operación">
-        {OPERACION.map((e) => (
+        {visibles(OPERACION).map((e) => (
           <Item key={e.href} enlace={e} activo={e.href === "/" ? ruta === "/" : ruta.startsWith(e.href)} />
         ))}
       </Seccion>
@@ -95,9 +95,9 @@ export function Navegacion({
         ))}
       </Seccion>
 
-      {puedeAdministrarUsuarios && (
+      {administracion.length > 0 && (
         <Seccion titulo="Administración">
-          {ADMINISTRACION.map((e) => (
+          {administracion.map((e) => (
             <Item key={e.href} enlace={e} activo={ruta.startsWith(e.href)} />
           ))}
         </Seccion>
@@ -105,7 +105,7 @@ export function Navegacion({
 
       <div className="mt-auto">
         <p className="px-3 text-xs leading-relaxed text-white/35">
-          BodeGasosur v{version} · fases 0 a 5. Las salidas llegan con la fase 6.
+          BodeGasosur v{version} · fases 0 a 6 construidas. Siguen los traspasos en la fase 7.
         </p>
         {sesion}
       </div>

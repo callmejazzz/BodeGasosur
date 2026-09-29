@@ -7,7 +7,7 @@ import { contarCatalogos } from "@/lib/catalogos/repos";
 import { cantidad } from "@/lib/utils";
 
 // El orden vigente está en docs/entregables-fases/README.md; el plan original
-// está en docs/cimientos-word/04-plan-demo.docx. Si las listas se separan, esta es la que miente:
+// está en docs/cimientos-word/02-plan-demo.docx. Si las listas se separan, esta es la que miente:
 // el plan vive en el repositorio, no aquí.
 const FASES = [
   { nombre: "Fase 0 y 1 — Cimientos y catálogos", detalle: "Next.js, PostgreSQL, Prisma y los catálogos con datos sembrados", estado: "lista" },
@@ -15,7 +15,7 @@ const FASES = [
   { nombre: "Fase 3 — Usuarios y permisos", detalle: "Acceso con Clerk, roles y la facultad de autorizar", estado: "lista" },
   { nombre: "Fase 4 — Migración de catálogos (Plan B)", detalle: "Catálogo global real; proveedores, artículos y existencias los captura Compras", estado: "lista" },
   { nombre: "Fase 5 — Entradas", detalle: "Compras con moneda, IVA y capas de costo PEPS", estado: "lista" },
-  { nombre: "Fase 6 — Salidas", detalle: "Solicitud, autorización, retiro PEPS y recepción", estado: "parcial" },
+  { nombre: "Fase 6 — Salidas", detalle: "Solicitud, autorización, retiro PEPS y recepción", estado: "lista" },
   { nombre: "Fase 7 — Traspasos, devoluciones y conteo", detalle: "Movimientos entre bodegas, préstamos e inventario físico", estado: "pendiente" },
   { nombre: "Fase 8 — Reportes", detalle: "Reporte de los viernes, kardex, gasto por estación y exportación", estado: "pendiente" },
   { nombre: "Fase 9 — Acabado", detalle: "Tablero, alertas de mínimos y diseño en celular", estado: "pendiente" },
