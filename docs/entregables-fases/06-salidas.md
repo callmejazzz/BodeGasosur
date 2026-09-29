@@ -6,7 +6,7 @@
 | Versión      | `v0.6.0`                                                                                                                                                                       |
 | Commits      | `bd3d30e` — contrato y frontera SQL; `6ef2605` — dominio, conciliación y acciones; `ae7741d` — actor verificable y guardas de acceso; `8fe9805` — pantallas; cierre de versión |
 | Etiqueta Git | `v0.6.0`                                                                                                                                                                       |
-| Contrato     | [Fase 6: Salidas](../decisiones-otros/04-fase-6-salidas.md)                                                                                                                    |
+| Contrato     | [Fase 6: Salidas](04-fase-6-salidas.md)                                                                                                                    |
 
 ## Construido
 

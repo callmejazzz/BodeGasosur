@@ -24,7 +24,7 @@ reales escritos de catorce formas —`OSCAR`, `OSCAR B.`, `LIC HUGO`, `LIC. HUGO
 Compras puede decir cómo se llama cada quien. Entran las dos personas confirmadas por
 nombre completo; las demás se agregan como renglón cuando se confirmen.
 
-**Los proveedores no se migran.** Por el [Plan B](../../docs/decisiones-otros/01-plan-b-produccion.md),
+**Los proveedores no se migran.** Por el [Plan B](01-plan-b-produccion.md),
 Compras los captura desde la aplicación. Lo que se aprendió de la hoja `CATALOGO
 PROVEDORES` quedó en [04 §6](../../docs/04-datos-actuales.md).
 

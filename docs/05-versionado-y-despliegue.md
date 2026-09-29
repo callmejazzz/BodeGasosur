@@ -193,7 +193,7 @@ configurado con una llave que no sea `sk_test_`, terminal interactiva, y que
 crea el usuario de ejecución y carga las llaves públicas de Clerk, rechaza una base que
 ya opere, muestra el resumen y exige teclear el nombre de la base para confirmar. La
 plantilla `bodegasosur-db` usa RS256 y dura 30 segundos; la base acepta hasta 60.
-Ver [Plan B](decisiones-otros/01-plan-b-produccion.md).
+Ver [Plan B](01-plan-b-produccion.md).
 
 **Skew Protection encendido.** Cuando se promueve una versión, alguien puede llevar horas
 con la pantalla de captura abierta: su navegador tiene el JavaScript anterior, que invoca

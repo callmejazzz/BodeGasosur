@@ -22,7 +22,7 @@
 
 | Archivo | Función |
 |---|---|
-| [Plan B para producción](../decisiones-otros/01-plan-b-produccion.md) | Decisión operativa de producción |
+| [Plan B para producción](01-plan-b-produccion.md) | Decisión operativa de producción |
 | [`prisma/migracion-datos/`](../../prisma/migracion-datos/) | Importador, CSV y pruebas |
 | [`prisma/configuracion.ts`](../../prisma/configuracion.ts) | Configuración mínima compartida |
 | [`prisma/fixtures.ts`](../../prisma/fixtures.ts) | Datos exclusivos de desarrollo |

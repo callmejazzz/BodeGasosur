@@ -268,7 +268,7 @@ candado del encabezado es el reclamo principal de la confirmación; el `UPDATE` 
 condicionado a `estatus = 'BORRADOR'` es una defensa adicional. Repetir la misma operación
 devuelve el mismo movimiento; nunca crea capas, existencia o folios adicionales. El
 contrato completo está en
-[`02-fase-5-entradas.md`](decisiones-otros/02-fase-5-entradas.md).
+[`02-fase-5-entradas.md`](02-fase-5-entradas.md).
 
 ## 6. Normalización a unidades base enteras
 
@@ -316,7 +316,7 @@ costoUnitarioBaseMxn = redondear4(
 Los totales de factura se calculan desde la captura original y se redondean por renglón; no
 se reconstruyen desde el costo base redondeado. El contrato completo, incluidos IVA,
 validaciones y ejemplos, está en
-[`02-fase-5-entradas.md`](decisiones-otros/02-fase-5-entradas.md#5-normalización-a-la-unidad-base).
+[`02-fase-5-entradas.md`](02-fase-5-entradas.md#5-normalización-a-la-unidad-base).
 
 ## 7. Usuarios, permisos y el catálogo compartido
 
@@ -337,7 +337,7 @@ opcional con una `Persona`.
 
 La matriz ya contiene los permisos de Entradas usados por sus páginas y Server Actions,
 y los cinco permisos de Salidas. Para `salidas:autorizar`, la puerta común exige además
-`puedeAutorizar` vigente. El [contrato de la fase 6](decisiones-otros/04-fase-6-salidas.md)
+`puedeAutorizar` vigente. El [contrato de la fase 6](04-fase-6-salidas.md)
 documenta el avance de esa fase. Los permisos de Traspasos, Devoluciones y Ajustes se
 agregarán cuando se construya cada flujo.
 
@@ -409,7 +409,7 @@ Si ya estaba, no se vuelve a procesar; si la transacción falla, el reintento la
 | Se eliminan `transportista` y `vehiculo`; `recibidoPor` pasa a `entregadoA` libre | D4 |
 | Tipo `DEVOLUCION` y bandera `esPrestamo` | D7 y B6 |
 | Estados de salida con autorización; `RETIRADA` registra salida física y `RECIBIDA` cierra desde 2026-09-23 | D2 y D6, ajustados por decisión de alcance posterior |
-| `Proveedor` lleva su propia razón social y RFC; **no** apunta a `Empresa` | `Empresa` es exclusivamente Gasosur ([10](decisiones-otros/01-plan-b-produccion.md)). Si una empresa del grupo debe ser proveedora, se decide como caso de negocio |
+| `Proveedor` lleva su propia razón social y RFC; **no** apunta a `Empresa` | `Empresa` es exclusivamente Gasosur ([10](01-plan-b-produccion.md)). Si una empresa del grupo debe ser proveedora, se decide como caso de negocio |
 | `autorizadoPor` apunta a `Usuario`, con `autorizadoEn` y escritura única | **A2** |
 | Actor y marca de tiempo por transición, más `Bitacora` | **A3** |
 | `fecha` como `@db.Date`; los instantes con `@db.Timestamptz(3)` | **E4** |

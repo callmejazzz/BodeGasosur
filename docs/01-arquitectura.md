@@ -298,7 +298,7 @@ las existencias por `articuloId` y, al final, el folio. La transición condicion
 juntas. El alta lleva una llave de idempotencia única y compara toda la captura antes de
 revalidar catálogos; una existencia ausente se crea en cero con
 `INSERT … ON CONFLICT DO NOTHING` antes de bloquearla. El contrato ejecutable está en
-[`02-fase-5-entradas.md`](decisiones-otros/02-fase-5-entradas.md).
+[`02-fase-5-entradas.md`](02-fase-5-entradas.md).
 
 ### 4.2 Stack concreto
 
@@ -439,7 +439,7 @@ para decidir el día—, la validación de una fecha calendario `YYYY-MM-DD`, su
 valor de Prisma sin desplazarla y las dos funciones de formato. Del lado de SQL, ninguna
 consulta calcula «hoy» por su cuenta: nada de `CURRENT_DATE`, que depende de cómo esté
 configurado el servidor que toque. El contrato y sus casos límite están en
-[`02-fase-5-entradas.md`](decisiones-otros/02-fase-5-entradas.md#10-fechas-de-negocio).
+[`02-fase-5-entradas.md`](02-fase-5-entradas.md#10-fechas-de-negocio).
 
 ## 5. Entorno local
 
@@ -487,7 +487,7 @@ Comandos útiles:
 | `npm run dev` | Servidor de desarrollo |
 | `npm run db:up` / `db:down` | Levanta o baja PostgreSQL |
 | `npm run db:reset` | Desarrollo: borra todo y encadena configuración, catálogos reales, fixtures y Superadmin |
-| `npm run prod:bootstrap` | Producción: manual y con confirmación, sin fixtures ([Plan B](decisiones-otros/01-plan-b-produccion.md)) |
+| `npm run prod:bootstrap` | Producción: manual y con confirmación, sin fixtures ([Plan B](01-plan-b-produccion.md)) |
 | `npm run test` | Pruebas de integración contra PostgreSQL |
 | `npm run db:studio` | Explorador visual de la base de datos |
 

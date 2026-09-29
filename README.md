@@ -28,7 +28,7 @@ Cada desarrollador tiene que usar su propio `COMPOSE_PROJECT_NAME`, `POSTGRES_PO
 `POSTGRES_DB` en `.env`; las dos URLs de base deben referirse a ese mismo nombre y puerto.
 Así Docker crea un contenedor y volumen independientes y `db:reset` solo borra esa base
 local. La guía completa, incluida la forma de entrar como Superadmin en un entorno de
-desarrollo aislado, está en [colaboración de desarrollo](docs/decisiones-otros/03-colaboracion-desarrollo.md).
+desarrollo aislado, está en [colaboración de desarrollo](03-colaboracion-desarrollo.md).
 
 La aplicación queda en <http://localhost:3000>.
 
@@ -40,7 +40,7 @@ La aplicación queda en <http://localhost:3000>.
 | `npm run dev` | Servidor de desarrollo |
 | `npm run db:up` / `db:down` | Levanta o baja PostgreSQL |
 | `npm run db:reset` | **Desarrollo.** Borra todo, remigra, crea el usuario de ejecución, carga las llaves públicas de Clerk y encadena configuración, catálogos reales, fixtures y Superadmin |
-| `npm run prod:bootstrap` | **Producción.** Manual y con confirmación: migraciones, usuario de ejecución, llaves de Clerk, configuración, catálogos reales y Superadmin. Sin fixtures — ver [Plan B](docs/decisiones-otros/01-plan-b-produccion.md) |
+| `npm run prod:bootstrap` | **Producción.** Manual y con confirmación: migraciones, usuario de ejecución, llaves de Clerk, configuración, catálogos reales y Superadmin. Sin fixtures — ver [Plan B](01-plan-b-produccion.md) |
 | `npm run db:usuario-app` / `db:llaves-clerk` | Crea el usuario de ejecución sin propiedad y carga manualmente las llaves públicas de Clerk |
 | `npm run db:configuracion` | Bodegas, áreas, unidad `PZA` y folios. Solo crea lo que falta |
 | `npm run datos:migrar` | Empresas, estaciones y personas desde `prisma/migracion-datos/`. Se detiene ante divergencias; `-- --sincronizar` sobrescribe, `-- --simular` solo muestra |
@@ -69,9 +69,9 @@ El script junta `prisma/sql/antes/`, el DDL que genera Prisma desde `schema.pris
 - **Actor verificable en desarrollo** — cada escritura protegida de un usuario liga en PostgreSQL un JWT RS256 de Clerk a su transacción. La bitácora y las columnas de actor usan esa identidad; las escrituras ordinarias sin liga se rechazan. Producción se desplegará al cerrar los entregables.
 - **Tablero** con el avance por fases y los datos base cargados.
 
-Los traspasos, devoluciones y conteos siguen en la fase 7. El [contrato de la fase 6](docs/decisiones-otros/04-fase-6-salidas.md) documenta el flujo de salidas construido.
+Los traspasos, devoluciones y conteos siguen en la fase 7. El [contrato de la fase 6](04-fase-6-salidas.md) documenta el flujo de salidas construido.
 
-**Empresas, estaciones y dos personas son las reales de Gasosur**, cargadas por [`prisma/migracion-datos/`](prisma/migracion-datos/README.md). **Artículos y proveedores son fixtures de desarrollo** (`prisma/fixtures.ts`) para probar movimientos, kardex y PEPS; producción arranca sin ellos, por el [Plan B](docs/decisiones-otros/01-plan-b-produccion.md).
+**Empresas, estaciones y dos personas son las reales de Gasosur**, cargadas por [`prisma/migracion-datos/`](prisma/migracion-datos/README.md). **Artículos y proveedores son fixtures de desarrollo** (`prisma/fixtures.ts`) para probar movimientos, kardex y PEPS; producción arranca sin ellos, por el [Plan B](01-plan-b-produccion.md).
 
 ## Documentación
 
@@ -86,10 +86,10 @@ Los traspasos, devoluciones y conteos siguen en la fase 7. El [contrato de la fa
 | [Inventario actual](docs/04-datos-actuales.md) | Análisis del Excel vigente y plan de migración |
 | [Versionado y despliegue](docs/05-versionado-y-despliegue.md) | Política de versiones y ramas |
 | [Auditoría de arquitectura](docs/cimientos-word/04-auditoria-arquitectura.docx) | Revisión de las bases, con lo que se resolvió y lo que sigue abierto |
-| [Plan B para producción](docs/decisiones-otros/01-plan-b-produccion.md) | Producción arranca sin inventario; los dos perfiles de base |
-| [Contrato de la Fase 5](docs/decisiones-otros/02-fase-5-entradas.md) | Funcionamiento, decisiones, seguridad, pruebas y orden de implementación de entradas |
-| [Contrato de la Fase 6](docs/decisiones-otros/04-fase-6-salidas.md) | Estados, permisos, PEPS, seguridad y pruebas de salidas |
-| [Colaboración de desarrollo](docs/decisiones-otros/03-colaboracion-desarrollo.md) | Alta de desarrolladores, Clerk y bases locales aisladas |
+| [Plan B para producción](01-plan-b-produccion.md) | Producción arranca sin inventario; los dos perfiles de base |
+| [Contrato de la Fase 5](02-fase-5-entradas.md) | Funcionamiento, decisiones, seguridad, pruebas y orden de implementación de entradas |
+| [Contrato de la Fase 6](04-fase-6-salidas.md) | Estados, permisos, PEPS, seguridad y pruebas de salidas |
+| [Colaboración de desarrollo](03-colaboracion-desarrollo.md) | Alta de desarrolladores, Clerk y bases locales aisladas |
 | [Cambios](CHANGELOG.md) | Qué trae cada versión, escrito para quien usa el sistema |
 | **[Entregables por fase](docs/entregables-fases/README.md)** | **Estado y plan de las fases** |
 

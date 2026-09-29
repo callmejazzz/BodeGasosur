@@ -136,7 +136,7 @@ existencias dejan de ser cero.
 - Prisma con `relationJoins`: las relaciones se cargan en una sola sentencia en vez de en
   paralelo sobre la conexión de la transacción (pg 9 lo rechazaría).
 - 142 pruebas contra PostgreSQL real: los 14 criterios de aceptación del contrato
-  ([contrato de Entradas](docs/decisiones-otros/02-fase-5-entradas.md) §12), el criterio 13 sobre
+  ([contrato de Entradas](02-fase-5-entradas.md) §12), el criterio 13 sobre
   las Server Actions reales.
 
 **Por saber**
@@ -152,7 +152,7 @@ existencias dejan de ser cero.
 ## v0.4.0 — 2026-09-12
 
 Cierra la fase 4: migración de catálogos, bajo el **Plan B** de
-[Plan B para producción](docs/decisiones-otros/01-plan-b-produccion.md). Es la primera versión con
+[Plan B para producción](01-plan-b-produccion.md). Es la primera versión con
 datos reales de Gasosur adentro, y la que decide cómo va a arrancar producción: **limpia de
 inventario**. Compras captura proveedores y artículos desde la aplicación; el Excel no se
 migra.
