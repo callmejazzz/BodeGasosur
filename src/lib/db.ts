@@ -7,10 +7,12 @@ import { cache } from "react";
 import { detalleDePostgres, esErrorDePrisma } from "@/lib/movimientos/errores";
 import { usuarioTienePermiso, type Permiso, type SujetoDePermisos } from "@/lib/permisos";
 
-// Prisma 7 exige un driver adapter explícito.
+// Prisma 7 exige un driver adapter explícito. La sesión va en UTC aunque la
+// base muestre la hora de México: el adapter lee y escribe timestamptz
+// suponiendo UTC, y en otra zona movería cada instante (prisma/comun.ts igual).
 const createPrismaClient = () =>
   new PrismaClient({
-    adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+    adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL, options: "-c TimeZone=UTC" }),
   });
 
 // En desarrollo Next.js recarga los módulos en caliente; sin este singleton se

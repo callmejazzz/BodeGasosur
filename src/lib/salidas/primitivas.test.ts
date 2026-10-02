@@ -10,7 +10,7 @@ import { URL_PRUEBAS } from "../../../pruebas/base-de-pruebas";
 import { articuloNuevo } from "../../../pruebas/semilla-entradas";
 import { sembrarCapa, sinDefensas } from "../../../pruebas/semilla-inventario";
 import { sembrarSalidas, type EntornoSalidas } from "../../../pruebas/semilla-salidas";
-import { bloquearCapasVivas } from "./primitivas";
+import { bloquearCapasVivas } from "../movimientos/primitivas";
 
 const prisma = crearCliente(URL_PRUEBAS);
 let e: EntornoSalidas;

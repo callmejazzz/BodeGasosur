@@ -1,7 +1,7 @@
 import type { FiltroSalidas } from "./repo";
 import type { EstatusSalida } from "./servicio";
 
-// Los filtros de la lista de salidas viven en la URL: /salidas?q=…&estatus=…
+// Los filtros de la lista de salidas viven en la URL: /salidas?q=…&estatus=…&prestamo=1
 
 export type FiltroEstatus = "todas" | "solicitadas" | "autorizadas" | "rechazadas" | "retiradas" | "recibidas" | "canceladas";
 
@@ -17,13 +17,15 @@ export const ESTATUS: { valor: FiltroEstatus; etiqueta: string; estatus?: Estatu
 
 export type FiltrosDeLista = {
   estatus: FiltroEstatus;
-  /** Folio, clave de bodega o número de estación (tolerante), alias, solicitante o quién retiró. */
+  /** Folio, clave de bodega o número de estación (tolerante); bodega, alias, solicitante o quién retiró. */
   busqueda: string;
+  /** Solo las marcadas como préstamo. */
+  prestamo: boolean;
 };
 
-export const PARAMETRO: Record<keyof FiltrosDeLista, string> = { busqueda: "q", estatus: "estatus" };
+export const PARAMETRO: Record<keyof FiltrosDeLista, string> = { busqueda: "q", estatus: "estatus", prestamo: "prestamo" };
 
-export const SIN_FILTROS: FiltrosDeLista = { estatus: "todas", busqueda: "" };
+export const SIN_FILTROS: FiltrosDeLista = { estatus: "todas", busqueda: "", prestamo: false };
 
 /** Lo que llega en la URL, ya acotado: lo que no se reconoce cae al valor por omisión. */
 export function leerFiltros(params: Record<string, string | string[] | undefined>): FiltrosDeLista {
@@ -34,18 +36,19 @@ export function leerFiltros(params: Record<string, string | string[] | undefined
   return {
     estatus: ESTATUS.find((f) => f.valor === texto("estatus"))?.valor ?? "todas",
     busqueda: texto("busqueda").slice(0, 80),
+    prestamo: texto("prestamo") === "1",
   };
 }
 
 export function hayFiltros(f: FiltrosDeLista): boolean {
-  return f.busqueda !== "" || f.estatus !== "todas";
+  return f.busqueda !== "" || f.estatus !== "todas" || f.prestamo;
 }
 
 export function aParametros(f: FiltrosDeLista): URLSearchParams {
   const p = new URLSearchParams();
-  for (const clave of Object.keys(PARAMETRO) as (keyof FiltrosDeLista)[]) {
-    if (f[clave] && f[clave] !== "todas") p.set(PARAMETRO[clave], f[clave]);
-  }
+  if (f.busqueda) p.set(PARAMETRO.busqueda, f.busqueda);
+  if (f.estatus !== "todas") p.set(PARAMETRO.estatus, f.estatus);
+  if (f.prestamo) p.set(PARAMETRO.prestamo, "1");
   return p;
 }
 
@@ -62,5 +65,5 @@ export function listaDeEstatus(estatus: EstatusSalida): string {
 }
 
 export function aFiltroDeRepo(f: FiltrosDeLista): FiltroSalidas {
-  return { estatus: ESTATUS.find((e) => e.valor === f.estatus)?.estatus ?? "todas", busqueda: f.busqueda };
+  return { estatus: ESTATUS.find((e) => e.valor === f.estatus)?.estatus ?? "todas", busqueda: f.busqueda, soloPrestamos: f.prestamo };
 }

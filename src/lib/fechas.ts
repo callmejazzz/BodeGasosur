@@ -79,6 +79,45 @@ export function deFechaDeBase(valor: Date): string {
   return `${año}-${mes}-${dia}`;
 }
 
+/**
+ * Un rango de fechas de la URL, ya acotado: fechas calendario dentro de lo
+ * operativo (mínima … hoy en México); lo demás se descarta y, si vienen al
+ * revés, se intercambian.
+ */
+export function leerRangoDeFechas(desdeCrudo: unknown, hastaCrudo: unknown, hoy = hoyEnMexico()): { desde: string; hasta: string } {
+  const fecha = (v: unknown) => {
+    const texto = typeof v === "string" ? v.trim() : "";
+    return esFechaOperativa(texto, hoy) ? texto : "";
+  };
+  let desde = fecha(desdeCrudo);
+  let hasta = fecha(hastaCrudo);
+  if (desde && hasta && desde > hasta) [desde, hasta] = [hasta, desde];
+  return { desde, hasta };
+}
+
+/** El día calendario siguiente. */
+export function diaSiguiente(texto: string): string {
+  const fecha = aFechaDeBase(texto);
+  fecha.setUTCDate(fecha.getUTCDate() + 1);
+  return deFechaDeBase(fecha);
+}
+
+/**
+ * El instante en que empieza ese día en México: el borde para filtrar marcas
+ * de tiempo por fecha calendario. Respeta el horario de verano que México tuvo
+ * hasta 2022.
+ */
+export function inicioDelDiaEnMexico(texto: string): Date {
+  const medianoche = aFechaDeBase(texto).getTime();
+  let instante = medianoche;
+  // Dos pasos: el desfase de México se mide de nuevo ya en su medianoche.
+  for (let i = 0; i < 2; i++) {
+    const p = partesEn(ZONA_HORARIA, new Date(instante));
+    instante += medianoche - Date.UTC(Number(p.año), Number(p.mes) - 1, Number(p.dia), Number(p.hora), Number(p.minuto));
+  }
+  return new Date(instante);
+}
+
 // ────────────────────────────────── Formato ──────────────────────────────────
 
 export function formatearFecha(valor: Date | string): string {

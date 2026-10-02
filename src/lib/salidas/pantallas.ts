@@ -1,6 +1,7 @@
 import "server-only";
 import type { EstatusMovimiento, Prisma } from "@prisma/client";
 import { uuid } from "@/lib/movimientos/formulario";
+import { devolucionDeSalidas } from "@/lib/inventario/repo";
 import { usuarioTienePermiso, type SujetoDePermisos } from "@/lib/permisos";
 import { aFiltroDeRepo, leerFiltros } from "./filtros";
 import { contarPendientes, existenciasDeSalida, listarSalidas, obtenerSalida, valuarSalida, type SalidaDetalle } from "./repo";
@@ -18,6 +19,8 @@ export async function datosDeLista(db: Db, usuario: SujetoDePermisos, params: Re
   return {
     filtros,
     filas,
+    // Solo a quien puede ver devoluciones, como el saldo del detalle.
+    devoluciones: usuarioTienePermiso(usuario, "devoluciones:leer") ? await devolucionDeSalidas(db, filas.map((f) => f.id)) : {},
     hayMas,
     cursorActual,
     cursorSiguiente,

@@ -1,5 +1,8 @@
 import { notFound } from "next/navigation";
 import { confirmarRecepcion, descartarEntrada, guardarEntrada } from "../actions";
+import { revertirMovimiento } from "../../reversas/actions";
+import { AvisoDeReversa } from "@/components/inventario/relaciones";
+import { RevertirMovimiento } from "@/components/inventario/revertir";
 import { AccionesBorrador } from "@/components/entradas/acciones-borrador";
 import { EncabezadoEntrada, EntradasRelacionadas, PartidasEntrada } from "@/components/entradas/detalle-entrada";
 import { FormularioEntrada } from "@/components/entradas/formulario-entrada";
@@ -7,6 +10,7 @@ import { Card, CardHeader, EncabezadoPagina } from "@/components/ui/superficies"
 import { consultar } from "@/lib/db";
 import { uuid, type ValoresEntrada } from "@/lib/entradas/formulario";
 import { cargarOpcionesDeCaptura, entradasRelacionadas, obtenerEntrada, type EntradaDetalle } from "@/lib/entradas/repo";
+import { datosDeReversa } from "@/lib/inventario/pantallas";
 import { deFechaDeBase } from "@/lib/fechas";
 import { rolTienePermiso } from "@/lib/permisos";
 import { decimalEnTexto } from "@/lib/utils";
@@ -55,10 +59,11 @@ export default async function PaginaEntrada({ params }: PageProps<"/entradas/[id
         })
       : null;
     const relacionadas = await entradasRelacionadas(db, entrada);
-    return { entrada, opciones, relacionadas, puedeCapturar, puedeConfirmar };
+    const reversa = await datosDeReversa(db, usuario, { id: entrada.id, tipo: "ENTRADA", estatus: entrada.estatus, cancelaAId: null });
+    return { entrada, opciones, relacionadas, puedeCapturar, puedeConfirmar, reversa };
   });
   if (!datos) notFound();
-  const { entrada, opciones, relacionadas, puedeCapturar, puedeConfirmar } = datos;
+  const { entrada, opciones, relacionadas, puedeCapturar, puedeConfirmar, reversa } = datos;
 
   const titulo = entrada.folio ? `Entrada ${entrada.folio}` : "Borrador de entrada";
 
@@ -84,6 +89,8 @@ export default async function PaginaEntrada({ params }: PageProps<"/entradas/[id
               <AccionesBorrador id={entrada.id} puedeConfirmar={puedeConfirmar} confirmar={confirmarRecepcion} descartar={descartarEntrada} />
             </div>
           )}
+          {reversa.reversa && <AvisoDeReversa reversa={reversa.reversa} />}
+          {reversa.revertir && entrada.folio && <RevertirMovimiento id={entrada.id} folio={entrada.folio} revertir={revertirMovimiento} />}
         </Card>
 
         {opciones ? (

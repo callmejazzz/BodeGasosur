@@ -1,6 +1,6 @@
 "use client";
 
-import { Input, Select } from "@/components/ui/campos";
+import { Checkbox, Input, Select } from "@/components/ui/campos";
 import { useFiltrosEnUrl } from "@/components/ui/filtros-en-url";
 import { aParametros, ESTATUS, hayFiltros, SIN_FILTROS, type FiltroEstatus, type FiltrosDeLista } from "@/lib/salidas/filtros";
 
@@ -23,6 +23,10 @@ export function FiltrosSalidas({ filtros, total, hayMas, esTramoAnterior }: { fi
             <option key={f.valor} value={f.valor}>{f.etiqueta}</option>
           ))}
         </Select>
+        <label className="flex h-8 items-center gap-2 rounded-md border border-border-strong px-3 text-sm text-foreground">
+          <Checkbox checked={actual.prestamo} onChange={(ev) => aplicar({ prestamo: ev.target.checked })} />
+          Solo préstamos
+        </label>
         {hayFiltros(actual) && (
           <button type="button" onClick={() => aplicar(SIN_FILTROS)} className="text-sm text-primary hover:underline">
             Limpiar

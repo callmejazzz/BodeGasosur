@@ -49,13 +49,13 @@ reserva inventario.
 
 ## 3. Actores y permisos
 
-| Acción | Roles | Condición adicional |
-|---|---|---|
-| Leer | `SUPERADMIN`, `COMPRAS`, `JEFE` | Usuario activo |
-| Capturar y cancelar antes de entrega | `SUPERADMIN`, `COMPRAS` | Usuario activo |
-| Autorizar o rechazar | Cualquier rol | `Usuario.puedeAutorizar = true` al actuar |
-| Retirar | `SUPERADMIN`, `COMPRAS` | Autorización previa registrada |
-| Confirmar recepción | `SUPERADMIN`, `COMPRAS` | Salida ya retirada |
+| Acción                               | Roles                           | Condición adicional                       |
+| ------------------------------------ | ------------------------------- | ----------------------------------------- |
+| Leer                                 | `SUPERADMIN`, `COMPRAS`, `JEFE` | Usuario activo                            |
+| Capturar y cancelar antes de entrega | `SUPERADMIN`, `COMPRAS`         | Usuario activo                            |
+| Autorizar o rechazar                 | Cualquier rol                   | `Usuario.puedeAutorizar = true` al actuar |
+| Retirar                              | `SUPERADMIN`, `COMPRAS`         | Autorización previa registrada            |
+| Confirmar recepción                  | `SUPERADMIN`, `COMPRAS`         | Salida ya retirada                        |
 
 Todas las mutaciones pasan por `accionProtegida()` y las consultas por `consultar()`.
 La identidad de cada actor sale de la sesión activa, jamás de un campo del formulario.

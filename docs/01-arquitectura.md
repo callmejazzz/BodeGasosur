@@ -61,7 +61,9 @@ las tres están confirmadas:
 - Una **entrada retroactiva** hace lo mismo cuando el material llegó días antes de que
   alguien lo capturara.
 - Una **cancelación** devuelve el material a las capas exactas que consumió, aunque una
-  salida posterior ya haya consumido otras.
+  salida posterior ya haya consumido otras. Desde la fase 7 es una reversa: otro asiento,
+  ligado por `cancelaAId`, que deja una `RestitucionCapa` por consumo en lugar de reescribir
+  el consumo original.
 
 En los tres casos las cantidades cuadran y los costos congelados no coinciden con lo que
 daría un recálculo. Prometer lo contrario sería prometer algo que la operación real impide.
@@ -277,7 +279,7 @@ públicas se cargan y rotan manualmente; una revisión periódica avisa si apare
 desconocido. La autorización funcional continúa en `src/lib/permisos.ts`, no en una
 matriz SQL.
 
-Las Actions de Entradas, Salidas y Catálogos leen el `FormData` dentro de la puerta,
+Las Actions de Entradas, Salidas, Catálogos y las de la fase 7 leen el `FormData` dentro de la puerta,
 después de comprobar sesión y permiso. Usuarios hace una comprobación previa antes de
 leerlo o consultar a Clerk, y `accionProtegida()` vuelve a comprobar el acceso al
 escribir. La relectura transaccional final de `Usuario` es común a estas escrituras.
@@ -298,7 +300,7 @@ las existencias por `articuloId` y, al final, el folio. La transición condicion
 juntas. El alta lleva una llave de idempotencia única y compara toda la captura antes de
 revalidar catálogos; una existencia ausente se crea en cero con
 `INSERT … ON CONFLICT DO NOTHING` antes de bloquearla. El contrato ejecutable está en
-[`02-fase-5-entradas.md`](02-fase-5-entradas.md).
+[`02-fase-5-entradas.md`](contratos-otros/02-fase-5-entradas.md).
 
 ### 4.2 Stack concreto
 
@@ -313,7 +315,7 @@ revalidar catálogos; una existencia ausente se crea en cero con
 | UI            | Tailwind CSS 4 + primitivas propias           | Un puñado de componentes en `src/components/ui`, sin dependencias de terceros que después estorben |
 | Formularios   | Acciones de servidor + `useActionState`       | Validación en el servidor sin duplicar reglas en el cliente                                        |
 | Fechas        | `Intl` nativo, encapsulado en `lib/fechas.ts` | Ver §4.5. No hace falta una biblioteca para esto                                                   |
-| Pruebas       | Vitest 4                                      | De integración contra el PostgreSQL de `docker-compose`, en una base `*_prueba` que se recrea en cada corrida. Cubren migraciones, formularios, repositorios, acciones de servidor y los contratos transaccionales de Entradas y Salidas |
+| Pruebas       | Vitest 4                                      | De integración contra el PostgreSQL de `docker-compose`, en una base `*_prueba` que se recrea en cada corrida. Cubren migraciones, formularios, repositorios, acciones de servidor y los contratos transaccionales de Entradas, Salidas, Traspasos, Devoluciones, Conteo y Reversas |
 
 Las cuatro pruebas que importan, y que van a CI cuando exista:
 
@@ -332,7 +334,7 @@ una puerta por donde se cuela el error que la prueba existía para atrapar.
 BodeGasosur/
 ├─ docs/                          # Esta documentación
 ├─ prisma/
-│  ├─ schema.prisma               # Modelo de datos: 19 modelos, dos esquemas
+│  ├─ schema.prisma               # Modelo de datos: 22 modelos, dos esquemas
 │  ├─ sql/                        # El SQL que Prisma no sabe expresar (§3.7)
 │  │  ├─ antes/                   #   lo que existe antes de las tablas
 │  │  └─ despues/                 #   invariantes, triggers, vistas y permisos
@@ -344,7 +346,9 @@ BodeGasosur/
 ├─ pruebas/
 │  ├─ base-de-pruebas.ts          # Recrea la base *_prueba antes de cada corrida de Vitest
 │  ├─ semilla-entradas.ts         # Entorno aislado para las pruebas de Entradas
-│  └─ semilla-salidas.ts          # Entorno aislado para las pruebas de Salidas
+│  ├─ semilla-salidas.ts          # Entorno aislado para las pruebas de Salidas
+│  ├─ semilla-operacion.ts        # …y el de la fase 7, con folios T, D y A
+│  └─ semilla-inventario.ts       # Capas sembradas desde un ingreso confirmado
 ├─ scripts/
 │  ├─ armar-migracion.sh          # Junta prisma/sql/ con el DDL generado
 │  ├─ arranque-superadmin.ts      # El primer Superadmin, desde su identidad en Clerk
@@ -360,13 +364,19 @@ BodeGasosur/
 │  │  │  ├─ catalogos/            # Índice, listado, alta y edición genérica
 │  │  │  ├─ usuarios/             # Administración de acceso
 │  │  │  ├─ entradas/             # Listado, captura, detalle y Server Actions
-│  │  │  └─ salidas/               # Lista, pendientes, captura, detalle y seis Server Actions
+│  │  │  ├─ salidas/              # Lista, pendientes, captura, detalle y seis Server Actions
+│  │  │  ├─ traspasos/            # Lista, captura, detalle y cuatro Server Actions
+│  │  │  ├─ devoluciones/         # Lista, captura, detalle y cuatro Server Actions
+│  │  │  ├─ conteos/              # Hojas de conteo y cinco Server Actions
+│  │  │  ├─ ajustes/ · prestamos/ # Consulta de ajustes (y reversas) y de préstamos
+│  │  │  └─ reversas/             # La Server Action de reversa, solo Superadmin
 │  │  └─ api/webhooks/clerk/       # Sincronización firmada desde Clerk
 │  ├─ components/
 │  │  ├─ ui/                      # Primitivas: botón, campos, tabla, tarjetas
 │  │  ├─ catalogos/               # Formulario genérico de catálogo
 │  │  ├─ entradas/                # Filtros, tabla, formulario, detalle y acciones
 │  │  ├─ salidas/                 # Filtros, tabla, formulario, pendientes, detalle y acciones
+│  │  ├─ inventario/              # Traspasos, devoluciones, hoja de conteo, rastro de capas y reversa
 │  │  └─ navegacion.tsx
 │  └─ lib/
 │     ├─ db.ts                    # Cliente Prisma + accionProtegida (§4.1)
@@ -377,7 +387,8 @@ BodeGasosur/
 │     │  ├─ repos.ts              # Acceso a datos por catálogo
 │     │  └─ formulario.ts         # Tipos compartidos del formulario
 │     ├─ entradas/                # Formulario, filtros, lecturas, primitivas y servicio transaccional
-│     ├─ movimientos/             # Primitivas, validación y errores compartidos
+│     ├─ movimientos/             # Primitivas (PEPS, capas, existencias), validación y errores
+│     ├─ inventario/              # Fase 7: traspasos, devoluciones, conteos, reversas y su puerta
 │     ├─ seguridad/               # Revisión periódica de las llaves públicas de Clerk
 │     └─ salidas/                 # Formulario, lecturas, PEPS, servicio y pruebas
 ├─ docker-compose.yml             # PostgreSQL local
@@ -433,13 +444,26 @@ Dos cosas que no son evidentes y que hay que sostener a mano:
   vuelve de la base como medianoche UTC y se formatea **en UTC**; formatearla en hora de
   México la recorre un día hacia atrás. Un `timestamptz` sí se formatea en
   `America/Mexico_City`.
+- **La base muestra la hora de México; la aplicación habla con ella en UTC.** La base
+  tiene `TimeZone = America/Mexico_City`
+  ([`993-hora-de-mexico.sql`](../prisma/sql/despues/993-hora-de-mexico.sql)), así que
+  psql, TablePlus o pgAdmin enseñan cada instante en hora de la CDMX. Los clientes de
+  Prisma (`src/lib/db.ts` y `prisma/comun.ts`) fijan su sesión en UTC: el adapter de
+  PostgreSQL lee y escribe `timestamptz` suponiendo UTC, y en otra zona correría cada
+  instante seis horas. Lo guardado es el mismo instante en las dos; solo cambia cómo se lee.
+  La bitácora fija la hora de México solo dentro de su función
+  ([`994-bitacora-en-hora-de-mexico.sql`](../prisma/sql/despues/994-bitacora-en-hora-de-mexico.sql)),
+  para que sus copias `antes`/`despues` en JSON también se lean así.
+  Para fijar la zona de toda una base en otro entorno, quien ejecuta la migración
+  debe ser su dueño; si no lo es, la migración la fija solo para las sesiones de
+  ese usuario y emite un aviso.
 
 Por eso la fase 5 creó `lib/fechas.ts` y concentra ahí: `hoyEnMexico()` —nunca `new Date()`
 para decidir el día—, la validación de una fecha calendario `YYYY-MM-DD`, su conversión al
 valor de Prisma sin desplazarla y las dos funciones de formato. Del lado de SQL, ninguna
 consulta calcula «hoy» por su cuenta: nada de `CURRENT_DATE`, que depende de cómo esté
 configurado el servidor que toque. El contrato y sus casos límite están en
-[`02-fase-5-entradas.md`](02-fase-5-entradas.md#10-fechas-de-negocio).
+[`02-fase-5-entradas.md`](contratos-otros/02-fase-5-entradas.md#10-fechas-de-negocio).
 
 ## 5. Entorno local
 
@@ -487,7 +511,7 @@ Comandos útiles:
 | `npm run dev` | Servidor de desarrollo |
 | `npm run db:up` / `db:down` | Levanta o baja PostgreSQL |
 | `npm run db:reset` | Desarrollo: borra todo y encadena configuración, catálogos reales, fixtures y Superadmin |
-| `npm run prod:bootstrap` | Producción: manual y con confirmación, sin fixtures ([Plan B](01-plan-b-produccion.md)) |
+| `npm run prod:bootstrap` | Producción: manual y con confirmación, sin fixtures ([Plan B](contratos-otros/01-plan-b-produccion.md)) |
 | `npm run test` | Pruebas de integración contra PostgreSQL |
 | `npm run db:studio` | Explorador visual de la base de datos |
 

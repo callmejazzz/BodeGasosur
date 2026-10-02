@@ -1,4 +1,4 @@
-import type { ComponentProps, ReactNode } from "react";
+import { Children, type ComponentProps, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 export function Card({ className, ...props }: ComponentProps<"div">) {
@@ -73,6 +73,20 @@ export function Badge({
       )}
     >
       {children}
+    </span>
+  );
+}
+
+// Literales completos para que Tailwind genere las clases.
+const COLUMNAS_DE_ESTADOS = ["grid-cols-[max-content]", "grid-cols-[repeat(2,max-content)]", "grid-cols-[repeat(3,max-content)]"];
+
+/** Insignias de estado: hasta tres por renglón; desde la cuarta pasan al siguiente, alineadas en columnas. */
+export function Estados({ children }: { children: ReactNode }) {
+  const insignias = Children.toArray(children);
+  if (insignias.length === 0) return null;
+  return (
+    <span className={cn("inline-grid items-center justify-items-start gap-1.5", COLUMNAS_DE_ESTADOS[Math.min(insignias.length, 3) - 1])}>
+      {insignias}
     </span>
   );
 }

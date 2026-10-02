@@ -295,7 +295,8 @@ describe("las escrituras sin sesión de usuario", () => {
     await expect(prisma.usuario.findUniqueOrThrow({ where: { id: u.id } })).resolves.toMatchObject({ correo });
     await expect(prisma.eventoAcceso.findFirstOrThrow({ where: { usuarioId: u.id } })).resolves.toMatchObject({ tipo: "SESION_INICIADA", ip: "10.0.0.2" });
     await expect(
-      prisma.bitacora.findFirstOrThrow({ where: { tabla: "Usuario", registroId: u.id }, orderBy: { ocurridoEn: "desc" } }),
+      // Por acción y no por instante: el alta y el cambio pueden caer en el mismo milisegundo.
+      prisma.bitacora.findFirstOrThrow({ where: { tabla: "Usuario", registroId: u.id, accion: "ACTUALIZAR" } }),
     ).resolves.toMatchObject({ origen: "clerk-webhook", verificacion: "declarada", usuarioId: null });
 
     await expect(
@@ -319,5 +320,39 @@ describe("las escrituras sin sesión de usuario", () => {
     } finally {
       errores.mockRestore();
     }
+  });
+});
+
+describe("la hora de lo que escribe la aplicación", () => {
+  it("la sesión de Prisma va en UTC; la base muestra la hora de México y la bitácora guarda el instante exacto", async () => {
+    await usuario({ rol: "COMPRAS" });
+    const antes = Date.now();
+    const leer = accionProtegida("entradas:capturar", async (tx) => {
+      const [r] = await tx.$queryRaw<{ zona: string; ahora: Date }[]>`SELECT current_setting('TimeZone') AS zona, now() AS ahora`;
+      return r;
+    });
+    const sesion = await leer();
+    expect(sesion.zona).toBe("UTC");
+    // Si el adapter leyera en otra zona, el instante saldría 6 horas corrido.
+    expect(Math.abs(sesion.ahora.getTime() - antes)).toBeLessThan(60_000);
+
+    const nombre = `hora ${randomUUID().slice(0, 8)}`;
+    await escribir("entradas:capturar")(nombre, null);
+    const { rows } = await observador.query(
+      `SELECT current_setting('TimeZone') AS zona, b."ocurridoEn", b."ocurridoEn"::text AS texto
+         FROM "Bitacora" b JOIN "Bodega" d ON d.id::text = b."registroId" WHERE b.tabla = 'Bodega' AND d.nombre = $1`,
+      [nombre],
+    );
+    expect(rows[0].zona).toBe("America/Mexico_City");
+    expect(Math.abs(rows[0].ocurridoEn.getTime() - antes)).toBeLessThan(60_000);
+    expect(rows[0].texto).toMatch(/-06$/);
+    // El mismo instante leído por el cliente de Prisma de los scripts (prisma/comun.ts).
+    const bodega = await prisma.bodega.findFirstOrThrow({ where: { nombre } });
+    const registro = await prisma.bitacora.findFirstOrThrow({ where: { tabla: "Bodega", registroId: bodega.id } });
+    expect(registro.ocurridoEn.getTime()).toBe(rows[0].ocurridoEn.getTime());
+    // La copia en JSON también va en hora de México, con el mismo instante.
+    const despues = registro.despues as { createdAt: string };
+    expect(despues.createdAt).toMatch(/-06:00$/);
+    expect(new Date(despues.createdAt).getTime()).toBe(bodega.createdAt.getTime());
   });
 });

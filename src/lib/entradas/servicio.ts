@@ -2,13 +2,12 @@ import { Prisma, type Moneda, type Presentacion } from "@prisma/client";
 import type { UsuarioSesion } from "@/lib/db";
 import { deFechaDeBase, aFechaDeBase, hoyEnMexico, motivoFechaNoOperativa } from "@/lib/fechas";
 import { chocaCon } from "@/lib/movimientos/errores";
-import { asegurarYBloquearExistencias, aUnidadBase, bloquearArticulos, tomarFolio } from "@/lib/movimientos/primitivas";
+import { asegurarYBloquearExistencias, aUnidadBase, bloquearArticulos, incrementarExistencias, tomarFolio } from "@/lib/movimientos/primitivas";
 import { ErrorDeDominio, traducirErrorDeBase } from "./errores";
 import {
   bloquearContrapartes,
   calcularCostosBase,
   crearCapasDeEntrada,
-  incrementarExistencias,
   recalcularCostosYTotales,
   verificarCapacidadDeExistencias,
 } from "./primitivas";

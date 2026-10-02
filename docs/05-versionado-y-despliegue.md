@@ -99,6 +99,10 @@ Al cerrar una fase, cuando su criterio de aceptación se cumple:
 cambiar `package.json` ni el CHANGELOG. La `v0.6.0` se publicó después en un commit de
 versión aparte, que agrupa los cuatro commits de la fase, y la etiqueta apunta a él.
 
+**Fase 7:** se construyó completa antes del registro en Git. Su cierre funcional,
+versión `v0.7.0` y documentación se reúnen en un único commit local. La etiqueta y
+la distribución quedan para otro momento; no forman parte de este cierre.
+
 Los mensajes de commit siguen siendo prosa en español que describe decisiones. **No se
 adopta Conventional Commits:** con ocho fases y un desarrollador, el changelog a mano sale
 mejor escrito que uno generado, y los mensajes actuales documentan mejor el porqué.
@@ -193,7 +197,7 @@ configurado con una llave que no sea `sk_test_`, terminal interactiva, y que
 crea el usuario de ejecución y carga las llaves públicas de Clerk, rechaza una base que
 ya opere, muestra el resumen y exige teclear el nombre de la base para confirmar. La
 plantilla `bodegasosur-db` usa RS256 y dura 30 segundos; la base acepta hasta 60.
-Ver [Plan B](01-plan-b-produccion.md).
+Ver [Plan B](contratos-otros/01-plan-b-produccion.md).
 
 **Skew Protection encendido.** Cuando se promueve una versión, alguien puede llevar horas
 con la pantalla de captura abierta: su navegador tiene el JavaScript anterior, que invoca

@@ -12,9 +12,32 @@ export type Permiso =
   | "salidas:capturar"
   | "salidas:autorizar"
   | "salidas:retirar"
-  | "salidas:recibir";
+  | "salidas:recibir"
+  | "traspasos:leer"
+  | "traspasos:capturar"
+  | "traspasos:confirmar"
+  | "devoluciones:leer"
+  | "devoluciones:capturar"
+  | "devoluciones:confirmar"
+  | "ajustes:leer"
+  | "ajustes:capturar"
+  | "ajustes:confirmar"
+  | "movimientos:revertir";
 
 export type SujetoDePermisos = { rol: Rol; puedeAutorizar: boolean };
+
+/** Traspasos, devoluciones y conteo: Superadmin y Compras leen, capturan y confirman (fase 7). */
+const INVENTARIO = [
+  "traspasos:leer",
+  "traspasos:capturar",
+  "traspasos:confirmar",
+  "devoluciones:leer",
+  "devoluciones:capturar",
+  "devoluciones:confirmar",
+  "ajustes:leer",
+  "ajustes:capturar",
+  "ajustes:confirmar",
+] as const satisfies readonly Permiso[];
 
 export const PERMISOS: Record<Rol, readonly Permiso[]> = {
   SUPERADMIN: [
@@ -30,6 +53,9 @@ export const PERMISOS: Record<Rol, readonly Permiso[]> = {
     "salidas:autorizar",
     "salidas:retirar",
     "salidas:recibir",
+    ...INVENTARIO,
+    // La reversa corrige un asiento cerrado: solo el Superadmin.
+    "movimientos:revertir",
   ],
   COMPRAS: [
     "catalogos:leer",
@@ -42,8 +68,9 @@ export const PERMISOS: Record<Rol, readonly Permiso[]> = {
     "salidas:autorizar",
     "salidas:retirar",
     "salidas:recibir",
+    ...INVENTARIO,
   ],
-  JEFE: ["catalogos:leer", "entradas:leer", "salidas:leer", "salidas:autorizar"],
+  JEFE: ["catalogos:leer", "entradas:leer", "salidas:leer", "salidas:autorizar", "traspasos:leer", "devoluciones:leer", "ajustes:leer"],
 };
 
 export function rolTienePermiso(rol: Rol, permiso: Permiso): boolean {

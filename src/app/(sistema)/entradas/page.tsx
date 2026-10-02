@@ -30,6 +30,7 @@ export default async function PaginaEntradas({ searchParams }: PageProps<"/entra
     referencia: e.referencia,
     bodega: e.bodegaDestino?.nombre ?? "—",
     partidas: e._count.partidas,
+    revertida: !!e.canceladoPor,
     total: e.total === null ? "—" : e.moneda === "USD" ? `${Number(String(e.total)).toFixed(2)} USD` : moneda(e.total),
   }));
 

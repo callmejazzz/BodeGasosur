@@ -1,5 +1,5 @@
-import { BadgeEstatusSalida } from "@/components/salidas/estatus-salida";
-import { Badge } from "@/components/ui/superficies";
+import { BadgeDevolucion, BadgeEstatusSalida } from "@/components/salidas/estatus-salida";
+import { Badge, Estados } from "@/components/ui/superficies";
 import { Tabla, Td, Th, Tr } from "@/components/ui/tabla";
 import { formatearFecha, formatearInstante } from "@/lib/fechas";
 import type { SalidaDetalle, Valuacion } from "@/lib/salidas/repo";
@@ -22,15 +22,16 @@ function Dato({ etiqueta, children }: { etiqueta: string; children: React.ReactN
 const DeBaja = ({ activa, texto = "Dada de baja" }: { activa: boolean | undefined; texto?: string }) =>
   activa === false ? <span className="ml-2"><Badge tono="aviso">{texto}</Badge></span> : null;
 
-export function EncabezadoSalida({ salida: s }: { salida: SalidaDetalle }) {
+export function EncabezadoSalida({ salida: s, devolucion = null }: { salida: SalidaDetalle; devolucion?: "completa" | "parcial" | null }) {
   const retirada = s.estatus === "RETIRADA" || s.estatus === "RECIBIDA";
   return (
     <dl className="grid gap-x-8 gap-y-5 px-5 py-5 sm:grid-cols-2 lg:grid-cols-4">
       <Dato etiqueta="Estatus">
-        <span className="flex flex-wrap items-center gap-1.5">
+        <Estados>
           <BadgeEstatusSalida estatus={s.estatus} />
           {s.esPrestamo && <Badge>Préstamo</Badge>}
-        </span>
+          {devolucion && <BadgeDevolucion estado={devolucion} />}
+        </Estados>
       </Dato>
       <Dato etiqueta="Folio">{s.folio ?? <span className="text-muted">Sin folio</span>}</Dato>
       <Dato etiqueta={retirada ? "Fecha de salida" : "Fecha de solicitud"}>{formatearFecha(s.fecha)}</Dato>

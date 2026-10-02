@@ -8,6 +8,85 @@ puede hacer ahora que antes no se podía.
 
 ---
 
+## v0.7.0 — 2026-10-02 (cierre local, sin publicar)
+
+Última migración incluida: `20261001150000_bitacora_en_hora_de_mexico`.
+
+Cierra la fase 7: traspasos, devoluciones y conteo. Con esta versión el material se mueve
+entre bodegas sin perder su costo, vuelve de las estaciones, los préstamos dicen cuánto
+falta, el inventario físico corrige la existencia y cualquier asiento cerrado se corrige
+con otro asiento, sin borrar nada.
+
+**Lo que cambia para quien va a usar el sistema**
+
+- **Traspasos entre bodegas.** Compras captura origen, destino y partidas, por unidad o por
+  caja, y los corrige mientras son borrador. Al confirmar, el material sale de las capas más
+  antiguas del origen y llega al destino con su fecha de entrada y su costo originales, con
+  folio `T-000001`. La valuación total no cambia. Si no alcanza, no se mueve nada.
+- **Devoluciones desde las estaciones.** Ligadas a una salida, regresan a la bodega de la
+  que salió —no se puede elegir otra—, solo ofrecen sus artículos, muestran cuánto falta
+  por volver y no dejan devolver de más; el material vuelve con el costo con el que salió.
+  Sin salida, entran sin costo a la bodega que se elija y se marcan como procedencia no
+  comprobada. Folio `D-000001`.
+- **Préstamos.** Una pantalla junta las salidas prestadas con lo que salió, lo que volvió y
+  lo que falta. Siguen abiertas hasta que vuelve la última pieza. La salida muestra su
+  saldo y sus devoluciones, y lleva a registrar la siguiente. La lista de salidas marca
+  «Devuelto» cuando volvió todo y «Devuelto parcial» cuando volvió una parte.
+- **Conteo físico.** Se abre una hoja por bodega con la existencia de cada artículo, se
+  captura lo contado —vacío significa «no se contó»— y se puede agregar lo que apareció.
+  Si alguien movió inventario mientras se contaba, confirmar lo avisa y la hoja se actualiza
+  para revisar las diferencias nuevas. Al confirmar, lo que sobra entra sin costo y lo que
+  falta se descuenta por PEPS, en ajustes con folio `A-000001` y el motivo de la hoja.
+- **Reversas.** El Superadmin corrige cualquier entrada, salida retirada, traspaso,
+  devolución o ajuste con un asiento inverso, con motivo y folio propios. El original no se
+  borra ni se edita; muestra con qué se revirtió. El material vuelve a las capas exactas de
+  las que salió. Si lo que entró ya se usó, o una salida tiene devoluciones vigentes, la
+  pantalla dice qué revertir antes.
+- **Lo que se puede seguir.** Cada detalle muestra de qué capa salió cada pieza, a cuál
+  entró y a cuál volvió, con su costo y el movimiento de origen; las listas marcan lo
+  revertido y lo que es reversa.
+- **Quién ve qué.** Compras y Superadmin capturan y confirman traspasos, devoluciones y
+  conteos; el Jefe los consulta; solo el Superadmin revierte. Quien no puede capturar no
+  ve los botones ni se le cargan catálogos o existencias.
+- **Un doble clic no duplica nada:** ni borradores, ni folios, ni ajustes, ni reversas.
+- **Listas ordenadas por estatus.** Entradas, salidas, traspasos, devoluciones y ajustes
+  muestran primero los borradores (en salidas, las solicitadas y autorizadas), luego lo
+  que tiene folio, del más alto al más bajo, y al final lo descartado, rechazado o
+  cancelado.
+- **Buscar sin acentos.** «marquez» encuentra a «Márquez» y «pena» a «Peña», en entradas,
+  salidas, traspasos, devoluciones, ajustes y catálogos.
+- **Salidas: solo préstamos.** Una casilla en la lista deja ver solo las salidas prestadas.
+- **Conteo físico por fecha.** Las hojas se filtran por el día en que se abrieron, con el
+  mismo selector de fechas que entradas.
+- **Estatus ordenados.** Las insignias de estado van hasta tres por renglón; desde la
+  cuarta pasan al siguiente.
+- **La reversa de un traspaso ya no aparece como otro traspaso.** Queda en el historial
+  del traspaso revertido, con su folio y su motivo; buscar ese folio lleva al revertido.
+- **Los avisos de error se van al dar «Volver»** al revertir o al descartar un borrador o
+  una hoja de conteo, también en entradas.
+
+**Por dentro**
+
+- Tablas nuevas `HojaConteo`, `RenglonConteo` y `RestitucionCapa`, y `Movimiento.conteoId`.
+  La migración es incremental y revisa el inventario existente antes de terminar.
+- Un trigger diferido comprueba, al confirmar cada transacción, que las capas, consumos y
+  restituciones de cada movimiento sean exactamente lo que dicen sus partidas, que ninguna
+  devolución exceda lo retirado y que una hoja confirmada deje la existencia en lo contado.
+  Otro trigger impide que una devolución ligada entre a una bodega distinta de la de su
+  salida. Vale también para escrituras SQL directas.
+- Las operaciones bloquean encabezados, catálogos, existencias de ambas bodegas en orden
+  estable y capas en orden PEPS, sin saltar candados. Movimientos cruzados no se
+  interbloquean.
+- Todas las acciones pasan por la puerta con sesión, permiso y el token de Clerk que
+  verifica la base; la bitácora conserva actor, instante y `jti`.
+- La búsqueda de texto usa una función de la base, `texto_buscable()`, que quita acentos
+  y mayúsculas a los dos lados de la comparación.
+- La base muestra las horas en la de la Ciudad de México: bitácora, accesos y cualquier
+  `…En` se leen igual que en el reloj de la oficina, también los registros anteriores. Las
+  copias que guarda la bitácora de cada cambio también llevan la hora de México.
+  La aplicación sigue hablando con la base en UTC, que es lo que espera Prisma.
+- 448 pruebas contra PostgreSQL real.
+
 ## v0.6.0 — 2026-09-28
 
 Cierra la fase 6: salidas. Con esta versión el inventario también baja: el material sale de
@@ -136,7 +215,7 @@ existencias dejan de ser cero.
 - Prisma con `relationJoins`: las relaciones se cargan en una sola sentencia en vez de en
   paralelo sobre la conexión de la transacción (pg 9 lo rechazaría).
 - 142 pruebas contra PostgreSQL real: los 14 criterios de aceptación del contrato
-  ([contrato de Entradas](02-fase-5-entradas.md) §12), el criterio 13 sobre
+  ([contrato de Entradas](docs/contratos-otros/02-fase-5-entradas.md) §12), el criterio 13 sobre
   las Server Actions reales.
 
 **Por saber**
@@ -152,7 +231,7 @@ existencias dejan de ser cero.
 ## v0.4.0 — 2026-09-12
 
 Cierra la fase 4: migración de catálogos, bajo el **Plan B** de
-[Plan B para producción](01-plan-b-produccion.md). Es la primera versión con
+[Plan B para producción](docs/contratos-otros/01-plan-b-produccion.md). Es la primera versión con
 datos reales de Gasosur adentro, y la que decide cómo va a arrancar producción: **limpia de
 inventario**. Compras captura proveedores y artículos desde la aplicación; el Excel no se
 migra.

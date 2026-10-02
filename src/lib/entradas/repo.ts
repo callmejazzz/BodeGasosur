@@ -1,7 +1,7 @@
 import "server-only";
 import type { EstatusMovimiento, Prisma } from "@prisma/client";
 import type { FiltroEntradas, FiltroEstatus } from "@/lib/entradas/filtros";
-import { aFechaDeBase } from "@/lib/fechas";
+import { enOrden, idsDeLista, sql } from "@/lib/movimientos/lista";
 
 // Lecturas de entradas. Recibe el cliente: solo consultar() lo entrega.
 
@@ -27,6 +27,7 @@ const RESUMEN = {
   proveedor: { select: { nombreComercial: true } },
   bodegaDestino: { select: { clave: true, nombre: true } },
   _count: { select: { partidas: true } },
+  canceladoPor: { select: { id: true } },
 } satisfies Prisma.MovimientoSelect;
 
 export type EntradaResumen = Prisma.MovimientoGetPayload<{ select: typeof RESUMEN }>;
@@ -34,60 +35,32 @@ export type EntradaResumen = Prisma.MovimientoGetPayload<{ select: typeof RESUME
 /** La lista se corta en 200: pasado eso, la pantalla avisa y pide afinar los filtros. */
 export const TOPE_LISTA = 200;
 
-/** Ids cuyo folio o clave de bodega coinciden ignorando guiones, ceros y mayúsculas (clave_normalizada). */
-async function idsPorClave(db: Db, texto: string): Promise<string[]> {
-  const filas = await db.$queryRaw<{ id: string }[]>`
-    SELECT m.id
-    FROM "Movimiento" m
-    LEFT JOIN "Bodega" b ON b.id = m."bodegaDestinoId"
-    WHERE m.tipo = 'ENTRADA'
-      AND clave_normalizada(${texto}) <> ''
-      AND (position(clave_normalizada(${texto}) IN clave_normalizada(m.folio)) > 0
-        OR position(clave_normalizada(${texto}) IN clave_normalizada(b.clave)) > 0)`;
-  return filas.map((f) => f.id);
-}
-
 /**
- * Los borradores van primero, del más recientemente tocado al más viejo; el
- * resto por orden de creación, la más nueva arriba. Pide una fila de más para
- * saber si el tope se quedó corto.
+ * Borradores primero, del más recientemente tocado al más viejo; luego las
+ * confirmadas por folio, del más alto al más bajo; al final las descartadas,
+ * la más nueva arriba. Folio y clave de bodega se buscan como clave; la
+ * referencia, el proveedor y el nombre de la bodega, sin acentos.
  */
 export async function listarEntradas(db: Db, filtro: FiltroEntradas): Promise<{ filas: EntradaResumen[]; hayMas: boolean }> {
-  const q = filtro.busqueda.trim();
-  const where: Prisma.MovimientoWhereInput = {
+  const filtros = [sql`m.estatus::text = ANY(${ESTATUS_POR_FILTRO[filtro.estatus]}::text[])`];
+  if (filtro.referencia === "con") filtros.push(sql`m.referencia IS NOT NULL`);
+  if (filtro.referencia === "sin") filtros.push(sql`m.referencia IS NULL`);
+  if (filtro.desde) filtros.push(sql`m.fecha >= ${filtro.desde}::date`);
+  if (filtro.hasta) filtros.push(sql`m.fecha <= ${filtro.hasta}::date`);
+  const ids = await idsDeLista(db, {
     tipo: "ENTRADA",
-    referencia: filtro.referencia === "sin" ? null : filtro.referencia === "con" ? { not: null } : undefined,
-    fecha:
-      filtro.desde || filtro.hasta
-        ? { gte: filtro.desde ? aFechaDeBase(filtro.desde) : undefined, lte: filtro.hasta ? aFechaDeBase(filtro.hasta) : undefined }
-        : undefined,
-    OR: q
-      ? [
-          { id: { in: await idsPorClave(db, q) } },
-          { referencia: { contains: q, mode: "insensitive" } },
-          { proveedor: { nombreComercial: { contains: q, mode: "insensitive" } } },
-          { bodegaDestino: { nombre: { contains: q, mode: "insensitive" } } },
-        ]
-      : undefined,
-  };
-
-  const estatus = ESTATUS_POR_FILTRO[filtro.estatus];
-  const cerrados = estatus.filter((s) => s !== "BORRADOR");
-  const tope = TOPE_LISTA + 1;
-  const borradores = estatus.includes("BORRADOR")
-    ? await db.movimiento.findMany({ where: { ...where, estatus: "BORRADOR" }, select: RESUMEN, orderBy: { updatedAt: "desc" }, take: tope })
-    : [];
-  const resto =
-    cerrados.length > 0 && borradores.length < tope
-      ? await db.movimiento.findMany({
-          where: { ...where, estatus: { in: cerrados } },
-          select: RESUMEN,
-          orderBy: { createdAt: "desc" },
-          take: tope - borradores.length,
-        })
-      : [];
-  const todas = [...borradores, ...resto];
-  return { filas: todas.slice(0, TOPE_LISTA), hayMas: todas.length > TOPE_LISTA };
+    abiertos: ["BORRADOR"],
+    abiertosPorToque: true,
+    joins: sql`LEFT JOIN "Bodega" b ON b.id = m."bodegaDestinoId" LEFT JOIN "Proveedor" p ON p.id = m."proveedorId"`,
+    filtros,
+    busqueda: filtro.busqueda,
+    claves: [sql`m.folio`, sql`b.clave`],
+    textos: [sql`m.referencia`, sql`p."nombreComercial"`, sql`b.nombre`],
+    tope: TOPE_LISTA + 1,
+  });
+  const visibles = ids.slice(0, TOPE_LISTA);
+  const filas = await db.movimiento.findMany({ where: { id: { in: visibles } }, select: RESUMEN });
+  return { filas: enOrden(visibles, filas), hayMas: ids.length > TOPE_LISTA };
 }
 
 const DETALLE = {

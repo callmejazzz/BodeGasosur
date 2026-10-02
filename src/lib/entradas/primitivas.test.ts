@@ -9,8 +9,8 @@ import { crearCliente } from "../../../prisma/comun";
 import { URL_PRUEBAS } from "../../../pruebas/base-de-pruebas";
 import { sembrarEntorno, type Entorno } from "../../../pruebas/semilla-entradas";
 import { aFechaDeBase } from "../fechas";
-import { asegurarYBloquearExistencias, tomarFolio } from "../movimientos/primitivas";
-import { calcularCostosBase, crearCapasDeEntrada, incrementarExistencias, recalcularCostosYTotales } from "./primitivas";
+import { asegurarYBloquearExistencias, incrementarExistencias, tomarFolio } from "../movimientos/primitivas";
+import { calcularCostosBase, crearCapasDeEntrada, recalcularCostosYTotales } from "./primitivas";
 
 const prisma = crearCliente(URL_PRUEBAS);
 let e: Entorno;
@@ -99,7 +99,7 @@ describe("existencia", () => {
   });
 });
 
-describe("recalcular dinero y crear capas sobre un borrador", () => {
+describe("recalcular dinero y crear capas al confirmar un borrador", () => {
   it("congela costos por partida, totales por renglón, y una capa por partida", async () => {
     const m = await prisma.movimiento.create({
       data: {
@@ -130,6 +130,11 @@ describe("recalcular dinero y crear capas sobre un borrador", () => {
       await expect(crearCapasDeEntrada(tx, m.id)).resolves.toBe(2);
       await asegurarYBloquearExistencias(tx, e.bodegaId, [e.articuloCajaId, e.articuloSueltoId]);
       await expect(incrementarExistencias(tx, m.id, e.bodegaId)).resolves.toBe(2);
+      // La base solo acepta capas de una entrada confirmada en la misma transacción.
+      await tx.movimiento.update({
+        where: { id: m.id },
+        data: { estatus: "CONFIRMADO", folio: `E-${randomUUID().slice(0, 8)}`, confirmadoPorId: e.usuarios.COMPRAS.id, confirmadoEn: new Date() },
+      });
     });
 
     const leido = await prisma.movimiento.findUniqueOrThrow({

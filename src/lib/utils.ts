@@ -42,3 +42,11 @@ export function decimalEnTexto(valor: unknown, minimo = 2): string {
   const [entero, fraccion = ""] = texto.split(".");
   return `${entero}.${fraccion.replace(/0+$/, "").padEnd(minimo, "0")}`;
 }
+
+/**
+ * Texto para comparar en una búsqueda: sin acentos ni mayúsculas, como
+ * texto_buscable() en la base («Peña Ñúñez» → «pena nunez»).
+ */
+export function textoBuscable(valor: string): string {
+  return valor.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+}

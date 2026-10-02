@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { aFechaDeBase, hoyEnMexico } from "../../src/lib/fechas";
 import { URL_PRUEBAS } from "../../pruebas/base-de-pruebas";
+import { sembrarCapa } from "../../pruebas/semilla-inventario";
 import { crearCliente } from "../comun";
 
 const prisma = crearCliente(URL_PRUEBAS);
@@ -120,13 +121,14 @@ describe("frontera SQL de salidas", () => {
     await prisma.movimiento.update({ where: { id: m.id }, data: {
       estatus: "AUTORIZADA", autorizadoPorId: autorizadorId, autorizadoEn: new Date(),
     } });
-    // El mínimo retiro conciliado: capa ya consumida, su consumo y la transición, juntos.
+    // El mínimo retiro conciliado: consumo, descuento de capa y existencia, y la transición, juntos.
+    const capa = await sembrarCapa(prisma, { usuarios: { COMPRAS: { id: capturistaId } } }, {
+      bodegaId, articuloId, cantidad: 2, fechaOriginal: "2026-09-01", costo: null,
+    });
     await prisma.$transaction(async (tx) => {
-      const capa = await tx.capaCosto.create({ data: {
-        movimientoId: m.id, bodegaId, articuloId, fecha: m.fecha, fechaOriginal: m.fecha,
-        cantidadInicial: 2, cantidadRestante: 0,
-      } });
       await tx.consumoCapa.create({ data: { partidaId: p.id, capaId: capa.id, cantidad: 2 } });
+      await tx.capaCosto.update({ where: { id: capa.id }, data: { cantidadRestante: 0 } });
+      await tx.existencia.update({ where: { bodegaId_articuloId: { bodegaId, articuloId } }, data: { cantidad: { decrement: 2 } } });
       await tx.movimiento.update({ where: { id: m.id }, data: {
         estatus: "RETIRADA", folio: `S-${randomUUID().slice(0, 8)}`,
         entregadoA: "Mensajero", entregadoPorId: capturistaId, entregadoEn: new Date(),

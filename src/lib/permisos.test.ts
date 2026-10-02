@@ -43,3 +43,28 @@ describe("permisos de salidas", () => {
     }
   });
 });
+
+describe("permisos de traspasos, devoluciones y conteo", () => {
+  const OPERACION = ["traspasos", "devoluciones", "ajustes"] as const;
+
+  it("Superadmin y Compras leen, capturan y confirman; Jefe solo lee, aun con la bandera", () => {
+    for (const area of OPERACION) {
+      for (const rol of ["SUPERADMIN", "COMPRAS"] as const) {
+        for (const accion of ["leer", "capturar", "confirmar"] as const) {
+          expect(rolTienePermiso(rol, `${area}:${accion}`), `${rol} ${area}:${accion}`).toBe(true);
+        }
+      }
+      expect(rolTienePermiso("JEFE", `${area}:leer`)).toBe(true);
+      for (const accion of ["capturar", "confirmar"] as const) {
+        expect(usuarioTienePermiso({ rol: "JEFE", puedeAutorizar: true }, `${area}:${accion}`), `${area}:${accion}`).toBe(false);
+      }
+    }
+  });
+
+  it("solo el Superadmin revierte, y la bandera de autorizar no lo cambia", () => {
+    expect(rolTienePermiso("SUPERADMIN", "movimientos:revertir")).toBe(true);
+    for (const rol of ["COMPRAS", "JEFE"] as const) {
+      expect(usuarioTienePermiso({ rol, puedeAutorizar: true }, "movimientos:revertir"), rol).toBe(false);
+    }
+  });
+});

@@ -11,11 +11,11 @@ export const dynamic = "force-dynamic";
 
 export default async function PaginaSalidas({ searchParams }: PageProps<"/salidas">) {
   // Sesión y permiso primero; los filtros se leen ya dentro de la puerta.
-  const { filtros, filas: resumen, hayMas, cursorActual, cursorSiguiente, puedeCapturar, pendientes } = await consultar("salidas:leer", async (db, usuario) =>
+  const { filtros, filas: resumen, devoluciones, hayMas, cursorActual, cursorSiguiente, puedeCapturar, pendientes } = await consultar("salidas:leer", async (db, usuario) =>
     datosDeLista(db, usuario, await searchParams),
   );
   const filtrando = hayFiltros(filtros);
-  const filas = resumen.map(filaDeSalida);
+  const filas = resumen.map((s) => filaDeSalida(s, devoluciones[s.id]));
 
   return (
     <>

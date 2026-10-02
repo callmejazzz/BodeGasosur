@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { excesoDeCapacidad } from "@/lib/movimientos/primitivas";
 import { ErrorDeDominio } from "./errores";
 
 // Primitivas de PostgreSQL propias de la confirmación de entradas (11 §9).
@@ -9,30 +10,13 @@ type Tx = Prisma.TransactionClient;
 // ─────────────────────────────── Existencia ──────────────────────────────────
 
 export async function verificarCapacidadDeExistencias(tx: Tx, movimientoId: string, bodegaId: string): Promise<void> {
-  const fuera = await tx.$queryRaw<{ clave: string; existencia: number; entra: number }[]>`
-    SELECT a.clave, e.cantidad AS existencia, p.cantidad AS entra
-    FROM "MovimientoPartida" p
-    JOIN "Existencia" e ON e."bodegaId" = ${bodegaId}::uuid AND e."articuloId" = p."articuloId"
-    JOIN "Articulo" a ON a.id = p."articuloId"
-    WHERE p."movimientoId" = ${movimientoId}::uuid
-      AND e.cantidad::bigint + p.cantidad > 2147483647
-    ORDER BY a.clave LIMIT 1`;
-  if (fuera[0]) {
+  const fuera = await excesoDeCapacidad(tx, movimientoId, bodegaId);
+  if (fuera) {
     throw new ErrorDeDominio(
       "partidas",
-      `${fuera[0].clave}: la existencia (${fuera[0].existencia}) más esta entrada (${fuera[0].entra}) rebasa lo que el sistema puede registrar.`,
+      `${fuera.clave}: la existencia (${fuera.existencia}) más esta entrada (${fuera.entra}) rebasa lo que el sistema puede registrar.`,
     );
   }
-}
-
-/** Suma a la existencia las partidas del movimiento. Exige haber bloqueado antes. */
-export async function incrementarExistencias(tx: Tx, movimientoId: string, bodegaId: string): Promise<number> {
-  return tx.$executeRaw`
-    UPDATE "Existencia" e
-    SET cantidad = e.cantidad + p.cantidad, "actualizadoEn" = now()
-    FROM "MovimientoPartida" p
-    WHERE p."movimientoId" = ${movimientoId}::uuid
-      AND e."bodegaId" = ${bodegaId}::uuid AND e."articuloId" = p."articuloId"`;
 }
 
 // ─────────────────────────── Proveedor y bodega ──────────────────────────────

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { BadgeEstatus } from "@/components/entradas/detalle-entrada";
 import { Paginador, usePaginaMedida } from "@/components/ui/paginacion";
+import { Badge, Estados } from "@/components/ui/superficies";
 import { Tabla, Td, Th, Tr } from "@/components/ui/tabla";
 
 export type FilaEntrada = {
@@ -15,6 +16,7 @@ export type FilaEntrada = {
   bodega: string;
   partidas: number;
   total: string;
+  revertida: boolean;
 };
 
 export function TablaEntradas({ filas, hayMas }: { filas: FilaEntrada[]; hayMas: boolean }) {
@@ -49,7 +51,12 @@ export function TablaEntradas({ filas, hayMas }: { filas: FilaEntrada[]; hayMas:
               <Td>{e.bodega}</Td>
               <Td className="text-right tabular">{e.partidas}</Td>
               <Td className="text-right tabular whitespace-nowrap">{e.total}</Td>
-              <Td><BadgeEstatus estatus={e.estatus} /></Td>
+              <Td>
+                <Estados>
+                  <BadgeEstatus estatus={e.estatus} />
+                  {e.revertida && <Badge tono="peligro">Revertida</Badge>}
+                </Estados>
+              </Td>
             </Tr>
           ))}
         </tbody>

@@ -1,10 +1,14 @@
 import { notFound } from "next/navigation";
 import { autorizarSalida, cancelarSalida, confirmarRecepcion, rechazarSalida, retirarSalida } from "../actions";
+import { revertirMovimiento } from "../../reversas/actions";
+import { AvisoDeReversa, SaldoDeSalida } from "@/components/inventario/relaciones";
+import { RevertirMovimiento } from "@/components/inventario/revertir";
 import { AccionesSalida } from "@/components/salidas/acciones-salida";
 import { AvisosDeRetiro, EncabezadoSalida, HistorialSalida, PartidasSalida, ValuacionSalida } from "@/components/salidas/detalle-salida";
 import { ButtonLink } from "@/components/ui/button";
 import { Card, CardHeader, EncabezadoPagina } from "@/components/ui/superficies";
 import { consultar } from "@/lib/db";
+import { relacionesDeSalida } from "@/lib/inventario/pantallas";
 import { datosDeDetalle } from "@/lib/salidas/pantallas";
 
 export const dynamic = "force-dynamic";
@@ -22,9 +26,12 @@ const ACCIONES = { autorizar: autorizarSalida, rechazar: rechazarSalida, cancela
 
 export default async function PaginaSalida({ params }: PageProps<"/salidas/[id]">) {
   // Sesión y permiso primero; el id se valida ya dentro de la puerta.
-  const datos = await consultar("salidas:leer", async (db, usuario) => datosDeDetalle(db, usuario, (await params).id));
+  const datos = await consultar("salidas:leer", async (db, usuario) => {
+    const detalle = await datosDeDetalle(db, usuario, (await params).id);
+    return detalle && { ...detalle, relaciones: await relacionesDeSalida(db, usuario, detalle.salida) };
+  });
   if (!datos) notFound();
-  const { salida, puede, existencias, valuacion, avisos } = datos;
+  const { salida, puede, existencias, valuacion, avisos, relaciones } = datos;
 
   return (
     <>
@@ -37,9 +44,21 @@ export default async function PaginaSalida({ params }: PageProps<"/salidas/[id]"
       <div className="flex flex-col gap-6">
         <Card>
           <CardHeader titulo="Salida" />
-          <EncabezadoSalida salida={salida} />
+          <EncabezadoSalida salida={salida} devolucion={relaciones?.devolucion} />
           <AccionesSalida key={salida.id} id={salida.id} puede={puede} acciones={ACCIONES} />
+          {relaciones?.reversa && <AvisoDeReversa reversa={relaciones.reversa} />}
+          {relaciones?.revertir && salida.folio && <RevertirMovimiento id={salida.id} folio={salida.folio} revertir={revertirMovimiento} />}
         </Card>
+
+        {relaciones?.saldo && (
+          <Card>
+            <CardHeader
+              titulo={salida.esPrestamo ? "Préstamo" : "Devoluciones"}
+              descripcion="Lo que volvió en devoluciones vigentes ligadas a esta salida. Una devolución sin salida no cuenta aquí."
+            />
+            <SaldoDeSalida salidaId={salida.id} saldo={relaciones.saldo} devoluciones={relaciones.devoluciones} esPrestamo={salida.esPrestamo} puedeDevolver={relaciones.puedeDevolver} />
+          </Card>
+        )}
 
         {avisos.length > 0 && (
           <Card className="border-warning/40">

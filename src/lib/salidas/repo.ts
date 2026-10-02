@@ -1,5 +1,6 @@
 import "server-only";
 import type { Prisma } from "@prisma/client";
+import { enOrden, idsDeLista, sql } from "@/lib/movimientos/lista";
 import { usuarioTienePermiso, type Permiso, type SujetoDePermisos } from "@/lib/permisos";
 import type { EstatusSalida } from "./servicio";
 
@@ -23,6 +24,7 @@ const RESUMEN = {
   area: { select: { nombre: true } },
   solicitadoPor: { select: { nombre: true } },
   _count: { select: { partidas: true } },
+  canceladoPor: { select: { id: true } },
 } satisfies Prisma.MovimientoSelect;
 
 export type SalidaResumen = Prisma.MovimientoGetPayload<{ select: typeof RESUMEN }>;
@@ -32,52 +34,41 @@ export const TOPE_LISTA = 200;
 
 export type FiltroSalidas = {
   estatus: EstatusSalida | "todas";
-  /** Folio, clave de bodega o número de estación (tolerante), alias, solicitante o quién retiró. */
+  /** Folio, clave de bodega o número de estación (tolerante); nombre de bodega, alias, solicitante o quién retiró. */
   busqueda: string;
+  soloPrestamos?: boolean;
   cursor?: string;
 };
 
-/** Ids cuyo folio, clave de bodega o número de estación coinciden ignorando guiones, ceros y mayúsculas. */
-async function idsPorClave(db: Db, texto: string): Promise<string[]> {
-  const filas = await db.$queryRaw<{ id: string }[]>`
-    SELECT m.id
-    FROM "Movimiento" m
-    JOIN "Bodega" b ON b.id = m."bodegaOrigenId"
-    JOIN catalogo_gasosur."Estacion" s ON s.id = m."estacionId"
-    WHERE m.tipo = 'SALIDA'
-      AND clave_normalizada(${texto}) <> ''
-      AND (position(clave_normalizada(${texto}) IN clave_normalizada(m.folio)) > 0
-        OR position(clave_normalizada(${texto}) IN clave_normalizada(b.clave)) > 0
-        OR position(clave_normalizada(${texto}) IN clave_normalizada(s.numero)) > 0)`;
-  return filas.map((f) => f.id);
-}
-
-/** La más reciente arriba. El id desempata fechas iguales y hace estable el cursor. */
+/**
+ * Lo que sigue en curso primero (solicitadas y autorizadas, sin folio todavía);
+ * luego las retiradas o recibidas por folio, del más alto al más bajo; al
+ * final rechazadas y canceladas, la más nueva arriba. El id desempata y hace
+ * estable el cursor.
+ */
 export async function listarSalidas(db: Db, filtro: FiltroSalidas): Promise<{ filas: SalidaResumen[]; hayMas: boolean; cursorActual: string | null; cursorSiguiente: string | null }> {
-  const q = filtro.busqueda.trim().slice(0, 80);
   const cursor = filtro.cursor ? await db.movimiento.findFirst({ where: { id: filtro.cursor, tipo: "SALIDA" }, select: { id: true } }) : null;
-  const filas = await db.movimiento.findMany({
-    where: {
-      tipo: "SALIDA",
-      estatus: filtro.estatus === "todas" ? undefined : filtro.estatus,
-      OR: q
-        ? [
-            { id: { in: await idsPorClave(db, q) } },
-            { estacion: { alias: { contains: q, mode: "insensitive" } } },
-            { solicitadoPor: { nombre: { contains: q, mode: "insensitive" } } },
-            { entregadoA: { contains: q, mode: "insensitive" } },
-          ]
-        : undefined,
-    },
-    select: RESUMEN,
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    cursor: cursor ? { id: cursor.id } : undefined,
-    skip: cursor ? 1 : undefined,
-    take: TOPE_LISTA + 1,
+  const filtros = [];
+  if (filtro.estatus !== "todas") filtros.push(sql`m.estatus = ${filtro.estatus}::"EstatusMovimiento"`);
+  if (filtro.soloPrestamos) filtros.push(sql`m."esPrestamo"`);
+  const ids = await idsDeLista(db, {
+    tipo: "SALIDA",
+    abiertos: ["SOLICITADA", "AUTORIZADA"],
+    joins: sql`
+      LEFT JOIN "Bodega" b ON b.id = m."bodegaOrigenId"
+      LEFT JOIN catalogo_gasosur."Estacion" s ON s.id = m."estacionId"
+      LEFT JOIN "Persona" p ON p.id = m."solicitadoPorId"`,
+    filtros,
+    busqueda: filtro.busqueda.slice(0, 80),
+    claves: [sql`m.folio`, sql`b.clave`, sql`s.numero`],
+    textos: [sql`b.nombre`, sql`s.alias`, sql`p.nombre`, sql`m."entregadoA"`],
+    cursor: cursor?.id,
+    tope: TOPE_LISTA + 1,
   });
-  const hayMas = filas.length > TOPE_LISTA;
-  const visibles = filas.slice(0, TOPE_LISTA);
-  return { filas: visibles, hayMas, cursorActual: cursor?.id ?? null, cursorSiguiente: hayMas ? visibles.at(-1)!.id : null };
+  const hayMas = ids.length > TOPE_LISTA;
+  const visibles = ids.slice(0, TOPE_LISTA);
+  const filas = enOrden(visibles, await db.movimiento.findMany({ where: { id: { in: visibles } }, select: RESUMEN }));
+  return { filas, hayMas, cursorActual: cursor?.id ?? null, cursorSiguiente: hayMas ? visibles.at(-1)! : null };
 }
 
 const DETALLE = {

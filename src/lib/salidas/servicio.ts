@@ -2,15 +2,17 @@ import type { EstatusMovimiento, Prisma, Presentacion } from "@prisma/client";
 import type { UsuarioSesion } from "@/lib/db";
 import { aFechaDeBase, hoyEnMexico } from "@/lib/fechas";
 import { chocaCon } from "@/lib/movimientos/errores";
-import { asegurarYBloquearExistencias, aUnidadBase, bloquearArticulos, tomarFolio } from "@/lib/movimientos/primitivas";
-import { ErrorDeDominio, traducirErrorDeBase } from "./errores";
 import {
+  asegurarYBloquearExistencias,
+  aUnidadBase,
+  bloquearArticulos,
   bloquearCapasVivas,
-  bloquearContrapartes,
   consumirCapasPEPS,
   descontarExistencias,
-  verificarExistencias,
-} from "./primitivas";
+  tomarFolio,
+} from "@/lib/movimientos/primitivas";
+import { ErrorDeDominio, traducirErrorDeBase } from "./errores";
+import { bloquearContrapartes, verificarExistencias } from "./primitivas";
 
 /*
   Cada función recibe `tx` y `usuario` de accionProtegida(): el actor sale de

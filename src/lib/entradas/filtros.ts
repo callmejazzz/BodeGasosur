@@ -1,4 +1,4 @@
-import { esFechaCalendario, FECHA_MINIMA_OPERATIVA, hoyEnMexico } from "@/lib/fechas";
+import { hoyEnMexico, leerRangoDeFechas } from "@/lib/fechas";
 
 // Los filtros de la lista de entradas viven en la URL:
 // /entradas?q=…&estatus=…&ref=…&desde=…&hasta=…
@@ -49,19 +49,11 @@ export function leerFiltros(params: Record<string, string | string[] | undefined
     const v = params[PARAMETRO[clave]];
     return typeof v === "string" ? v.trim() : "";
   };
-  const fecha = (clave: "desde" | "hasta") => {
-    const v = texto(clave);
-    return esFechaCalendario(v) && v >= FECHA_MINIMA_OPERATIVA && v <= hoy ? v : "";
-  };
-  let desde = fecha("desde");
-  let hasta = fecha("hasta");
-  if (desde && hasta && desde > hasta) [desde, hasta] = [hasta, desde];
   return {
     estatus: ESTATUS.find((f) => f.valor === texto("estatus"))?.valor ?? "todas",
     referencia: REFERENCIA.find((f) => f.valor === texto("referencia"))?.valor ?? "todas",
     busqueda: texto("busqueda").slice(0, 80),
-    desde,
-    hasta,
+    ...leerRangoDeFechas(params[PARAMETRO.desde], params[PARAMETRO.hasta], hoy),
   };
 }
 

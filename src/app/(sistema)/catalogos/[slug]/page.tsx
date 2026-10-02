@@ -11,7 +11,7 @@ import {
 import { leerRuta, REPOS } from "@/lib/catalogos/repos";
 import { consultar } from "@/lib/db";
 import { rolTienePermiso } from "@/lib/permisos";
-import { cantidad, cn } from "@/lib/utils";
+import { cantidad, cn, textoBuscable } from "@/lib/utils";
 
 function celda(registro: { id: string }, campo: CampoDef, def: CatalogoDef) {
   const valor = leerRuta(registro, campo.rutaTabla ?? campo.nombre);
@@ -55,7 +55,8 @@ export default async function PaginaCatalogo({
   const repo = REPOS[slug];
   if (!def || !repo) notFound();
 
-  const busqueda = typeof q === "string" ? q.trim().toLowerCase() : "";
+  const busqueda = typeof q === "string" ? q.trim() : "";
+  const buscado = textoBuscable(busqueda);
   // El permiso de escritura sale del mismo `usuario` que `consultar` ya entrega:
   // ni segunda lectura de sesión ni consulta extra.
   const { todos, puedeEscribir } = await consultar("catalogos:leer", async (db, usuario) => ({
@@ -66,9 +67,7 @@ export default async function PaginaCatalogo({
   const registros = busqueda
     ? todos.filter((r) =>
         def.camposBusqueda.some((campo) =>
-          String(leerRuta(r, campo) ?? "")
-            .toLowerCase()
-            .includes(busqueda),
+          textoBuscable(String(leerRuta(r, campo) ?? "")).includes(buscado),
         ),
       )
     : todos;

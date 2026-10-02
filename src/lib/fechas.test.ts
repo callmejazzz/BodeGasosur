@@ -4,11 +4,14 @@ import {
   FechaInvalida,
   aFechaDeBase,
   deFechaDeBase,
+  diaSiguiente,
   esFechaCalendario,
   esFechaOperativa,
   formatearFecha,
   formatearInstante,
   hoyEnMexico,
+  inicioDelDiaEnMexico,
+  leerRangoDeFechas,
   motivoFechaNoOperativa,
 } from "./fechas";
 
@@ -220,6 +223,29 @@ describe("formatearInstante", () => {
     enCadaZona(() => {
       expect(formatearInstante(instante("2027-01-01T05:59:00.000Z"))).toBe("31/12/2026 23:59");
       expect(formatearInstante(instante("2027-01-01T06:00:00.000Z"))).toBe("01/01/2027 00:00");
+    });
+  });
+});
+
+describe("rangos de fechas", () => {
+  it("leerRangoDeFechas descarta lo no operativo e intercambia un rango al revés", () => {
+    expect(leerRangoDeFechas(" 2026-09-01 ", "2026-09-30", "2026-09-30")).toEqual({ desde: "2026-09-01", hasta: "2026-09-30" });
+    expect(leerRangoDeFechas("2026-09-20", "2026-09-01", "2026-09-30")).toEqual({ desde: "2026-09-01", hasta: "2026-09-20" });
+    expect(leerRangoDeFechas("1999-12-31", "2026-10-01", "2026-09-30")).toEqual({ desde: "", hasta: "" });
+    expect(leerRangoDeFechas(["2026-09-01"], 20260901)).toEqual({ desde: "", hasta: "" });
+  });
+
+  it("diaSiguiente cruza mes y año", () => {
+    expect(diaSiguiente("2026-09-30")).toBe("2026-10-01");
+    expect(diaSiguiente("2026-12-31")).toBe("2027-01-01");
+    expect(diaSiguiente("2028-02-28")).toBe("2028-02-29");
+  });
+
+  it("el día en México empieza a las 06:00 UTC, y a las 05:00 con el horario de verano previo a 2022", () => {
+    enCadaZona(() => {
+      expect(inicioDelDiaEnMexico("2026-09-30").toISOString()).toBe("2026-09-30T06:00:00.000Z");
+      expect(inicioDelDiaEnMexico("2020-07-01").toISOString()).toBe("2020-07-01T05:00:00.000Z");
+      expect(inicioDelDiaEnMexico("2027-01-01").toISOString()).toBe("2027-01-01T06:00:00.000Z");
     });
   });
 });

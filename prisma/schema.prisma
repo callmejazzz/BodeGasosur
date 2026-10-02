@@ -16,7 +16,7 @@
 // porque Prisma no sabe expresarlos. Se arman dentro de la migración.
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
   // relationJoins: las relaciones de un select se traen en una sola sentencia
   // (LATERAL JOIN). Sin él, Prisma 7 las carga en paralelo sobre la misma
   // conexión de la transacción, cosa que pg 9 dejará de aceptar.
@@ -53,6 +53,16 @@ enum EstatusMovimiento {
   RETIRADA
   /// La estación confirmó la recepción; cierra la salida sin mover inventario.
   RECIBIDA
+  CANCELADO
+
+  @@schema("public")
+}
+
+/// La hoja de conteo es una captura de trabajo: al confirmarse se convierte en
+/// ajustes inmutables; descartada no deja nada en el inventario.
+enum EstatusConteo {
+  BORRADOR
+  CONFIRMADO
   CANCELADO
 
   @@schema("public")
@@ -182,15 +192,18 @@ model Usuario {
 
   persona Persona? @relation(fields: [personaId], references: [id])
 
-  bitacora            Bitacora[]
-  eventosAcceso       EventoAcceso[]
-  movimientosCreados     Movimiento[] @relation("Creador")
-  movimientosConfirmados Movimiento[] @relation("Confirmador")
-  movimientosAutorizados Movimiento[] @relation("Autorizador")
-  movimientosRechazados  Movimiento[] @relation("Rechazador")
-  movimientosEntregados  Movimiento[] @relation("Entregador")
-  movimientosRecibidos   Movimiento[] @relation("Receptor")
-  movimientosCancelados  Movimiento[] @relation("Cancelador")
+  bitacora               Bitacora[]
+  eventosAcceso          EventoAcceso[]
+  movimientosCreados     Movimiento[]   @relation("Creador")
+  movimientosConfirmados Movimiento[]   @relation("Confirmador")
+  movimientosAutorizados Movimiento[]   @relation("Autorizador")
+  movimientosRechazados  Movimiento[]   @relation("Rechazador")
+  movimientosEntregados  Movimiento[]   @relation("Entregador")
+  movimientosRecibidos   Movimiento[]   @relation("Receptor")
+  movimientosCancelados  Movimiento[]   @relation("Cancelador")
+  conteosCreados         HojaConteo[]   @relation("CreadorConteo")
+  conteosConfirmados     HojaConteo[]   @relation("ConfirmadorConteo")
+  conteosCancelados      HojaConteo[]   @relation("CanceladorConteo")
 
   @@schema("public")
 }
@@ -232,16 +245,16 @@ model EventoWebhook {
 /// deja seguridad.fijar_actor() con el token de Clerk; los logins de confianza
 /// (migraciones y scripts) lo declaran con app.usuario_id o app.origen.
 model Bitacora {
-  id         String         @id @default(uuid(7)) @db.Uuid
-  tabla      String
-  registroId String
-  accion     AccionBitacora
-  usuarioId  String?        @db.Uuid
+  id           String         @id @default(uuid(7)) @db.Uuid
+  tabla        String
+  registroId   String
+  accion       AccionBitacora
+  usuarioId    String?        @db.Uuid
   /// "clerk-webhook", "migracion-datos"… Nulo cuando escribió un usuario.
-  origen     String?
-  antes      Json?
-  despues    Json?
-  ocurridoEn DateTime       @default(now()) @db.Timestamptz(3)
+  origen       String?
+  antes        Json?
+  despues      Json?
+  ocurridoEn   DateTime       @default(now()) @db.Timestamptz(3)
   /// De dónde salió el actor: liga (token verificado), dueño (login de
   /// confianza), declarada (webhook) o heredada (solo en la fase A).
   verificacion String?
@@ -274,6 +287,7 @@ model Bodega {
   capas              CapaCosto[]
   movimientosOrigen  Movimiento[] @relation("BodegaOrigen")
   movimientosDestino Movimiento[] @relation("BodegaDestino")
+  conteos            HojaConteo[]
 
   @@schema("public")
 }
@@ -338,11 +352,12 @@ model Articulo {
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
-  unidad      UnidadMedida       @relation(fields: [unidadId], references: [id])
-  categoria   CategoriaArticulo? @relation(fields: [categoriaId], references: [id])
-  existencias Existencia[]
-  capas       CapaCosto[]
-  partidas    MovimientoPartida[]
+  unidad          UnidadMedida        @relation(fields: [unidadId], references: [id])
+  categoria       CategoriaArticulo?  @relation(fields: [categoriaId], references: [id])
+  existencias     Existencia[]
+  capas           CapaCosto[]
+  partidas        MovimientoPartida[]
+  renglonesConteo RenglonConteo[]
 
   @@index([descripcion])
   @@index([categoriaId])
@@ -437,8 +452,11 @@ model Movimiento {
   observaciones     String?
   motivoRechazo     String?
   motivoCancelacion String?
-  /// El movimiento que este reversa. Un movimiento confirmado nunca se borra.
+  /// El movimiento que este reversa. Un movimiento confirmado nunca se borra:
+  /// la reversa es otro asiento, AJUSTE o TRASPASO, y solo hay una por original.
   cancelaAId        String? @unique @db.Uuid
+  /// AJUSTE nacido al confirmar una hoja de conteo.
+  conteoId          String? @db.Uuid
 
   /// UUID generado al abrir el formulario y conservado en reintentos y dobles
   /// clics: repetir el alta devuelve este mismo movimiento (11 §8). Obligatoria en
@@ -469,23 +487,24 @@ model Movimiento {
 
   partidas      MovimientoPartida[]
   capas         CapaCosto[]
-  bodegaOrigen  Bodega?      @relation("BodegaOrigen", fields: [bodegaOrigenId], references: [id])
-  bodegaDestino Bodega?      @relation("BodegaDestino", fields: [bodegaDestinoId], references: [id])
-  proveedor     Proveedor?   @relation(fields: [proveedorId], references: [id])
-  estacion      Estacion?    @relation(fields: [estacionId], references: [id])
-  area          Area?        @relation(fields: [areaId], references: [id])
-  solicitadoPor Persona?     @relation("Solicitante", fields: [solicitadoPorId], references: [id])
-  devuelveA     Movimiento?  @relation("Devolucion", fields: [devuelveAId], references: [id])
-  devoluciones  Movimiento[] @relation("Devolucion")
-  cancelaA      Movimiento?  @relation("Cancelacion", fields: [cancelaAId], references: [id])
-  canceladoPor  Movimiento?  @relation("Cancelacion")
+  bodegaOrigen  Bodega?             @relation("BodegaOrigen", fields: [bodegaOrigenId], references: [id])
+  bodegaDestino Bodega?             @relation("BodegaDestino", fields: [bodegaDestinoId], references: [id])
+  proveedor     Proveedor?          @relation(fields: [proveedorId], references: [id])
+  estacion      Estacion?           @relation(fields: [estacionId], references: [id])
+  area          Area?               @relation(fields: [areaId], references: [id])
+  solicitadoPor Persona?            @relation("Solicitante", fields: [solicitadoPorId], references: [id])
+  devuelveA     Movimiento?         @relation("Devolucion", fields: [devuelveAId], references: [id])
+  devoluciones  Movimiento[]        @relation("Devolucion")
+  cancelaA      Movimiento?         @relation("Cancelacion", fields: [cancelaAId], references: [id])
+  canceladoPor  Movimiento?         @relation("Cancelacion")
+  conteo        HojaConteo?         @relation(fields: [conteoId], references: [id])
 
-  creadoPor     Usuario  @relation("Creador", fields: [creadoPorId], references: [id])
-  confirmadoPor Usuario? @relation("Confirmador", fields: [confirmadoPorId], references: [id])
-  autorizadoPor Usuario? @relation("Autorizador", fields: [autorizadoPorId], references: [id])
-  rechazadoPor  Usuario? @relation("Rechazador", fields: [rechazadoPorId], references: [id])
-  entregadoPor  Usuario? @relation("Entregador", fields: [entregadoPorId], references: [id])
-  recibidoPor   Usuario? @relation("Receptor", fields: [recibidoPorId], references: [id])
+  creadoPor           Usuario  @relation("Creador", fields: [creadoPorId], references: [id])
+  confirmadoPor       Usuario? @relation("Confirmador", fields: [confirmadoPorId], references: [id])
+  autorizadoPor       Usuario? @relation("Autorizador", fields: [autorizadoPorId], references: [id])
+  rechazadoPor        Usuario? @relation("Rechazador", fields: [rechazadoPorId], references: [id])
+  entregadoPor        Usuario? @relation("Entregador", fields: [entregadoPorId], references: [id])
+  recibidoPor         Usuario? @relation("Receptor", fields: [recibidoPorId], references: [id])
   canceladoPorUsuario Usuario? @relation("Cancelador", fields: [canceladoPorId], references: [id])
 
   @@index([tipo, estatus, fecha])
@@ -493,6 +512,8 @@ model Movimiento {
   @@index([bodegaOrigenId])
   @@index([bodegaDestinoId])
   @@index([proveedorId])
+  @@index([devuelveAId])
+  @@index([conteoId])
   @@schema("public")
 }
 
@@ -516,7 +537,7 @@ model MovimientoPartida {
   factorConversion       Int
   /// Solo en ENTRADA: sin IVA, por la presentación capturada y en la moneda de la
   /// factura. De aquí salen los importes del encabezado.
-  costoUnitarioCapturado Decimal? @db.Decimal(14, 4)
+  costoUnitarioCapturado Decimal?     @db.Decimal(14, 4)
 
   /// Sin IVA, SIEMPRE en MXN y por unidad base: ya convertido con el tipo de
   /// cambio y dividido entre el factor (11 §6). Nulo = no se conoce el costo
@@ -528,12 +549,13 @@ model MovimientoPartida {
   /// Solo en ENTRADA: 0.1600, 0.0800 o 0 según el bien.
   tasaIva             Decimal? @db.Decimal(5, 4)
   /// Se anota, no se rastrea.
-  numeroSerie   String?
-  observaciones String?
+  numeroSerie         String?
+  observaciones       String?
 
-  movimiento Movimiento    @relation(fields: [movimientoId], references: [id], onDelete: Cascade)
-  articulo   Articulo      @relation(fields: [articuloId], references: [id])
-  consumos   ConsumoCapa[]
+  movimiento    Movimiento        @relation(fields: [movimientoId], references: [id], onDelete: Cascade)
+  articulo      Articulo          @relation(fields: [articuloId], references: [id])
+  consumos      ConsumoCapa[]
+  restituciones RestitucionCapa[]
 
   @@unique([movimientoId, articuloId])
   @@unique([movimientoId, orden])
@@ -546,11 +568,11 @@ model MovimientoPartida {
 /// que la crea con costo nulo. Es lo que hace que el invariante 9 se cumpla
 /// universalmente y que PEPS siempre encuentre de dónde consumir.
 model CapaCosto {
-  id           String @id @default(uuid(7)) @db.Uuid
-  bodegaId     String @db.Uuid
-  articuloId   String @db.Uuid
+  id            String   @id @default(uuid(7)) @db.Uuid
+  bodegaId      String   @db.Uuid
+  articuloId    String   @db.Uuid
   /// El movimiento que la creó: ENTRADA, TRASPASO, DEVOLUCION o el AJUSTE inicial.
-  movimientoId String @db.Uuid
+  movimientoId  String   @db.Uuid
   /// Cuándo apareció la capa en esta bodega. Informativo: no ordena PEPS.
   fecha         DateTime @db.Date
   /// Fecha de la ENTRADA original. Es la que ordena PEPS, junto con el id.
@@ -560,8 +582,8 @@ model CapaCosto {
   /// Capa de la que se partió esta, en un traspaso o una devolución.
   origenId      String?  @db.Uuid
 
-  cantidadInicial  Int
-  cantidadRestante Int
+  cantidadInicial     Int
+  cantidadRestante    Int
   /// Ambos en pesos, ya convertidos al tipo de cambio de la entrada.
   /// Nulos juntos cuando el costo no se conoce.
   costoUnitario       Decimal? @db.Decimal(14, 4)
@@ -569,12 +591,13 @@ model CapaCosto {
 
   createdAt DateTime @default(now()) @db.Timestamptz(3)
 
-  bodega     Bodega        @relation(fields: [bodegaId], references: [id])
-  articulo   Articulo      @relation(fields: [articuloId], references: [id])
-  movimiento Movimiento    @relation(fields: [movimientoId], references: [id])
-  origen     CapaCosto?    @relation("ParticionDeCapa", fields: [origenId], references: [id])
-  particiones CapaCosto[]  @relation("ParticionDeCapa")
-  consumos   ConsumoCapa[]
+  bodega        Bodega            @relation(fields: [bodegaId], references: [id])
+  articulo      Articulo          @relation(fields: [articuloId], references: [id])
+  movimiento    Movimiento        @relation(fields: [movimientoId], references: [id])
+  origen        CapaCosto?        @relation("ParticionDeCapa", fields: [origenId], references: [id])
+  particiones   CapaCosto[]       @relation("ParticionDeCapa")
+  consumos      ConsumoCapa[]
+  restituciones RestitucionCapa[]
 
   /// El índice que recorre PEPS: capas vivas de un artículo y bodega, en orden.
   @@index([bodegaId, articuloId, fechaOriginal, id])
@@ -585,21 +608,48 @@ model CapaCosto {
 
 /// De qué capa salió cada pieza de una salida. Una partida puede tocar varias capas.
 model ConsumoCapa {
-  id        String @id @default(uuid(7)) @db.Uuid
-  partidaId String @db.Uuid
-  capaId    String @db.Uuid
-  cantidad  Int
+  id                  String   @id @default(uuid(7)) @db.Uuid
+  partidaId           String   @db.Uuid
+  capaId              String   @db.Uuid
+  cantidad            Int
   /// Congelados al momento de la salida. Nulos si la capa no tenía costo.
   costoUnitario       Decimal? @db.Decimal(14, 4)
   costoUnitarioConIva Decimal? @db.Decimal(14, 4)
 
   createdAt DateTime @default(now()) @db.Timestamptz(3)
 
-  partida MovimientoPartida @relation(fields: [partidaId], references: [id], onDelete: Cascade)
-  capa    CapaCosto         @relation(fields: [capaId], references: [id])
+  partida     MovimientoPartida @relation(fields: [partidaId], references: [id], onDelete: Cascade)
+  capa        CapaCosto         @relation(fields: [capaId], references: [id])
+  restitucion RestitucionCapa?
 
   /// Una partida consume cada capa una sola vez: un consumo duplicado descontaría dos veces.
   @@unique([partidaId, capaId])
+  @@index([partidaId])
+  @@index([capaId])
+  @@schema("public")
+}
+
+/// La variación inversa de un consumo: la reversa de un egreso devuelve cada
+/// pieza a la capa exacta de la que salió. El consumo original no se toca.
+model RestitucionCapa {
+  id                  String   @id @default(uuid(7)) @db.Uuid
+  /// Partida de la reversa.
+  partidaId           String   @db.Uuid
+  /// Una sola vez por consumo: la reversa es única.
+  consumoId           String   @unique @db.Uuid
+  /// La del consumo, a la que vuelven las piezas.
+  capaId              String   @db.Uuid
+  cantidad            Int
+  /// Los del consumo, iguales a los de la capa. Nulos si no tenía costo.
+  costoUnitario       Decimal? @db.Decimal(14, 4)
+  costoUnitarioConIva Decimal? @db.Decimal(14, 4)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  partida MovimientoPartida @relation(fields: [partidaId], references: [id], onDelete: Cascade)
+  consumo ConsumoCapa       @relation(fields: [consumoId], references: [id])
+  capa    CapaCosto         @relation(fields: [capaId], references: [id])
+
   @@index([partidaId])
   @@index([capaId])
   @@schema("public")
@@ -617,6 +667,62 @@ model Existencia {
   articulo Articulo @relation(fields: [articuloId], references: [id])
 
   @@id([bodegaId, articuloId])
+  @@index([articuloId])
+  @@schema("public")
+}
+
+/// Hoja de conteo físico de una bodega. Mientras está en BORRADOR se corrige;
+/// al confirmarse se vuelve uno o dos AJUSTE según el signo de las diferencias.
+/// No congela la bodega ni reserva existencias: si el stock cambió desde que se
+/// leyó, la confirmación se rechaza y hay que actualizar la hoja.
+model HojaConteo {
+  id                String        @id @default(uuid(7)) @db.Uuid
+  bodegaId          String        @db.Uuid
+  estatus           EstatusConteo
+  /// Obligatorio: pasa a los ajustes que nazcan de la hoja.
+  motivo            String
+  observaciones     String?
+  llaveIdempotencia String        @unique @db.Uuid
+  /// Sube con cada guardado o actualización: se confirma lo que se revisó.
+  revision          Int           @default(1)
+
+  creadoPorId       String    @db.Uuid
+  confirmadoPorId   String?   @db.Uuid
+  confirmadoEn      DateTime? @db.Timestamptz(3)
+  canceladoPorId    String?   @db.Uuid
+  canceladoEn       DateTime? @db.Timestamptz(3)
+  motivoCancelacion String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  bodega        Bodega          @relation(fields: [bodegaId], references: [id])
+  creadoPor     Usuario         @relation("CreadorConteo", fields: [creadoPorId], references: [id])
+  confirmadoPor Usuario?        @relation("ConfirmadorConteo", fields: [confirmadoPorId], references: [id])
+  canceladoPor  Usuario?        @relation("CanceladorConteo", fields: [canceladoPorId], references: [id])
+  renglones     RenglonConteo[]
+  ajustes       Movimiento[]
+
+  @@index([bodegaId, estatus])
+  @@schema("public")
+}
+
+model RenglonConteo {
+  id               String  @id @default(uuid(7)) @db.Uuid
+  hojaId           String  @db.Uuid
+  articuloId       String  @db.Uuid
+  orden            Int
+  /// Existencia que leyó el servidor al abrir o actualizar la hoja. Nunca viene del navegador.
+  cantidadEsperada Int
+  /// Lo contado en físico, en la unidad base. Nulo: no se contó y no ajusta.
+  cantidadContada  Int?
+  observaciones    String?
+
+  hoja     HojaConteo @relation(fields: [hojaId], references: [id], onDelete: Cascade)
+  articulo Articulo   @relation(fields: [articuloId], references: [id])
+
+  @@unique([hojaId, articuloId])
+  @@unique([hojaId, orden])
   @@index([articuloId])
   @@schema("public")
 }

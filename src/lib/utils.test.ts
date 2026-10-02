@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decimalEnTexto } from "./utils";
+import { decimalEnTexto, textoBuscable } from "./utils";
 
 describe("decimalEnTexto", () => {
   it("muestra dos decimales y los demás solo cuando no son cero", () => {
@@ -16,5 +16,13 @@ describe("decimalEnTexto", () => {
     expect(decimalEnTexto(null)).toBe("");
     expect(decimalEnTexto(undefined)).toBe("");
     expect(decimalEnTexto("abc")).toBe("abc");
+  });
+});
+
+describe("textoBuscable", () => {
+  it("quita acentos, diéresis y tilde de la ñ, y no distingue mayúsculas", () => {
+    expect(textoBuscable("Peña Ñúñez")).toBe("pena nunez");
+    expect(textoBuscable("MENSAJERÍA Güero")).toBe("mensajeria guero");
+    expect(textoBuscable("Árbol")).toBe(textoBuscable("arbol"));
   });
 });

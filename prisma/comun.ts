@@ -21,9 +21,14 @@ export type Tx = Prisma.TransactionClient;
 export const VARIABLE_DE_AUTORIZACION = "BODEGASOSUR_FIXTURES";
 export const VALOR_DE_AUTORIZACION = "permitidos";
 
+/**
+ * La sesión va en UTC aunque la base muestre la hora de México: el adapter
+ * lee y escribe timestamptz suponiendo UTC, y en otra zona movería cada
+ * instante (src/lib/db.ts igual).
+ */
 export function crearCliente(url = process.env.DATABASE_URL): PrismaClient {
   if (!url) throw new Error("Falta DATABASE_URL.");
-  return new PrismaClient({ adapter: new PrismaPg({ connectionString: url }) });
+  return new PrismaClient({ adapter: new PrismaPg({ connectionString: url, options: "-c TimeZone=UTC" }) });
 }
 
 /**

@@ -1,4 +1,5 @@
 import { formatearFecha } from "@/lib/fechas";
+import type { EstadoDevolucion } from "@/lib/inventario/repo";
 import type { SalidaResumen } from "@/lib/salidas/repo";
 
 /** Una salida en una tabla. Al cliente viaja texto ya formateado: nada de Date en las props. */
@@ -12,9 +13,11 @@ export type FilaSalida = {
   solicitante: string | null;
   partidas: number;
   prestamo: boolean;
+  revertida: boolean;
+  devolucion: EstadoDevolucion | null;
 };
 
-export function filaDeSalida(s: SalidaResumen): FilaSalida {
+export function filaDeSalida(s: SalidaResumen, devolucion?: EstadoDevolucion): FilaSalida {
   return {
     id: s.id,
     folio: s.folio,
@@ -25,5 +28,7 @@ export function filaDeSalida(s: SalidaResumen): FilaSalida {
     solicitante: s.solicitadoPor?.nombre ?? null,
     partidas: s._count.partidas,
     prestamo: s.esPrestamo,
+    revertida: !!s.canceladoPor,
+    devolucion: devolucion ?? null,
   };
 }

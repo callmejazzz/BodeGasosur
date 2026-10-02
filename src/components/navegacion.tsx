@@ -9,7 +9,7 @@ import packageJson from "../../package.json";
 const { version } = packageJson;
 
 /** Lo que el layout decidió en el servidor: la matriz no viaja al cliente. */
-export type Accesos = { salidas: boolean; usuarios: boolean };
+export type Accesos = { salidas: boolean; traspasos: boolean; devoluciones: boolean; prestamos: boolean; ajustes: boolean; usuarios: boolean };
 
 type Enlace = { href: string; etiqueta: string; proximamente?: boolean; acceso?: keyof Accesos };
 
@@ -19,6 +19,11 @@ const OPERACION: Enlace[] = [
   { href: "/", etiqueta: "Tablero" },
   { href: "/entradas", etiqueta: "Entradas" },
   { href: "/salidas", etiqueta: "Salidas", acceso: "salidas" },
+  { href: "/traspasos", etiqueta: "Traspasos", acceso: "traspasos" },
+  { href: "/devoluciones", etiqueta: "Devoluciones", acceso: "devoluciones" },
+  { href: "/prestamos", etiqueta: "Préstamos", acceso: "prestamos" },
+  { href: "/conteos", etiqueta: "Conteo físico", acceso: "ajustes" },
+  { href: "/ajustes", etiqueta: "Ajustes", acceso: "ajustes" },
   { href: "/movimientos", etiqueta: "Movimientos", proximamente: true },
   { href: "/existencias", etiqueta: "Existencias", proximamente: true },
   { href: "/kardex", etiqueta: "Kardex", proximamente: true },
@@ -105,7 +110,7 @@ export function Navegacion({ sesion, accesos }: { sesion?: React.ReactNode; acce
 
       <div className="mt-auto">
         <p className="px-3 text-xs leading-relaxed text-white/35">
-          BodeGasosur v{version} · fases 0 a 6 construidas. Siguen los traspasos en la fase 7.
+          BodeGasosur v{version} · fases 0 a 7 construidas. Siguen los reportes en la fase 8.
         </p>
         {sesion}
       </div>

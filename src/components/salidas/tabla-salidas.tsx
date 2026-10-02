@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { BadgeEstatusSalida } from "@/components/salidas/estatus-salida";
+import { BadgeDevolucion, BadgeEstatusSalida } from "@/components/salidas/estatus-salida";
 import type { FilaSalida } from "@/components/salidas/filas";
 import { Paginador, usePaginaMedida } from "@/components/ui/paginacion";
-import { Badge } from "@/components/ui/superficies";
+import { Badge, Estados } from "@/components/ui/superficies";
 import { Tabla, Td, Th, Tr } from "@/components/ui/tabla";
 
 export function TablaSalidas({ filas, siguienteHref, inicioHref }: { filas: FilaSalida[]; siguienteHref: string | null; inicioHref: string | null }) {
@@ -38,10 +38,12 @@ export function TablaSalidas({ filas, siguienteHref, inicioHref }: { filas: Fila
               <Td>{s.solicitante ?? <span className="text-muted">—</span>}</Td>
               <Td className="text-right tabular">{s.partidas}</Td>
               <Td>
-                <span className="flex flex-wrap items-center gap-1.5">
+                <Estados>
                   <BadgeEstatusSalida estatus={s.estatus} />
                   {s.prestamo && <Badge>Préstamo</Badge>}
-                </span>
+                  {s.devolucion && <BadgeDevolucion estado={s.devolucion} />}
+                  {s.revertida && <Badge tono="peligro">Revertida</Badge>}
+                </Estados>
               </Td>
             </Tr>
           ))}

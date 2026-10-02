@@ -9,7 +9,9 @@ catálogo global de [03-estaciones](03-estaciones.md), el análisis del Excel vi
 > [`prisma/schema.prisma`](../prisma/schema.prisma) y los invariantes que la base hace
 > cumplir en [`prisma/sql/`](../prisma/sql/). La base del modelo se implementó en la fase 2
 > (`v0.2.0`) y la fase 5 completó el contrato de Entradas: captura estructurada, orden de
-> partidas, idempotencia, dinero exacto, folios, capas y existencias. Lo que sigue explica
+> partidas, idempotencia, dinero exacto, folios, capas y existencias. La fase 7 agregó la
+> hoja de conteo, la restitución exacta de capas y la conciliación de cada movimiento
+> contra sus partidas ([contrato](contratos-otros/05-fase-7-traspasos-devoluciones-conteo.md)). Lo que sigue explica
 > **por qué** está así; la fuente de verdad de **cómo** está es el esquema.
 
 ## 1. Panorama
@@ -31,6 +33,13 @@ erDiagram
     CAPA_COSTO  ||--o{ CONSUMO    : "aporta"
     CAPA_COSTO  }o--o| CAPA_COSTO : "se parte de"
     CAPA_COSTO  }o--|| BODEGA     : "vive en"
+    PARTIDA     ||--o{ RESTITUCION : "devuelve"
+    CONSUMO     ||--o| RESTITUCION : "se deshace en"
+    CAPA_COSTO  ||--o{ RESTITUCION : "recupera"
+
+    HOJA_CONTEO ||--o{ RENGLON_CONTEO : "cuenta"
+    HOJA_CONTEO ||--o{ MOVIMIENTO     : "se ajusta en"
+    HOJA_CONTEO }o--|| BODEGA         : "de"
 
     MOVIMIENTO  }o--o| BODEGA    : "origen"
     MOVIMIENTO  }o--o| BODEGA    : "destino"
@@ -39,6 +48,8 @@ erDiagram
     MOVIMIENTO  }o--o| AREA      : "para el área"
     MOVIMIENTO  }o--o| PERSONA   : "solicita"
     MOVIMIENTO  }o--o| USUARIO   : "autoriza"
+    MOVIMIENTO  |o--o| MOVIMIENTO : "revierte a"
+    MOVIMIENTO  }o--o| MOVIMIENTO : "devuelve a"
 ```
 
 Dos esquemas de PostgreSQL:
@@ -47,7 +58,7 @@ Dos esquemas de PostgreSQL:
   no leen estas tablas: leen **vistas versionadas** (§7).
 - **`public`** — todo lo demás, propio de BodeGasosur.
 
-Diecinueve modelos en total: dos en `catalogo_gasosur` y diecisiete en `public`.
+Veintidós modelos en total: dos en `catalogo_gasosur` y veinte en `public`.
 
 ## 2. Los cinco tipos de movimiento
 
@@ -56,7 +67,7 @@ Diecinueve modelos en total: dos en `catalogo_gasosur` y diecisiete en `public`.
 | **ENTRADA** | — | Bodega | Proveedor + factura o remisión | `+` en destino, **crea capa de costo** |
 | **SALIDA** | Bodega | — | Estación + área | `−` en origen, **consume capas** |
 | **TRASPASO** | Bodega | Bodega | — | `−` origen, `+` destino, partiendo la capa |
-| **DEVOLUCIÓN** | — | Bodega | Estación | `+` en destino; puede referenciar la salida original |
+| **DEVOLUCIÓN** | — | Bodega | Estación | `+` en destino; puede referenciar la salida original, y entonces regresa a su bodega de origen |
 | **AJUSTE** | Bodega *o* — | — *o* Bodega | Motivo (conteo, merma, daño) | `+` o `−` |
 
 **El signo del ajuste vive en la bodega, no en la cantidad.** Un ajuste que suma lleva
@@ -65,7 +76,19 @@ salida. Así la cantidad es siempre positiva y el invariante 3 no tiene excepcio
 esto estaba sin decidir, y la tabla de tipos y el invariante 3 se contradecían.
 
 Los **préstamos** no son un tipo aparte: son una `SALIDA` con la bandera `esPrestamo`, que
-queda abierta hasta que una `DEVOLUCIÓN` la cierra. Es el compresor que Diana menciona.
+queda abierta mientras falte cualquier pieza por volver en devoluciones vinculadas a ella.
+Es el compresor que Diana menciona. El saldo no se guarda: se calcula desde los consumos
+de la salida y las capas que crearon sus devoluciones vigentes. Una devolución sin salida
+no lo reduce y una salida revertida deja de contar.
+
+**Los ajustes no se capturan sueltos.** Nacen al confirmar una hoja de conteo —hasta dos,
+uno que suma y otro que resta, con el motivo de la hoja— o como reversa de otro
+movimiento.
+
+**La reversa es otro asiento**, ligado por `cancelaAId`: un `TRASPASO` en sentido
+contrario si revierte un traspaso, un `AJUSTE` en cualquier otro caso. Retira completas las
+capas que creó el original y devuelve cada consumo del original a su capa exacta, con una
+`RestitucionCapa` por consumo. Solo hay una por original y una reversa no se revierte.
 
 Las **recepciones parciales** no agregan una tabla en la fase 5: cada entrega física es una
 `ENTRADA` independiente y varias pueden compartir `(proveedorId, referencia)`. Esto permite
@@ -78,6 +101,7 @@ será la capa superior que calcule cumplimiento sin cambiar el libro.
 | Tipo | Flujo |
 |---|---|
 | ENTRADA, TRASPASO, DEVOLUCIÓN, AJUSTE | `BORRADOR → CONFIRMADO`, o `CANCELADO` |
+| Hoja de conteo (`HojaConteo`) | `BORRADOR → CONFIRMADO`, o `CANCELADO`; enum propio `EstatusConteo` |
 | SALIDA | `SOLICITADA → AUTORIZADA → RETIRADA → RECIBIDA`, con `RECHAZADA` y `CANCELADO`; `RECIBIDA` es terminal |
 
 Son **dos máquinas de estados en un solo enum**, y la base sabe cuál corresponde a cada
@@ -91,6 +115,11 @@ dependa de otra columna.
 
 **La existencia se descuenta al pasar a `RETIRADA`**, no al autorizar. Autorizar es un
 permiso; retirar es el hecho físico. Entre uno y otro el material sigue en la bodega.
+
+Revertir **no es una transición**: el original conserva `CONFIRMADO`, `RETIRADA` o
+`RECIBIDA`, y «revertido» se deriva de que otro movimiento lo apunte con `cancelaAId`.
+Un borrador se descarta y una salida sin retirar se cancela; solo lo que afectó el
+inventario se revierte.
 
 `RECIBIDA` confirma que la estación recibió el material y cierra la salida sin
 volver a descontar existencia. Guarda quién y cuándo confirmó. La fase 6 no genera
@@ -134,6 +163,17 @@ Y tres que la auditoría obligó a agregar:
 | 12 | El par de costos se conoce junto o se desconoce junto | `CHECK` |
 | 13 | El dinero existe solo en `ENTRADA`; el tipo de cambio, solo en dólares | `CHECK` |
 | 14 | Una clave de negocio no cambia después del alta | **Trigger** |
+
+Y los que agregó la fase 7:
+
+| | Invariante | Quién lo impone |
+|---|---|---|
+| 15 | Capas, consumos y restituciones de un movimiento son exactamente los que dicen sus partidas según su tipo; sin confirmar, no tiene ninguno | **Trigger diferido** |
+| 16 | Una capa descuenta lo consumido menos lo restituido | **Trigger diferido** |
+| 17 | Las devoluciones vigentes de una salida no exceden lo que salió de cada capa | **Trigger diferido** + candado de la salida |
+| 18 | Una reversa por original, que no se revierte y lo reproduce en sentido contrario; una salida con devoluciones vigentes no se revierte | `UNIQUE` + **trigger diferido** |
+| 19 | Una hoja de conteo confirmada es exactamente sus ajustes y deja la existencia en lo contado | **Trigger diferido** |
+| 20 | Una devolución ligada a una salida entra a la bodega de la que salió | **Trigger** |
 
 **El invariante 9 se verifica por igualdad exacta**, sin tolerancia, porque las cantidades
 son enteras. Con decimales, el consumo PEPS acabaría dejando residuos de milésimas y la
@@ -195,7 +235,8 @@ salió y **conservando la fecha de la entrada original**. Si llevara la fecha de
 el material viejo se iría al final de la fila PEPS en el destino y el costeo mentiría.
 
 La **devolución** funciona igual, y así queda escrito lo que antes no lo estaba: crea una
-capa nueva por cada capa que consumió la salida original, con `origenId` a la capa
+capa nueva por cada capa de la salida original a la que le toca devolver —se reparten en
+orden PEPS entre los consumos con saldo—, con `origenId` a la capa
 consumida y su `fechaOriginal` heredada. No reabre la capa original — eso borraría el
 rastro de que hubo devolución. Cuando la devolución no referencia ninguna salida, el costo
 es nulo, que es el caso que **A1** ya sabe representar.
@@ -268,7 +309,7 @@ candado del encabezado es el reclamo principal de la confirmación; el `UPDATE` 
 condicionado a `estatus = 'BORRADOR'` es una defensa adicional. Repetir la misma operación
 devuelve el mismo movimiento; nunca crea capas, existencia o folios adicionales. El
 contrato completo está en
-[`02-fase-5-entradas.md`](02-fase-5-entradas.md).
+[`02-fase-5-entradas.md`](contratos-otros/02-fase-5-entradas.md).
 
 ## 6. Normalización a unidades base enteras
 
@@ -316,7 +357,7 @@ costoUnitarioBaseMxn = redondear4(
 Los totales de factura se calculan desde la captura original y se redondean por renglón; no
 se reconstruyen desde el costo base redondeado. El contrato completo, incluidos IVA,
 validaciones y ejemplos, está en
-[`02-fase-5-entradas.md`](02-fase-5-entradas.md#5-normalización-a-la-unidad-base).
+[`02-fase-5-entradas.md`](contratos-otros/02-fase-5-entradas.md#5-normalización-a-la-unidad-base).
 
 ## 7. Usuarios, permisos y el catálogo compartido
 
@@ -331,15 +372,16 @@ opcional con una `Persona`.
 
 | Rol          | Empresas y Estaciones | Resto de tablas      | Movimientos |
 | ------------ | --------------------- | -------------------- | ----------- |
-| `SUPERADMIN` | CRUD                  | CRUD                 | Entradas completas; Salidas: lectura, captura, retiro, recepción y autorización solo con bandera |
-| `COMPRAS`    | Lectura               | Catálogos operativos | Entradas completas; Salidas: lectura, captura, retiro, recepción y autorización solo con bandera |
-| `JEFE`       | Lectura               | Lectura              | Consulta de Entradas y Salidas; autorización solo con bandera |
+| `SUPERADMIN` | CRUD                  | CRUD                 | Entradas completas; Salidas: lectura, captura, retiro, recepción y autorización solo con bandera; traspasos, devoluciones y conteo completos; **reversas** |
+| `COMPRAS`    | Lectura               | Catálogos operativos | Entradas completas; Salidas: lectura, captura, retiro, recepción y autorización solo con bandera; traspasos, devoluciones y conteo completos |
+| `JEFE`       | Lectura               | Lectura              | Consulta de todos los movimientos; autorización de salidas solo con bandera |
 
 La matriz ya contiene los permisos de Entradas usados por sus páginas y Server Actions,
 y los cinco permisos de Salidas. Para `salidas:autorizar`, la puerta común exige además
-`puedeAutorizar` vigente. El [contrato de la fase 6](04-fase-6-salidas.md)
-documenta el avance de esa fase. Los permisos de Traspasos, Devoluciones y Ajustes se
-agregarán cuando se construya cada flujo.
+`puedeAutorizar` vigente. El [contrato de la fase 6](contratos-otros/04-fase-6-salidas.md)
+documenta el avance de esa fase. La fase 7 agregó `traspasos:*`, `devoluciones:*` y
+`ajustes:*` —leer, capturar y confirmar; los de ajustes cubren la hoja de conteo— y
+`movimientos:revertir`, solo del Superadmin.
 
 `puedeAutorizar` es una **bandera del usuario, no un rol**: un Jefe puede tenerla y un
 usuario de Compras puede no tenerla. La lista de facultados cambia —el Lic. Hugo, la Lic.
@@ -409,7 +451,7 @@ Si ya estaba, no se vuelve a procesar; si la transacción falla, el reintento la
 | Se eliminan `transportista` y `vehiculo`; `recibidoPor` pasa a `entregadoA` libre | D4 |
 | Tipo `DEVOLUCION` y bandera `esPrestamo` | D7 y B6 |
 | Estados de salida con autorización; `RETIRADA` registra salida física y `RECIBIDA` cierra desde 2026-09-23 | D2 y D6, ajustados por decisión de alcance posterior |
-| `Proveedor` lleva su propia razón social y RFC; **no** apunta a `Empresa` | `Empresa` es exclusivamente Gasosur ([10](01-plan-b-produccion.md)). Si una empresa del grupo debe ser proveedora, se decide como caso de negocio |
+| `Proveedor` lleva su propia razón social y RFC; **no** apunta a `Empresa` | `Empresa` es exclusivamente Gasosur ([10](contratos-otros/01-plan-b-produccion.md)). Si una empresa del grupo debe ser proveedora, se decide como caso de negocio |
 | `autorizadoPor` apunta a `Usuario`, con `autorizadoEn` y escritura única | **A2** |
 | Actor y marca de tiempo por transición, más `Bitacora` | **A3** |
 | `fecha` como `@db.Date`; los instantes con `@db.Timestamptz(3)` | **E4** |
@@ -433,6 +475,8 @@ Si ya estaba, no se vuelve a procesar; si la transacción falla, el reintento la
 | ¿Con qué frecuencia se pide esta pieza? | Conteo de partidas del artículo por periodo |
 | ¿Qué salidas autorizadas faltan por retirar? | Salidas en estatus `AUTORIZADA` |
 | ¿Qué salidas siguen sin confirmar recepción? | Salidas en estatus `RETIRADA` |
-| ¿Qué material prestado no ha vuelto? | Salidas con `esPrestamo` sin devolución que las cierre |
+| ¿Qué material prestado no ha vuelto? | Salidas con `esPrestamo`, sin reversa, con saldo: consumido menos las capas de sus devoluciones vigentes |
+| ¿De dónde salió esta pieza y a qué costo llegó a esta bodega? | `CapaCosto.origenId` hasta la capa de la entrada, con su `fechaOriginal` y su par de costos |
+| ¿Qué corrigió esta reversa y por qué? | `cancelaAId`, `motivo`, y sus consumos y restituciones |
 | ¿Quién le quitó el permiso de autorizar a la C.P. Cosumel? | `Bitacora`, tabla `Usuario`, comparando `antes` y `despues` |
 | El reporte de los viernes | Entradas, salidas y stock final del periodo |

@@ -41,6 +41,10 @@ export default async function LayoutSistema({ children }: { children: ReactNode 
       <Navegacion
         accesos={{
           salidas: usuarioTienePermiso(sesion.usuario, "salidas:leer"),
+          traspasos: usuarioTienePermiso(sesion.usuario, "traspasos:leer"),
+          devoluciones: usuarioTienePermiso(sesion.usuario, "devoluciones:leer"),
+          prestamos: usuarioTienePermiso(sesion.usuario, "devoluciones:leer") && usuarioTienePermiso(sesion.usuario, "salidas:leer"),
+          ajustes: usuarioTienePermiso(sesion.usuario, "ajustes:leer"),
           usuarios: usuarioTienePermiso(sesion.usuario, "usuarios:administrar"),
         }}
         sesion={<ControlesSesion rol={sesion.usuario.rol} />}

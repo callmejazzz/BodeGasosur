@@ -12,7 +12,7 @@ import { URL_PRUEBAS } from "../../../pruebas/base-de-pruebas";
 import { articuloNuevo } from "../../../pruebas/semilla-entradas";
 import { sembrarCapa } from "../../../pruebas/semilla-inventario";
 import { sembrarSalidas, type EntornoSalidas } from "../../../pruebas/semilla-salidas";
-import { autorizarSalida, confirmarRecepcion, retirarSalida, solicitarSalida } from "./servicio";
+import { autorizarSalida, cancelarSalida, confirmarRecepcion, rechazarSalida, retirarSalida, solicitarSalida } from "./servicio";
 
 vi.mock("server-only", () => ({}));
 const { bandejaDeSalidas, cargarOpcionesDeCaptura, contarPendientes, existenciasDeSalida, listarSalidas, obtenerSalida, TOPE_LISTA, valuarSalida } =
@@ -34,12 +34,16 @@ const enTx = <T>(usuarioId: string, fn: (tx: Prisma.TransactionClient) => Promis
   });
 
 /** Una salida de `cantidad` piezas llevada hasta el estatus pedido. */
-async function nueva(cantidad: number, hasta: "SOLICITADA" | "AUTORIZADA" | "RETIRADA" | "RECIBIDA"): Promise<string> {
+async function nueva(
+  cantidad: number,
+  hasta: "SOLICITADA" | "AUTORIZADA" | "RETIRADA" | "RECIBIDA",
+  { solicitadoPorId = e.personaId, esPrestamo = false } = {},
+): Promise<string> {
   const compras = e.usuarios.COMPRAS;
   const jefe = e.autorizadores.JEFE;
   const { id } = await enTx(compras.id, (tx) =>
     solicitarSalida(tx, compras, randomUUID(), {
-      encabezado: { bodegaOrigenId: e.bodegaId, estacionId: e.estacionId, solicitadoPorId: e.personaId },
+      encabezado: { bodegaOrigenId: e.bodegaId, estacionId: e.estacionId, solicitadoPorId, esPrestamo },
       partidas: [{ articuloId, presentacion: "UNIDAD", cantidadCapturada: cantidad }],
     }),
   );
@@ -124,19 +128,49 @@ describe("listarSalidas", () => {
     await expect(ids("AUTORIZADA")).resolves.toContain(autorizada);
     await expect(ids("RETIRADA")).resolves.toContain(retirada);
     await expect(ids("RECIBIDA")).resolves.toContain(recibida);
-    await expect(ids("todas")).resolves.toEqual(expect.arrayContaining([solicitada, autorizada, retirada, recibida]));
+    // Acotado al solicitante de este entorno: las 251 en curso de la paginación irían primero.
+    const persona = await prisma.persona.findUniqueOrThrow({ where: { id: e.personaId } });
+    await expect(lista({ estatus: "todas", busqueda: persona.nombre }).then((f) => f.map((x) => x.id))).resolves.toEqual(
+      expect.arrayContaining([solicitada, autorizada, retirada, recibida]),
+    );
   });
 
   it("encuentra por folio sin guiones ni ceros, por estación, solicitante y quién retiró", async () => {
     const numero = Number(folioRetirada.slice(2));
+    // Acotado a retiradas: el número de la estación de prueba es aleatorio y puede contener el del folio.
     for (const q of [folioRetirada, `s${numero}`, `S-${numero}`]) {
-      await expect(lista({ estatus: "todas", busqueda: q }).then((f) => f.map((x) => x.id)), q).resolves.toContain(retirada);
+      await expect(lista({ estatus: "RETIRADA", busqueda: q }).then((f) => f.map((x) => x.id)), q).resolves.toContain(retirada);
     }
     const estacion = await prisma.estacion.findUniqueOrThrow({ where: { id: e.estacionId } });
     const persona = await prisma.persona.findUniqueOrThrow({ where: { id: e.personaId } });
-    for (const q of [estacion.numero.toLowerCase(), estacion.alias, persona.nombre.toUpperCase(), "mensajería"]) {
-      await expect(lista({ estatus: "todas", busqueda: q }).then((f) => f.map((x) => x.id)), q).resolves.toContain(retirada);
+    for (const q of [estacion.numero.toLowerCase(), estacion.alias, persona.nombre.toUpperCase(), "mensajería", "MENSAJERIA"]) {
+      await expect(lista({ estatus: "RETIRADA", busqueda: q }).then((f) => f.map((x) => x.id)), q).resolves.toContain(retirada);
     }
+  });
+
+  it("en curso primero, luego por folio del más alto al más bajo y al final rechazadas y canceladas; el cursor cruza grupos", async () => {
+    const persona = await prisma.persona.create({ data: { nombre: `Peñaloza Ávila ${randomUUID().slice(0, 8)}` } });
+    const de = { solicitadoPorId: persona.id };
+    const compras = e.usuarios.COMPRAS;
+    const jefe = e.autorizadores.JEFE;
+    const retiradaVieja = await nueva(1, "RETIRADA", de);
+    const solicitadaPropia = await nueva(1, "SOLICITADA", de);
+    const cancelada = await nueva(1, "SOLICITADA", de);
+    await enTx(compras.id, (tx) => cancelarSalida(tx, compras, cancelada, "Ya no se necesita"));
+    const recibidaNueva = await nueva(1, "RECIBIDA", { ...de, esPrestamo: true });
+    const rechazada = await nueva(1, "SOLICITADA", de);
+    await enTx(jefe.id, (tx) => rechazarSalida(tx, jefe, rechazada, "No procede"));
+    const autorizadaPropia = await nueva(1, "AUTORIZADA", de);
+
+    // Sin acentos ni mayúsculas: «peñaloza ávila» se encuentra tecleando «PENALOZA AVILA».
+    const filtro = { estatus: "todas" as const, busqueda: persona.nombre.replace("Peñaloza Ávila", "PENALOZA AVILA") };
+    const orden = [autorizadaPropia, solicitadaPropia, recibidaNueva, retiradaVieja, rechazada, cancelada];
+    await expect(lista(filtro).then((f) => f.map((x) => x.id))).resolves.toEqual(orden);
+    for (const [i, cursor] of orden.entries()) {
+      const r = await prisma.$transaction((tx) => listarSalidas(tx, { ...filtro, cursor }));
+      expect(r.filas.map((x) => x.id), `después de la fila ${i}`).toEqual(orden.slice(i + 1));
+    }
+    await expect(lista({ ...filtro, soloPrestamos: true }).then((f) => f.map((x) => x.id))).resolves.toEqual([recibidaNueva]);
   });
 
   it("no incluye movimientos de otro tipo", async () => {
@@ -215,7 +249,9 @@ describe("bandeja", () => {
       expect(total, estatus).toBe(await prisma.movimiento.count({ where: { tipo: "SALIDA", estatus } }));
       expect(filas.length, estatus).toBe(Math.min(total, 50));
       expect(filas.every((f) => f.estatus === estatus), estatus).toBe(true);
-      const fechas = filas.map((f) => f.createdAt.getTime());
+      // Cada cola se ordena por el instante en que empezó a esperar, no por la captura.
+      const inicio = { SOLICITADA: "createdAt", AUTORIZADA: "autorizadoEn", RETIRADA: "entregadoEn" } as const;
+      const fechas = filas.map((f) => f[inicio[estatus as keyof typeof inicio]]!.getTime());
       expect(fechas, estatus).toEqual([...fechas].sort((x, y) => x - y));
       if (total <= 50) expect(filas.map((f) => f.id), estatus).toContain(nuestras[estatus]);
     }

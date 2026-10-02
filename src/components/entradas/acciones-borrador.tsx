@@ -39,6 +39,15 @@ export function AccionesBorrador({
         setMensaje(r.mensaje);
       }
     });
+  const abrir = () => {
+    setMotivo("");
+    setMensaje(null);
+    setDescartando(true);
+  };
+  const volver = () => {
+    setMensaje(null);
+    setDescartando(false);
+  };
 
   return (
     <div className="flex flex-col gap-3 px-5 py-4">
@@ -63,13 +72,13 @@ export function AccionesBorrador({
           <Button type="submit" variante="peligro" disabled={pendiente}>
             {pendiente ? "Descartando…" : "Descartar borrador"}
           </Button>
-          <Button type="button" variante="secundario" onClick={() => setDescartando(false)} disabled={pendiente}>
+          <Button type="button" variante="secundario" onClick={volver} disabled={pendiente}>
             Volver
           </Button>
         </form>
       ) : (
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <Button type="button" variante="sutil" onClick={() => setDescartando(true)} disabled={pendiente}>
+          <Button type="button" variante="sutil" onClick={abrir} disabled={pendiente}>
             Descartar borrador
           </Button>
           {puedeConfirmar && (
