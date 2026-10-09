@@ -37,6 +37,7 @@ vi.mock("@clerk/nextjs/server", async () => ({ auth: (await import("../../../pru
 process.env.DATABASE_URL = inject("urlEjecucionPruebas");
 const traspasos = await import("@/app/(sistema)/traspasos/actions");
 const devoluciones = await import("@/app/(sistema)/devoluciones/actions");
+const consultasDeDevolucion = await import("@/app/(sistema)/devoluciones/consultas");
 const conteos = await import("@/app/(sistema)/conteos/actions");
 const reversas = await import("@/app/(sistema)/reversas/actions");
 
@@ -196,6 +197,8 @@ describe("acceso directo sin permiso", () => {
       await expect(conteos.confirmarConteo(hoja.id, 1), etiqueta).resolves.toEqual(NEGADO);
       await expect(conteos.descartarHoja(hoja.id, "No"), etiqueta).resolves.toEqual(NEGADO);
       await expect(reversas.revertirMovimiento(confirmado, "No"), etiqueta).resolves.toEqual(NEGADO);
+      // La búsqueda del formulario solo lee, pero tampoco responde sin sesión ni permiso de captura.
+      await expect(consultasDeDevolucion.buscarSalidas({ estacionId: e.estacionId, texto: "", pagina: 1 }), etiqueta).resolves.toMatchObject({ salidas: [], aviso: SIN_PERMISO });
       await expect(Promise.all([borrador, confirmado].map(leer)), etiqueta).resolves.toEqual(antes);
       await expect(prisma.hojaConteo.findUniqueOrThrow({ where: { id: hoja.id } }), etiqueta).resolves.toEqual(hojaAntes);
       await expect(prisma.movimiento.count({ where: { cancelaAId: confirmado } }), etiqueta).resolves.toBe(0);
@@ -317,10 +320,16 @@ describe("lo que llega manipulado no toca la base", () => {
     await comoEnServicio(prisma, jefe, "salidas:autorizar", (tx) => autorizarSalida(tx, jefe, s));
     await comoEnServicio(prisma, u, "salidas:retirar", (tx) => retirarSalida(tx, u, s, "Mensajero"));
 
+    // El selector la encuentra con su saldo, con el usuario de ejecución y la sesión de Compras.
+    await como(u);
+    const { folio } = await leer(s);
+    const r = await consultasDeDevolucion.buscarSalidas({ estacionId: e.estacionId, texto: folio, pagina: 1 });
+    expect(r.salidas).toEqual([expect.objectContaining({ id: s, bodega: expect.objectContaining({ id: e.bodegaId }), pendientes: { [articuloId]: 2 } })]);
+    await expect(consultasDeDevolucion.buscarSalidas({ estacionId: e.estacionId, texto: { toString: () => folio }, pagina: 1 })).resolves.toMatchObject({ salidas: [], aviso: expect.stringMatching(/^Elige la estación/) });
+
     const fd = formularioDevolucion(randomUUID());
     fd.set("encabezado.salidaId", s);
     fd.set("encabezado.bodegaDestinoId", e.otraBodegaId);
-    await como(u);
     await expect(devoluciones.crearDevolucion(ESTADO_INICIAL, fd)).resolves.toMatchObject({ mensaje: expect.stringContaining("regresa a la bodega de la que salió") });
     await expect(prisma.movimiento.count({ where: { llaveIdempotencia: fd.get("llaveIdempotencia") as string } })).resolves.toBe(0);
   });

@@ -98,9 +98,20 @@ describe("traducirErrorDeBase", () => {
         },
       },
     });
-    await prisma.movimiento.update({
-      where: { id: m.id },
-      data: { estatus: "CONFIRMADO", folio: `E-${randomUUID().slice(0, 6)}`, confirmadoPorId: e.usuarios.COMPRAS.id, confirmadoEn: new Date(), subtotal: "1", iva: "0", total: "1" },
+    // Confirmada como la deja la recepción: con su capa y su existencia.
+    await prisma.$transaction(async (tx) => {
+      await tx.capaCosto.create({
+        data: { bodegaId: e.bodegaId, articuloId: e.articuloSueltoId, movimientoId: m.id, fecha: m.fecha, fechaOriginal: m.fecha, cantidadInicial: 1, cantidadRestante: 1, costoUnitario: "1", costoUnitarioConIva: "1" },
+      });
+      await tx.existencia.upsert({
+        where: { bodegaId_articuloId: { bodegaId: e.bodegaId, articuloId: e.articuloSueltoId } },
+        create: { bodegaId: e.bodegaId, articuloId: e.articuloSueltoId, cantidad: 1 },
+        update: { cantidad: { increment: 1 } },
+      });
+      await tx.movimiento.update({
+        where: { id: m.id },
+        data: { estatus: "CONFIRMADO", folio: `E-${randomUUID().slice(0, 6)}`, confirmadoPorId: e.usuarios.COMPRAS.id, confirmadoEn: new Date(), subtotal: "1", iva: "0", total: "1" },
+      });
     });
     const t = await traducido(() => prisma.movimiento.update({ where: { id: m.id }, data: { referencia: "x" } }));
     expect(t.codigo).toBe("ya-confirmado");

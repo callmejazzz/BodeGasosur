@@ -6,12 +6,14 @@ import { RevertirMovimiento } from "@/components/inventario/revertir";
 import { AccionesBorrador } from "@/components/entradas/acciones-borrador";
 import { EncabezadoEntrada, EntradasRelacionadas, PartidasEntrada } from "@/components/entradas/detalle-entrada";
 import { FormularioEntrada } from "@/components/entradas/formulario-entrada";
+import { Paginacion } from "@/components/ui/paginacion";
 import { Card, CardHeader, EncabezadoPagina } from "@/components/ui/superficies";
 import { consultar } from "@/lib/db";
 import { uuid, type ValoresEntrada } from "@/lib/entradas/formulario";
 import { cargarOpcionesDeCaptura, entradasRelacionadas, obtenerEntrada, type EntradaDetalle } from "@/lib/entradas/repo";
 import { datosDeReversa } from "@/lib/inventario/pantallas";
 import { deFechaDeBase } from "@/lib/fechas";
+import { leerPagina, paginar, parametrosDePaginas } from "@/lib/paginacion";
 import { rolTienePermiso } from "@/lib/permisos";
 import { decimalEnTexto } from "@/lib/utils";
 
@@ -41,7 +43,7 @@ function valoresDe(e: EntradaDetalle): ValoresEntrada {
   };
 }
 
-export default async function PaginaEntrada({ params }: PageProps<"/entradas/[id]">) {
+export default async function PaginaEntrada({ params, searchParams }: PageProps<"/entradas/[id]">) {
   const { id } = await params;
   if (!uuid.safeParse(id).success) notFound();
 
@@ -66,6 +68,12 @@ export default async function PaginaEntrada({ params }: PageProps<"/entradas/[id
   const { entrada, opciones, relacionadas, puedeCapturar, puedeConfirmar, reversa } = datos;
 
   const titulo = entrada.folio ? `Entrada ${entrada.folio}` : "Borrador de entrada";
+  // Cada lista del detalle pagina por su cuenta: ?partidas=2&relacionadas=3
+  const sp = await searchParams;
+  const partidas = paginar(entrada.partidas, leerPagina(sp.partidas));
+  const otras = paginar(relacionadas, leerPagina(sp.relacionadas));
+  const paginas = parametrosDePaginas({ partidas: partidas.pagina, relacionadas: otras.pagina });
+  const ruta = `/entradas/${entrada.id}`;
 
   return (
     <>
@@ -108,19 +116,23 @@ export default async function PaginaEntrada({ params }: PageProps<"/entradas/[id
             />
           </Card>
         ) : (
-          <Card>
+          <Card id="partidas" className="scroll-mt-4">
             <CardHeader titulo="Partidas" descripcion="Costos base en pesos por unidad base; importes en la moneda de la factura." />
-            <PartidasEntrada entrada={entrada} />
+            <PartidasEntrada
+              entrada={{ ...entrada, partidas: partidas.filas }}
+              pie={<Paginacion pagina={partidas.pagina} ruta={ruta} parametros={paginas} parametro="partidas" ancla="partidas" sustantivo="partidas" />}
+            />
           </Card>
         )}
 
         {relacionadas.length > 0 && (
-          <Card>
+          <Card id="relacionadas" className="scroll-mt-4">
             <CardHeader
               titulo="Otras recepciones de la misma factura"
               descripcion="Mismo proveedor y referencia. Se muestran, no se descuentan: sin orden de compra no hay pendiente por recibir."
             />
-            <EntradasRelacionadas entradas={relacionadas} />
+            <EntradasRelacionadas entradas={otras.filas} />
+            <Paginacion pagina={otras.pagina} ruta={ruta} parametros={paginas} parametro="relacionadas" ancla="relacionadas" sustantivo="recepciones" />
           </Card>
         )}
       </div>

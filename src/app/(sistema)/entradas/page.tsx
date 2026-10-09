@@ -1,25 +1,28 @@
 import { FiltrosEntradas } from "@/components/entradas/filtros-entradas";
 import { TablaEntradas, type FilaEntrada } from "@/components/entradas/tabla-entradas";
 import { ButtonLink } from "@/components/ui/button";
+import { Paginacion } from "@/components/ui/paginacion";
 import { Card, EncabezadoPagina, EstadoVacio } from "@/components/ui/superficies";
 import { consultar } from "@/lib/db";
 import { aParametros, hayFiltros, leerFiltros } from "@/lib/entradas/filtros";
 import { listarEntradas } from "@/lib/entradas/repo";
 import { formatearFecha } from "@/lib/fechas";
+import { leerPagina } from "@/lib/paginacion";
 import { rolTienePermiso } from "@/lib/permisos";
 import { moneda } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
 export default async function PaginaEntradas({ searchParams }: PageProps<"/entradas">) {
-  const filtros = leerFiltros(await searchParams);
+  const params = await searchParams;
+  const filtros = leerFiltros(params);
   const filtrando = hayFiltros(filtros);
 
   const { lista, puedeCapturar } = await consultar("entradas:leer", async (db, usuario) => ({
-    lista: await listarEntradas(db, filtros),
+    lista: await listarEntradas(db, filtros, leerPagina(params.pagina)),
     puedeCapturar: rolTienePermiso(usuario.rol, "entradas:capturar"),
   }));
-  const { hayMas } = lista;
+  const { pagina } = lista;
   // Al cliente viaja texto ya formateado: nada de Decimal ni Date en las props.
   const filas: FilaEntrada[] = lista.filas.map((e) => ({
     id: e.id,
@@ -49,7 +52,7 @@ export default async function PaginaEntradas({ searchParams }: PageProps<"/entra
       />
 
       <Card>
-        <FiltrosEntradas filtros={filtros} total={filas.length} hayMas={hayMas} />
+        <FiltrosEntradas filtros={filtros} total={pagina.total} />
 
         {filas.length === 0 ? (
           <EstadoVacio
@@ -68,8 +71,9 @@ export default async function PaginaEntradas({ searchParams }: PageProps<"/entra
             }
           />
         ) : (
-          <TablaEntradas key={aParametros(filtros).toString()} filas={filas} hayMas={hayMas} />
+          <TablaEntradas filas={filas} />
         )}
+        <Paginacion pagina={pagina} ruta="/entradas" parametros={aParametros(filtros)} sustantivo="entradas" />
       </Card>
     </>
   );

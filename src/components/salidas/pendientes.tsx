@@ -1,8 +1,8 @@
 import Link from "next/link";
+import { Paginacion } from "@/components/ui/paginacion";
 import { Card, CardHeader } from "@/components/ui/superficies";
 import { Tabla, Td, Th, Tr } from "@/components/ui/tabla";
 import { formatearInstante } from "@/lib/fechas";
-import { listaDeEstatus } from "@/lib/salidas/filtros";
 import type { ClaveSeccion, SalidaResumen, SeccionBandeja } from "@/lib/salidas/repo";
 
 const SECCION: Record<ClaveSeccion, { titulo: string; descripcion: string; desde: (s: SalidaResumen) => Date | null }> = {
@@ -23,11 +23,12 @@ const SECCION: Record<ClaveSeccion, { titulo: string; descripcion: string; desde
   },
 };
 
-export function SeccionPendientes({ seccion }: { seccion: SeccionBandeja }) {
+/** `parametros` son las páginas de todas las secciones: pasar de página en una no reinicia las otras. */
+export function SeccionPendientes({ seccion, parametros }: { seccion: SeccionBandeja; parametros: URLSearchParams }) {
   const { titulo, descripcion, desde } = SECCION[seccion.clave];
   return (
     <Card>
-      <CardHeader titulo={`${titulo} (${seccion.total})`} descripcion={descripcion} />
+      <CardHeader titulo={`${titulo} (${seccion.pagina.total})`} descripcion={descripcion} />
       {seccion.filas.length === 0 ? (
         <p className="px-5 py-4 text-sm text-muted">Nada pendiente.</p>
       ) : (
@@ -64,14 +65,7 @@ export function SeccionPendientes({ seccion }: { seccion: SeccionBandeja }) {
               })}
             </tbody>
           </Tabla>
-          {seccion.total > seccion.filas.length && (
-            <p className="border-t border-border px-5 py-3 text-sm text-muted">
-              Se muestran las {seccion.filas.length} más antiguas.{" "}
-              <Link href={listaDeEstatus(seccion.estatus)} className="text-primary hover:underline">
-                Ver las {seccion.total} en la lista
-              </Link>
-            </p>
-          )}
+          <Paginacion pagina={seccion.pagina} ruta="/salidas/pendientes" parametros={parametros} parametro={seccion.clave} sustantivo="salidas" />
         </>
       )}
     </Card>

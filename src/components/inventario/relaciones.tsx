@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { EnlaceMovimiento } from "@/components/inventario/detalle-movimiento";
 import { Badge } from "@/components/ui/superficies";
 import { Tabla, Td, Th, Tr } from "@/components/ui/tabla";
@@ -25,21 +26,30 @@ export function AvisoDeReversa({ reversa }: { reversa: Reversa }) {
 
 type Devolucion = { id: string; folio: string | null; estatus: string; fecha: Date; canceladoPor: { id: string; folio: string | null } | null };
 
-/** Lo que salió, lo que ya volvió en devoluciones vigentes y lo que falta, por artículo. */
+/**
+ * Lo que salió, lo que ya volvió en devoluciones vigentes y lo que falta, por
+ * artículo. `saldo` y `devoluciones` son la página que se ve; `abierto` mira
+ * toda la salida. Cada pie es la paginación de su lista.
+ */
 export function SaldoDeSalida({
   salidaId,
   saldo,
+  abierto,
   devoluciones,
   esPrestamo,
   puedeDevolver,
+  pieSaldo,
+  pieDevoluciones,
 }: {
   salidaId: string;
   saldo: SaldoDeArticulo[];
+  abierto: boolean;
   devoluciones: Devolucion[];
   esPrestamo: boolean;
   puedeDevolver: boolean;
+  pieSaldo?: ReactNode;
+  pieDevoluciones?: ReactNode;
 }) {
-  const pendiente = saldo.some((s) => s.pendiente > 0);
   return (
     <>
       <Tabla>
@@ -62,9 +72,10 @@ export function SaldoDeSalida({
           ))}
         </tbody>
       </Tabla>
+      {pieSaldo}
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3 text-sm">
         <span className="flex flex-wrap items-center gap-3">
-          {esPrestamo && (pendiente ? <Badge tono="aviso">Préstamo abierto</Badge> : <Badge tono="exito">Préstamo cerrado</Badge>)}
+          {esPrestamo && (abierto ? <Badge tono="aviso">Préstamo abierto</Badge> : <Badge tono="exito">Préstamo cerrado</Badge>)}
           {devoluciones.length === 0 ? (
             <span className="text-muted">Sin devoluciones.</span>
           ) : (
@@ -77,12 +88,13 @@ export function SaldoDeSalida({
             ))
           )}
         </span>
-        {puedeDevolver && pendiente && (
+        {puedeDevolver && abierto && (
           <Link href={`/devoluciones/nueva?salida=${salidaId}`} prefetch={false} className="font-medium text-primary hover:underline">
             Registrar devolución
           </Link>
         )}
       </div>
+      {pieDevoluciones}
     </>
   );
 }

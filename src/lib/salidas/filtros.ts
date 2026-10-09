@@ -52,18 +52,6 @@ export function aParametros(f: FiltrosDeLista): URLSearchParams {
   return p;
 }
 
-export function enlaceDeTramo(f: FiltrosDeLista, cursor?: string): string {
-  const p = aParametros(f);
-  if (cursor) p.set("cursor", cursor);
-  return p.size ? `/salidas?${p}` : "/salidas";
-}
-
-/** La lista filtrada por un estatus: el enlace de la bandeja cuando no cabe todo. */
-export function listaDeEstatus(estatus: EstatusSalida): string {
-  const valor = ESTATUS.find((f) => f.estatus === estatus)?.valor ?? "todas";
-  return `/salidas?${aParametros({ ...SIN_FILTROS, estatus: valor })}`;
-}
-
 export function aFiltroDeRepo(f: FiltrosDeLista): FiltroSalidas {
   return { estatus: ESTATUS.find((e) => e.valor === f.estatus)?.estatus ?? "todas", busqueda: f.busqueda, soloPrestamos: f.prestamo };
 }

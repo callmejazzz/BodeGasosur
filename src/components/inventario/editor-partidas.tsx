@@ -2,7 +2,9 @@
 
 import { Button } from "@/components/ui/button";
 import { Campo, Input, Select } from "@/components/ui/campos";
+import { PaginacionLocal, usePaginaLocal } from "@/components/ui/paginacion-local";
 import type { OpcionArticulo } from "@/lib/inventario/repo";
+import { paginasConError } from "@/lib/paginacion";
 import { cantidad, cn } from "@/lib/utils";
 
 export type ValoresPartida = { articuloId: string; presentacion: "UNIDAD" | "CAJA"; cantidadCapturada: string; observaciones: string };
@@ -34,16 +36,18 @@ export function EditorPartidas({
   etiquetaLimite: string;
   errores: Record<string, string>;
 }) {
+  const { contenedor, pagina, irA, visible, alFinal } = usePaginaLocal(filas.length);
   const cambiar = (clave: number, cambio: Partial<ValoresPartida>) =>
     setFilas((f) => f.map((x) => (x.clave === clave ? { ...x, valores: { ...x.valores, ...cambio } } : x)));
   const agregar = () => {
     setFilas((f) => [...f, { clave: siguiente, valores: { ...PARTIDA_VACIA } }]);
     setSiguiente(siguiente + 1);
+    alFinal(filas.length + 1);
   };
   const quitar = (clave: number) => setFilas((f) => (f.length > 1 ? f.filter((x) => x.clave !== clave) : f));
 
   return (
-    <div>
+    <div ref={contenedor} className="scroll-mt-4">
       <div className="mb-2 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-foreground">Partidas</h3>
         <Button type="button" variante="secundario" tamano="sm" onClick={agregar}>
@@ -64,7 +68,7 @@ export function EditorPartidas({
           const tope = articulo && limite ? (limite[articulo.id] ?? 0) : null;
           const conError = Object.keys(errores).some((k) => k.startsWith(`partidas.${i}.`));
           return (
-            <fieldset key={clave} className={cn("rounded-md border border-border p-4", conError && "border-danger/50")}>
+            <fieldset key={clave} data-fila={i} hidden={!visible(i)} className={cn("rounded-md border border-border p-4", conError && "border-danger/50")}>
               <div className="mb-3 flex items-center justify-between">
                 <legend className="text-xs font-semibold tracking-wide text-muted uppercase">Partida {i + 1}</legend>
                 {filas.length > 1 && (
@@ -118,6 +122,7 @@ export function EditorPartidas({
           );
         })}
       </div>
+      <PaginacionLocal pagina={pagina} irA={irA} sustantivo="partidas" conErrores={paginasConError(errores)} className="mt-3 px-0" />
     </div>
   );
 }

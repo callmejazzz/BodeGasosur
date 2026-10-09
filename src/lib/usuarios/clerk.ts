@@ -1,5 +1,6 @@
 import "server-only";
 import { clerkClient } from "@clerk/nextjs/server";
+import { POR_PAGINA } from "@/lib/paginacion";
 
 /**
  * Lectura de identidades en Clerk.
@@ -16,9 +17,6 @@ export type IdentidadClerk = {
   correo: string | null;
   nombre: string | null;
 };
-
-/** Clerk admite hasta 500 por petición; 15 es lo que cabe cómodo en pantalla. */
-export const POR_PAGINA = 15;
 
 type UsuarioDeClerk = {
   id: string;
@@ -38,6 +36,7 @@ function aIdentidad(u: UsuarioDeClerk): IdentidadClerk {
   };
 }
 
+/** Una página de 100, como las demás listas; Clerk admite hasta 500 por petición. */
 export async function listarIdentidades(pagina: number) {
   const clerk = await clerkClient();
   const { data, totalCount } = await clerk.users.getUserList({

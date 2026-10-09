@@ -4,11 +4,14 @@ import { useRouter } from "next/navigation";
 import { startTransition, useActionState, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/campos";
+import { PaginacionLocal, usePaginaLocal } from "@/components/ui/paginacion-local";
 import { Badge } from "@/components/ui/superficies";
 import { Tabla, Td, Th, Tr } from "@/components/ui/tabla";
 import type { ResultadoAccion } from "@/lib/inventario/acciones";
+import { editar, guardado, haySinGuardar, SIN_CAMBIOS } from "@/lib/inventario/cambios";
 import { ESTADO_INICIAL, type EstadoFormulario } from "@/lib/inventario/formulario";
 import type { OpcionArticulo } from "@/lib/inventario/repo";
+import { paginasConError } from "@/lib/paginacion";
 import { cantidad, cn } from "@/lib/utils";
 
 export type RenglonHoja = { articuloId: string; clave: string; descripcion: string; unidad: string; esperada: number | null; contada: string; observaciones: string };
@@ -42,10 +45,17 @@ export function HojaConteo({
   descartar: (id: string, motivo: string) => Promise<ResultadoAccion>;
 }) {
   const router = useRouter();
-  const [estado, enviar, guardando] = useActionState(guardar, ESTADO_INICIAL);
+  const [cambios, setCambios] = useState(SIN_CAMBIOS);
+  const sucio = haySinGuardar(cambios);
+  const [estado, enviar, guardando] = useActionState(async (previo: EstadoFormulario, { formData, enviadas }: { formData: FormData; enviadas: number }) => {
+    const r = await guardar(previo, formData);
+    // Solo una revisión guardada limpia la marca: con un rechazo, confirmar seguiría bloqueado.
+    if (r.revision !== undefined) setCambios((c) => guardado(c, enviadas));
+    return r;
+  }, ESTADO_INICIAL);
   const [pendiente, iniciar] = useTransition();
   const [renglones, setRenglones] = useState(iniciales);
-  const [sucio, setSucio] = useState(false);
+  const { contenedor, pagina, irA, visible, alFinal } = usePaginaLocal(renglones.length);
   const [nuevo, setNuevo] = useState("");
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [descartando, setDescartando] = useState(false);
@@ -53,7 +63,7 @@ export function HojaConteo({
 
   const cambiar = (i: number, cambio: Partial<RenglonHoja>) => {
     setRenglones((r) => r.map((x, j) => (j === i ? { ...x, ...cambio } : x)));
-    setSucio(true);
+    setCambios(editar);
   };
   const ejecutar = (fn: () => Promise<ResultadoAccion>) =>
     iniciar(async () => {
@@ -79,10 +89,7 @@ export function HojaConteo({
       onSubmit={(ev) => {
         ev.preventDefault();
         const formData = new FormData(ev.currentTarget);
-        startTransition(() => {
-          enviar(formData);
-          setSucio(false);
-        });
+        startTransition(() => enviar({ formData, enviadas: cambios.hechas }));
       }}
     >
       <input type="hidden" name="revision" value={revision} />
@@ -91,64 +98,67 @@ export function HojaConteo({
           {aviso}
         </p>
       )}
-      <Tabla>
-        <thead>
-          <tr>
-            <Th>Artículo</Th>
-            <Th className="text-right">Esperada</Th>
-            <Th className="text-right">Contada</Th>
-            <Th className="text-right">Diferencia</Th>
-            <Th>Observaciones</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {renglones.map((r, i) => {
-            const contada = /^\d{1,9}$/.test(r.contada.trim()) ? Number(r.contada) : null;
-            const diferencia = contada !== null && r.esperada !== null ? contada - r.esperada : null;
-            const error = estado.errores[`partidas.${i}.cantidadContada`];
-            return (
-              <Tr key={r.articuloId}>
-                <Td className="whitespace-nowrap">
-                  <input type="hidden" name={`partidas.${i}.articuloId`} value={r.articuloId} />
-                  <span className="font-medium">{r.clave}</span> <span className="text-muted">{r.descripcion}</span>
-                </Td>
-                <Td className="text-right tabular whitespace-nowrap">
-                  {r.esperada === null ? <span className="text-muted">al guardar</span> : `${cantidad(r.esperada)} ${r.unidad}`}
-                </Td>
-                <Td className="text-right">
-                  {editable ? (
-                    <Input
-                      name={`partidas.${i}.cantidadContada`}
-                      inputMode="numeric"
-                      pattern="\d*"
-                      value={r.contada}
-                      onChange={(ev) => cambiar(i, { contada: ev.target.value })}
-                      className={cn("ml-auto h-8 w-28 text-right", error && "border-danger")}
-                      aria-label={`Contado de ${r.clave}`}
-                      placeholder="—"
-                    />
-                  ) : (
-                    <span className="tabular">{r.contada === "" ? "—" : `${cantidad(Number(r.contada))} ${r.unidad}`}</span>
-                  )}
-                  {error && <span className="block text-xs text-danger">{error}</span>}
-                </Td>
-                <Td className="text-right tabular whitespace-nowrap">
-                  {diferencia === null ? <span className="text-muted">—</span> : diferencia === 0 ? <Badge>Sin diferencia</Badge> : (
-                    <Badge tono={diferencia > 0 ? "info" : "peligro"}>{diferencia > 0 ? "+" : ""}{cantidad(diferencia)}</Badge>
-                  )}
-                </Td>
-                <Td>
-                  {editable ? (
-                    <Input name={`partidas.${i}.observaciones`} value={r.observaciones} onChange={(ev) => cambiar(i, { observaciones: ev.target.value })} maxLength={300} className="h-8" aria-label={`Observaciones de ${r.clave}`} />
-                  ) : (
-                    <span className="text-muted">{r.observaciones || "—"}</span>
-                  )}
-                </Td>
-              </Tr>
-            );
-          })}
-        </tbody>
-      </Tabla>
+      <div ref={contenedor} className="scroll-mt-4">
+        <Tabla>
+          <thead>
+            <tr>
+              <Th>Artículo</Th>
+              <Th className="text-right">Esperada</Th>
+              <Th className="text-right">Contada</Th>
+              <Th className="text-right">Diferencia</Th>
+              <Th>Observaciones</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {renglones.map((r, i) => {
+              const contada = /^\d{1,9}$/.test(r.contada.trim()) ? Number(r.contada) : null;
+              const diferencia = contada !== null && r.esperada !== null ? contada - r.esperada : null;
+              const error = estado.errores[`partidas.${i}.cantidadContada`];
+              return (
+                <Tr key={r.articuloId} data-fila={i} hidden={!visible(i)}>
+                  <Td className="whitespace-nowrap">
+                    <input type="hidden" name={`partidas.${i}.articuloId`} value={r.articuloId} />
+                    <span className="font-medium">{r.clave}</span> <span className="text-muted">{r.descripcion}</span>
+                  </Td>
+                  <Td className="text-right tabular whitespace-nowrap">
+                    {r.esperada === null ? <span className="text-muted">al guardar</span> : `${cantidad(r.esperada)} ${r.unidad}`}
+                  </Td>
+                  <Td className="text-right">
+                    {editable ? (
+                      <Input
+                        name={`partidas.${i}.cantidadContada`}
+                        inputMode="numeric"
+                        pattern="\d*"
+                        value={r.contada}
+                        onChange={(ev) => cambiar(i, { contada: ev.target.value })}
+                        className={cn("ml-auto h-8 w-28 text-right", error && "border-danger")}
+                        aria-label={`Contado de ${r.clave}`}
+                        placeholder="—"
+                      />
+                    ) : (
+                      <span className="tabular">{r.contada === "" ? "—" : `${cantidad(Number(r.contada))} ${r.unidad}`}</span>
+                    )}
+                    {error && <span className="block text-xs text-danger">{error}</span>}
+                  </Td>
+                  <Td className="text-right tabular whitespace-nowrap">
+                    {diferencia === null ? <span className="text-muted">—</span> : diferencia === 0 ? <Badge>Sin diferencia</Badge> : (
+                      <Badge tono={diferencia > 0 ? "info" : "peligro"}>{diferencia > 0 ? "+" : ""}{cantidad(diferencia)}</Badge>
+                    )}
+                  </Td>
+                  <Td>
+                    {editable ? (
+                      <Input name={`partidas.${i}.observaciones`} value={r.observaciones} onChange={(ev) => cambiar(i, { observaciones: ev.target.value })} maxLength={300} className="h-8" aria-label={`Observaciones de ${r.clave}`} />
+                    ) : (
+                      <span className="text-muted">{r.observaciones || "—"}</span>
+                    )}
+                  </Td>
+                </Tr>
+              );
+            })}
+          </tbody>
+        </Tabla>
+        <PaginacionLocal pagina={pagina} irA={irA} sustantivo="artículos" conErrores={paginasConError(estado.errores)} />
+      </div>
 
       {editable && (
         <div className="flex flex-col gap-4 border-t border-border px-5 py-4">
@@ -169,7 +179,8 @@ export function HojaConteo({
                 if (!a) return;
                 setRenglones((r) => [...r, { articuloId: a.id, clave: a.clave, descripcion: a.descripcion, unidad: a.unidad, esperada: null, contada: "", observaciones: "" }]);
                 setNuevo("");
-                setSucio(true);
+                setCambios(editar);
+                alFinal(renglones.length + 1);
               }}
             >
               Agregar

@@ -1,11 +1,13 @@
 import { notFound } from "next/navigation";
 import { confirmarDevolucion, descartarDevolucion, guardarDevolucion } from "../actions";
+import { buscarSalidas } from "../consultas";
 import { revertirMovimiento } from "../../reversas/actions";
 import { FormularioDevolucion } from "@/components/inventario/formulario-devolucion";
 import { PaginaMovimiento } from "@/components/inventario/pagina-movimiento";
 import { Card, CardHeader } from "@/components/ui/superficies";
 import { consultar } from "@/lib/db";
 import { datosDeDetalle } from "@/lib/inventario/pantallas";
+import { leerPagina } from "@/lib/paginacion";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +17,7 @@ const DESCRIPCION: Record<string, string> = {
   CANCELADO: "Borrador descartado. No tuvo efecto.",
 };
 
-export default async function PaginaDevolucion({ params }: PageProps<"/devoluciones/[id]">) {
+export default async function PaginaDevolucion({ params, searchParams }: PageProps<"/devoluciones/[id]">) {
   const datos = await consultar("devoluciones:leer", async (db, usuario) => datosDeDetalle(db, usuario, "DEVOLUCION", (await params).id));
   if (!datos) notFound();
   const m = datos.movimiento;
@@ -35,6 +37,7 @@ export default async function PaginaDevolucion({ params }: PageProps<"/devolucio
         texto: "Confirmar devolución",
       }}
       revertir={revertirMovimiento}
+      paginaPartidas={leerPagina((await searchParams).partidas)}
       edicion={
         datos.opciones && (
           <Card>
@@ -42,10 +45,11 @@ export default async function PaginaDevolucion({ params }: PageProps<"/devolucio
             <FormularioDevolucion
               key={m.updatedAt.toISOString()}
               opciones={datos.opciones}
+              vinculada={datos.vinculada}
+              buscar={buscarSalidas}
               accion={guardarDevolucion.bind(null, m.id)}
               valores={{
                 estacionId: m.estacionId ?? "",
-                salidaId: m.devuelveA?.id ?? "",
                 bodegaDestinoId: m.bodegaDestinoId ?? "",
                 observaciones: m.observaciones ?? "",
                 partidas: m.partidas.map((p) => ({ articuloId: p.articuloId, presentacion: p.presentacionCapturada, cantidadCapturada: String(p.cantidadCapturada), observaciones: p.observaciones ?? "" })),

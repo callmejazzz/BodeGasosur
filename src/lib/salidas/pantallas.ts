@@ -2,6 +2,7 @@ import "server-only";
 import type { EstatusMovimiento, Prisma } from "@prisma/client";
 import { uuid } from "@/lib/movimientos/formulario";
 import { devolucionDeSalidas } from "@/lib/inventario/repo";
+import { leerPagina } from "@/lib/paginacion";
 import { usuarioTienePermiso, type SujetoDePermisos } from "@/lib/permisos";
 import { aFiltroDeRepo, leerFiltros } from "./filtros";
 import { contarPendientes, existenciasDeSalida, listarSalidas, obtenerSalida, valuarSalida, type SalidaDetalle } from "./repo";
@@ -14,16 +15,13 @@ type Db = Prisma.TransactionClient;
 
 export async function datosDeLista(db: Db, usuario: SujetoDePermisos, params: Record<string, string | string[] | undefined>) {
   const filtros = leerFiltros(params);
-  const cursor = typeof params.cursor === "string" ? uuid.safeParse(params.cursor) : null;
-  const { filas, hayMas, cursorActual, cursorSiguiente } = await listarSalidas(db, { ...aFiltroDeRepo(filtros), cursor: cursor?.success ? cursor.data : undefined });
+  const { filas, pagina } = await listarSalidas(db, aFiltroDeRepo(filtros), leerPagina(params.pagina));
   return {
     filtros,
     filas,
     // Solo a quien puede ver devoluciones, como el saldo del detalle.
     devoluciones: usuarioTienePermiso(usuario, "devoluciones:leer") ? await devolucionDeSalidas(db, filas.map((f) => f.id)) : {},
-    hayMas,
-    cursorActual,
-    cursorSiguiente,
+    pagina,
     puedeCapturar: usuarioTienePermiso(usuario, "salidas:capturar"),
     pendientes: await contarPendientes(db, usuario),
   };

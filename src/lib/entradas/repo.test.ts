@@ -14,7 +14,7 @@ import { SIN_FILTROS, type FiltroEntradas } from "./filtros";
 import { confirmarEntrada, crearBorrador, guardarBorrador, type DatosBorrador } from "./servicio";
 
 vi.mock("server-only", () => ({}));
-const { listarEntradas, TOPE_LISTA } = await import("./repo");
+const { listarEntradas } = await import("./repo");
 
 const prisma = crearCliente(URL_PRUEBAS);
 let e: Entorno;
@@ -94,10 +94,10 @@ describe("listarEntradas", () => {
     expect((await listar({ estatus: "borradores" })).map((x) => x.id)).toEqual([borradorViejo, borradorNuevo]);
   });
 
-  it("se corta en el tope y avisa que hay más", async () => {
+  it("muestra 100 por página: la 101 abre la segunda, y pasada la última se queda en la última", async () => {
     const proveedor = await prisma.proveedor.create({ data: { nombreComercial: `Mayorista ${randomUUID().slice(0, 8)}`, razonSocial: "Mayorista SA" } });
     await prisma.movimiento.createMany({
-      data: Array.from({ length: TOPE_LISTA + 1 }, () => ({
+      data: Array.from({ length: 101 }, () => ({
         tipo: "ENTRADA" as const,
         estatus: "BORRADOR" as const,
         fecha: new Date("2026-09-01T00:00:00Z"),
@@ -108,8 +108,14 @@ describe("listarEntradas", () => {
         llaveIdempotencia: randomUUID(),
       })),
     });
-    const r = await prisma.$transaction((tx) => listarEntradas(tx, { ...SIN_FILTROS, busqueda: proveedor.nombreComercial }));
-    expect(r.filas).toHaveLength(TOPE_LISTA);
-    expect(r.hayMas).toBe(true);
+    const pagina = (n: number) => prisma.$transaction((tx) => listarEntradas(tx, { ...SIN_FILTROS, busqueda: proveedor.nombreComercial }, n));
+    const [primera, segunda, novena] = [await pagina(1), await pagina(2), await pagina(9)];
+    expect(primera.filas).toHaveLength(100);
+    expect(primera.pagina).toEqual({ actual: 1, ultima: 2, total: 101 });
+    expect(segunda.filas).toHaveLength(1);
+    expect(segunda.pagina).toEqual({ actual: 2, ultima: 2, total: 101 });
+    expect(novena).toEqual(segunda);
+    // Ninguna se repite ni se pierde entre páginas.
+    expect(new Set([...primera.filas, ...segunda.filas].map((f) => f.id)).size).toBe(101);
   });
 });

@@ -8,7 +8,47 @@ puede hacer ahora que antes no se podía.
 
 ---
 
-## v0.7.0 — 2026-10-02 (cierre local, sin publicar)
+## v0.7.1 — 2026-10-09
+
+Última migración incluida: `20261008100000_entrada_con_sus_capas`.
+
+Correcciones de la revisión de `v0.7.0`.
+
+**Lo que cambia para quien va a usar el sistema**
+
+- **Ninguna lista esconde registros.** Entradas, salidas, pendientes, traspasos,
+  devoluciones, ajustes, préstamos, conteo físico, catálogos y usuarios muestran hasta 100
+  por página; desde el 101 se pasa a la siguiente sin perder la búsqueda ni los filtros.
+  Antes, préstamos se cortaba en 500 y las demás listas pedían afinar los filtros o ir
+  por tramos.
+- **También dentro de cada detalle.** Las partidas de entradas, salidas, traspasos,
+  devoluciones y ajustes, el saldo y las devoluciones de una salida, las otras recepciones
+  de la misma factura y los artículos de la hoja de conteo van de 100 en 100. Al capturar,
+  las partidas de otras páginas no se pierden: se guardan completas, y si a una le falta
+  un dato, la página se abre sola para corregirlo.
+- **El selector de salida de una devolución se busca tecleando.** Sigue mostrando las
+  salidas de la estación que aún tienen algo por volver, la más reciente primero y de 100
+  en 100; al teclear el folio (`S-000123`, `s123` o `123`), el número o el nombre se
+  filtra. Si la salida buscada no aparece porque ya volvió todo, fue revertida o salió a
+  otra estación, lo dice. Lo mismo al llegar desde una salida o un préstamo con
+  «Registrar devolución».
+- **Una hoja de conteo no se confirma con valores sin guardar.** Si el guardado falla,
+  «Confirmar conteo» sigue bloqueado y la hoja sigue avisando que hay cambios sin guardar.
+
+**Por dentro**
+
+- La base exige que una entrada confirmada tenga exactamente una capa por partida, con su
+  cantidad y su costo: ya no se puede confirmar, ni con SQL directo, sin que suba la
+  existencia. La migración revisa las entradas existentes antes de terminar.
+- La lista y su total salen de una sola consulta; una página que ya no existe muestra la
+  última.
+- El selector de salidas no se precarga: lee cada página bajo demanda, con sesión y
+  permiso de captura, igual que la pantalla.
+- 469 pruebas contra PostgreSQL real.
+
+## v0.7.0 — 2026-10-02
+
+Commit `2ac6ca3`, con su etiqueta.
 
 Última migración incluida: `20261001150000_bitacora_en_hora_de_mexico`.
 

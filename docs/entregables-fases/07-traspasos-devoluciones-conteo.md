@@ -2,9 +2,9 @@
 
 | Campo    | Referencia                                                                                                |
 | -------- | --------------------------------------------------------------------------------------------------------- |
-| Estado   | Construida en desarrollo                                                                                  |
-| Versión  | `v0.7.0`                                                                                                |
-| Commit   | Cierre integral de fase 7 (único commit local)                                                          |
+| Estado   | Construida y publicada                                                                                    |
+| Versión  | `v0.7.0`; correcciones de su revisión en `v0.7.1`                                                        |
+| Commit   | `2ac6ca3` (`v0.7.0`); correcciones en `v0.7.1`                                                           |
 | Contrato | [Fase 7: Traspasos, devoluciones y conteo](../contratos-otros/05-fase-7-traspasos-devoluciones-conteo.md) |
 
 ## Construido
@@ -31,7 +31,8 @@
 - **Frontera SQL**: conciliación diferida por movimiento, sobredevolución, reversa única
   y exacta, hoja confirmada igual a sus ajustes con la existencia en lo contado, máquina
   de estados de la hoja, inmutabilidad de restituciones y guardas de actor y bitácora
-  para las tablas nuevas. La migración revisa lo existente antes de terminar.
+  para las tablas nuevas. Una entrada confirmada es exactamente una capa por partida.
+  Cada migración revisa lo existente antes de terminar.
 - Diez permisos nuevos, catorce Server Actions detrás de `accionProtegida()` y pantallas
   de lista, captura y detalle de traspasos, devoluciones, ajustes y hojas de conteo,
   además de préstamos. Entradas y salidas muestran su reversa, y las salidas su saldo,
@@ -41,11 +42,17 @@
   todas las pantallas que buscan, filtro de solo préstamos en salidas, filtro por fecha
   en hojas de conteo e insignias de estado hasta tres por renglón. La reversa de un
   traspaso no ocupa fila: queda en el historial del revertido, con folio y motivo.
+- **Páginas de 100** en toda pantalla con lista —también préstamos, hojas de conteo,
+  catálogos, pendientes de salidas y usuarios— y en las listas dentro de cada detalle,
+  también al capturar; desde el registro 101 se pagina sin perder los filtros.
+- **El selector de salida de una devolución se busca tecleando** y lee de 100 en 100
+  bajo demanda en vez de precargar 500; valida la salida que llega en el enlace y, si no
+  admite devolución, dice por qué.
 - **Hora de la CDMX en la base**: los clientes SQL leen los instantes en
   `America/Mexico_City` cuando se configura toda la base, también las copias JSON de la
   bitácora; la aplicación conserva sesiones UTC para el adapter de Prisma. Si quien
   migra no es dueño de la base, la zona se configura solo para ese usuario y se avisa.
-- 448 pruebas sobre PostgreSQL real, con concurrencia, idempotencia, doble clic,
+- 469 pruebas sobre PostgreSQL real, con concurrencia, idempotencia, doble clic,
   escrituras SQL directas, revocación a mitad de la acción y el JWT verificado por la base.
 
 ## Archivos principales
@@ -53,11 +60,11 @@
 | Área                     | Archivos                                                                                                                                                                                                                                                                                                                        |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Dominio                  | [`src/lib/inventario/`](../../src/lib/inventario/): captura, primitivas, traspasos, devoluciones, conteos, reversas, lecturas y pantallas                                                                                                                                                                                       |
-| Primitivas compartidas   | [`src/lib/movimientos/primitivas.ts`](../../src/lib/movimientos/primitivas.ts): PEPS, capas y existencias de varias bodegas; [`lista.ts`](../../src/lib/movimientos/lista.ts): orden, búsqueda y cursor de las listas                                                                                                                                                                                                     |
+| Primitivas compartidas   | [`src/lib/movimientos/primitivas.ts`](../../src/lib/movimientos/primitivas.ts): PEPS, capas y existencias de varias bodegas; [`lista.ts`](../../src/lib/movimientos/lista.ts): orden, búsqueda y página de las listas; [`src/lib/paginacion.ts`](../../src/lib/paginacion.ts): páginas de 100 |
 | Server Actions y páginas | [`traspasos/`](<../../src/app/(sistema)/traspasos/>), [`devoluciones/`](<../../src/app/(sistema)/devoluciones/>), [`conteos/`](<../../src/app/(sistema)/conteos/>), [`ajustes/`](<../../src/app/(sistema)/ajustes/>), [`prestamos/`](<../../src/app/(sistema)/prestamos/>) y [`reversas/`](<../../src/app/(sistema)/reversas/>) |
 | Interfaz                 | [`src/components/inventario/`](../../src/components/inventario/)                                                                                                                                                                                                                                                                |
 | Permisos                 | [`src/lib/permisos.ts`](../../src/lib/permisos.ts)                                                                                                                                                                                                                                                                              |
-| Esquema y frontera SQL   | [`prisma/schema.prisma`](../../prisma/schema.prisma), [`990-traspasos-devoluciones-conteo.sql`](../../prisma/sql/despues/990-traspasos-devoluciones-conteo.sql), [`991-devolucion-a-su-bodega.sql`](../../prisma/sql/despues/991-devolucion-a-su-bodega.sql), [`992-busqueda-sin-acentos.sql`](../../prisma/sql/despues/992-busqueda-sin-acentos.sql), [`993-hora-de-mexico.sql`](../../prisma/sql/despues/993-hora-de-mexico.sql) y [`994-bitacora-en-hora-de-mexico.sql`](../../prisma/sql/despues/994-bitacora-en-hora-de-mexico.sql), con sus migraciones `20260929120000_traspasos_devoluciones_conteo`, `20261001100000_devolucion_a_su_bodega`, `20261001120000_busqueda_sin_acentos`, `20261001140000_hora_de_mexico` y `20261001150000_bitacora_en_hora_de_mexico` |
+| Esquema y frontera SQL   | [`prisma/schema.prisma`](../../prisma/schema.prisma), [`990-traspasos-devoluciones-conteo.sql`](../../prisma/sql/despues/990-traspasos-devoluciones-conteo.sql), [`991-devolucion-a-su-bodega.sql`](../../prisma/sql/despues/991-devolucion-a-su-bodega.sql), [`992-busqueda-sin-acentos.sql`](../../prisma/sql/despues/992-busqueda-sin-acentos.sql), [`993-hora-de-mexico.sql`](../../prisma/sql/despues/993-hora-de-mexico.sql), [`994-bitacora-en-hora-de-mexico.sql`](../../prisma/sql/despues/994-bitacora-en-hora-de-mexico.sql) y [`995-entrada-con-sus-capas.sql`](../../prisma/sql/despues/995-entrada-con-sus-capas.sql), con sus migraciones `20260929120000_traspasos_devoluciones_conteo`, `20261001100000_devolucion_a_su_bodega`, `20261001120000_busqueda_sin_acentos`, `20261001140000_hora_de_mexico`, `20261001150000_bitacora_en_hora_de_mexico` y `20261008100000_entrada_con_sus_capas` |
 | Pruebas                  | [`fase7-frontera.test.ts`](../../prisma/sql/fase7-frontera.test.ts) y las de [`src/lib/inventario/`](../../src/lib/inventario/)                                                                                                                                                                                                 |
 | Semillas de pruebas      | [`pruebas/semilla-operacion.ts`](../../pruebas/semilla-operacion.ts) y [`pruebas/semilla-inventario.ts`](../../pruebas/semilla-inventario.ts)                                                                                                                                                                                   |
 
@@ -73,3 +80,26 @@ de pruebas ahora crea sus capas desde un ingreso confirmado, porque la base ya n
 capas sin un movimiento que las explique. Se corrigieron dos pruebas previas que
 dependían del orden de marcas de tiempo iguales: la bandeja de salidas y la bitácora del
 webhook.
+
+## Correcciones posteriores a `v0.7.0`
+
+La revisión del código etiquetado encontró tres huecos, corregidos en `v0.7.1`:
+
+- **Entrada confirmada sin capas.** La conciliación revisaba que cada capa existente
+  correspondiera a una partida, pero no exigía una capa por partida: una entrada escrita
+  a mano podía confirmarse sin capas ni existencia. `995-entrada-con-sus-capas.sql`
+  compara exactamente partidas y capas y extiende `movimientos_sin_conciliar()` a las
+  entradas. Las pruebas de la fase 5 y de errores que confirmaban entradas a mano ahora
+  crean su capa y su existencia, como la recepción.
+- **Límites que ocultaban operaciones.** Préstamos mostraba solo 500 y el formulario de
+  devoluciones elegía entre las 500 salidas más recientes. Las listas pasaron de tramos
+  de 200 con cursor a páginas de 100, también dentro de los detalles, y el selector de
+  salidas se busca tecleando y pagina en el servidor
+  ([`selector-buscable.tsx`](../../src/components/ui/selector-buscable.tsx)).
+- **Conteo confirmable tras un guardado fallido.** La hoja marcaba los cambios como
+  guardados al enviar. Ahora la marca se limpia solo cuando el servidor devuelve la
+  revisión guardada ([`cambios.ts`](../../src/lib/inventario/cambios.ts)).
+
+El cuarto hallazgo —que la cuenta de ejecución escribe en las tablas y `fijar_actor` no
+comprueba el rol de la operación— queda fuera, por decisión del 2026-10-08: los permisos
+se exigen en las Server Actions, y desde la interfaz no hay forma de saltarlos.

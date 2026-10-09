@@ -2,17 +2,18 @@ import Link from "next/link";
 import { FiltrosMovimientos } from "@/components/inventario/filtros-movimientos";
 import { BadgeEstatus } from "@/components/inventario/estatus";
 import { ButtonLink } from "@/components/ui/button";
+import { Paginacion } from "@/components/ui/paginacion";
 import { Card, EncabezadoPagina, EstadoVacio } from "@/components/ui/superficies";
 import { Tabla, Td, Th, Tr } from "@/components/ui/tabla";
 import { consultar } from "@/lib/db";
 import { formatearInstante } from "@/lib/fechas";
-import { enlaceDeTramo } from "@/lib/inventario/filtros";
+import { aParametros } from "@/lib/inventario/filtros";
 import { datosDeListaHojas } from "@/lib/inventario/pantallas";
 
 export const dynamic = "force-dynamic";
 
 export default async function PaginaConteos({ searchParams }: PageProps<"/conteos">) {
-  const { filtros, filas, hayMas, cursorActual, cursorSiguiente, puedeCapturar } = await consultar("ajustes:leer", async (db, usuario) =>
+  const { filtros, filas, pagina, puedeCapturar } = await consultar("ajustes:leer", async (db, usuario) =>
     datosDeListaHojas(db, usuario, await searchParams),
   );
 
@@ -29,7 +30,7 @@ export default async function PaginaConteos({ searchParams }: PageProps<"/conteo
         }
       />
       <Card>
-        <FiltrosMovimientos filtros={filtros} total={filas.length} tramo={hayMas || !!cursorActual} sustantivo={["hoja", "hojas"]} busqueda={false} fechas />
+        <FiltrosMovimientos filtros={filtros} total={pagina.total} sustantivo={["hoja", "hojas"]} busqueda={false} fechas />
         {filas.length === 0 ? (
           <EstadoVacio titulo="No hay hojas de conteo en esta vista" />
         ) : (
@@ -60,12 +61,7 @@ export default async function PaginaConteos({ searchParams }: PageProps<"/conteo
             </tbody>
           </Tabla>
         )}
-        {(cursorActual || cursorSiguiente) && (
-          <nav aria-label="Tramos" className="flex justify-between border-t border-border px-5 py-3 text-sm">
-            {cursorActual ? <Link href={enlaceDeTramo("/conteos", filtros)} className="text-primary hover:underline">Volver a las más recientes</Link> : <span />}
-            {cursorSiguiente && <Link href={enlaceDeTramo("/conteos", filtros, cursorSiguiente)} className="text-primary hover:underline">Ver anteriores</Link>}
-          </nav>
-        )}
+        <Paginacion pagina={pagina} ruta="/conteos" parametros={aParametros(filtros)} sustantivo="hojas" />
       </Card>
     </>
   );

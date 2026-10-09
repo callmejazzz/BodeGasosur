@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { ButtonLink } from "@/components/ui/button";
 import { Input } from "@/components/ui/campos";
+import { Paginacion } from "@/components/ui/paginacion";
 import { Badge, Card, EncabezadoPagina, EstadoVacio } from "@/components/ui/superficies";
 import { Tabla, Td, Th, Tr } from "@/components/ui/tabla";
 import {
@@ -10,6 +11,7 @@ import {
 } from "@/lib/catalogos/definiciones";
 import { leerRuta, REPOS } from "@/lib/catalogos/repos";
 import { consultar } from "@/lib/db";
+import { leerPagina, paginar } from "@/lib/paginacion";
 import { rolTienePermiso } from "@/lib/permisos";
 import { cantidad, cn, textoBuscable } from "@/lib/utils";
 
@@ -50,7 +52,7 @@ export default async function PaginaCatalogo({
   searchParams,
 }: PageProps<"/catalogos/[slug]">) {
   const { slug } = await params;
-  const { q } = await searchParams;
+  const { q, pagina: paginaPedida } = await searchParams;
   const def = catalogoPorSlug(slug);
   const repo = REPOS[slug];
   if (!def || !repo) notFound();
@@ -71,6 +73,7 @@ export default async function PaginaCatalogo({
         ),
       )
     : todos;
+  const { filas: visibles, pagina } = paginar(registros, leerPagina(paginaPedida));
 
   const columnas = def.campos.filter((c) => !c.ocultarEnTabla);
 
@@ -138,7 +141,7 @@ export default async function PaginaCatalogo({
               </tr>
             </thead>
             <tbody>
-              {registros.map((registro) => (
+              {visibles.map((registro) => (
                 <Tr key={registro.id}>
                   {columnas.map((c) => (
                     <Td
@@ -166,6 +169,12 @@ export default async function PaginaCatalogo({
             </tbody>
           </Tabla>
         )}
+        <Paginacion
+          pagina={pagina}
+          ruta={`/catalogos/${slug}`}
+          parametros={new URLSearchParams(busqueda ? { q: busqueda } : {})}
+          sustantivo={def.titulo.toLowerCase()}
+        />
       </Card>
     </>
   );

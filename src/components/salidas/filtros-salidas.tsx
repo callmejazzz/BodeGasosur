@@ -4,7 +4,7 @@ import { Checkbox, Input, Select } from "@/components/ui/campos";
 import { useFiltrosEnUrl } from "@/components/ui/filtros-en-url";
 import { aParametros, ESTATUS, hayFiltros, SIN_FILTROS, type FiltroEstatus, type FiltrosDeLista } from "@/lib/salidas/filtros";
 
-export function FiltrosSalidas({ filtros, total, hayMas, esTramoAnterior }: { filtros: FiltrosDeLista; total: number; hayMas: boolean; esTramoAnterior: boolean }) {
+export function FiltrosSalidas({ filtros, total }: { filtros: FiltrosDeLista; total: number }) {
   const { actual, pendiente, aplicar, teclear } = useFiltrosEnUrl(filtros, aParametros);
 
   return (
@@ -34,7 +34,7 @@ export function FiltrosSalidas({ filtros, total, hayMas, esTramoAnterior }: { fi
         )}
       </div>
       <p className="text-sm text-muted tabular" aria-live="polite">
-        {pendiente ? "Buscando…" : `${total} salida${total === 1 ? "" : "s"}${esTramoAnterior || hayMas ? " en este tramo" : ""}`}
+        {pendiente ? "Buscando…" : `${total} salida${total === 1 ? "" : "s"}`}
       </p>
     </div>
   );

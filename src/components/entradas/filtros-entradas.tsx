@@ -14,7 +14,7 @@ import {
   type FiltroReferencia,
 } from "@/lib/entradas/filtros";
 
-export function FiltrosEntradas({ filtros, total, hayMas }: { filtros: FiltroEntradas; total: number; hayMas: boolean }) {
+export function FiltrosEntradas({ filtros, total }: { filtros: FiltroEntradas; total: number }) {
   const { actual, pendiente, aplicar, teclear } = useFiltrosEnUrl(filtros, aParametros);
 
   return (
@@ -46,7 +46,7 @@ export function FiltrosEntradas({ filtros, total, hayMas }: { filtros: FiltroEnt
         )}
       </div>
       <p className="text-sm text-muted tabular" aria-live="polite">
-        {pendiente ? "Buscando…" : hayMas ? `Más de ${total} entradas` : `${total} entrada${total === 1 ? "" : "s"}`}
+        {pendiente ? "Buscando…" : `${total} entrada${total === 1 ? "" : "s"}`}
       </p>
     </div>
   );

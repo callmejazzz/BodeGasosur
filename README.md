@@ -4,9 +4,9 @@ Sistema de control de inventario para las bodegas del grupo gasolinero **Gasosur
 
 Controla la entrada y salida de material entre bodegas y estaciones, registrando hacia qué estación se envía, quién lo autoriza, quién lo entrega, cuándo, en qué cantidad, a qué costo unitario, a qué área se destina y con qué observaciones.
 
-**Versión del código: `v0.7.0`** - ver [CHANGELOG.md](CHANGELOG.md).
+**Versión del código: `v0.7.1`** - ver [CHANGELOG.md](CHANGELOG.md).
 
-**Estado:** fases 0 a 7 construidas en desarrollo; la fase 7 (traspasos, devoluciones, préstamos, conteo físico y reversas) se cerró en un commit local. La versión `v0.7.0` aún no se ha distribuido; siguen los reportes de la fase 8. Ver [entregables por fase](docs/entregables-fases/README.md).
+**Estado:** fases 0 a 7 construidas en desarrollo; la fase 7 (traspasos, devoluciones, préstamos, conteo físico y reversas) se publicó como `v0.7.0` (commit `2ac6ca3`), y `v0.7.1` corrige lo que encontró su revisión; siguen los reportes de la fase 8. Ver [entregables por fase](docs/entregables-fases/README.md).
 
 **Entorno:** local mientras dure el desarrollo. Dónde se despliega se decide antes de la
 `v1.0.0` — ver [versionado y despliegue](docs/05-versionado-y-despliegue.md) y el hallazgo

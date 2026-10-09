@@ -127,6 +127,17 @@ describe("frontera de la fase 7", () => {
     }
   });
 
+  it("la búsqueda de salida del formulario solo lee, dentro de consultar() con el permiso de captura", () => {
+    const codigo = readFileSync(join(APP, "devoluciones", "consultas.ts"), "utf8");
+    expect(codigo.startsWith('"use server";')).toBe(true);
+    const exportadas = [...codigo.matchAll(/export async function (\w+)\(([^)]*)\)/g)];
+    expect(exportadas.map((m) => m[1])).toEqual(["buscarSalidas"]);
+    expect(exportadas[0][2]).not.toMatch(/usuario|creadoPor|rol/i);
+    expect(codigo).toMatch(/return await consultar\("devoluciones:capturar", \(db\) => salidasDelSelector\(db, busqueda\)\)/);
+    expect(codigo.match(/consultar\("/g)).toHaveLength(1);
+    expect(codigo).not.toMatch(/accionProtegida\(|protegida\(|servicio|\$queryRaw|\$executeRaw/);
+  });
+
   it("la puerta común lee y valida dentro de accionProtegida(), y traduce la confirmación", () => {
     const codigo = readFileSync(join(RAIZ, "src/lib/inventario/acciones.ts"), "utf8");
     expect(codigo).toMatch(/return traducida\(\s*accionProtegida\(permiso, \(tx, usuario, entrada: I\) => \{\s*const r = esquema\.safeParse\(leer\(entrada\)\);/);

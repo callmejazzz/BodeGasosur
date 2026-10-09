@@ -2,8 +2,8 @@ import type { EstatusMovimiento } from "@prisma/client";
 import { hoyEnMexico, leerRangoDeFechas } from "@/lib/fechas";
 
 // Los filtros de las listas de traspasos, devoluciones, ajustes y conteos
-// viven en la URL: /traspasos?q=…&estatus=…&cursor=…; las hojas de conteo
-// además filtran por el día en que se abrieron: /conteos?desde=…&hasta=…
+// viven en la URL: /traspasos?q=…&estatus=…; las hojas de conteo además
+// filtran por el día en que se abrieron: /conteos?desde=…&hasta=…
 
 export type FiltroEstatus = "todos" | "borradores" | "confirmados" | "descartados";
 
@@ -44,12 +44,6 @@ export function aParametros(f: FiltrosDeLista): URLSearchParams {
   if (f.desde) p.set("desde", f.desde);
   if (f.hasta) p.set("hasta", f.hasta);
   return p;
-}
-
-export function enlaceDeTramo(ruta: string, f: FiltrosDeLista, cursor?: string): string {
-  const p = aParametros(f);
-  if (cursor) p.set("cursor", cursor);
-  return p.size ? `${ruta}?${p}` : ruta;
 }
 
 export const estatusDeFiltro = (f: FiltrosDeLista) => ESTATUS.find((e) => e.valor === f.estatus)?.estatus ?? "todos";

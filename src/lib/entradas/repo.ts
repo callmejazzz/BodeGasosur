@@ -2,6 +2,7 @@ import "server-only";
 import type { EstatusMovimiento, Prisma } from "@prisma/client";
 import type { FiltroEntradas, FiltroEstatus } from "@/lib/entradas/filtros";
 import { enOrden, idsDeLista, sql } from "@/lib/movimientos/lista";
+import type { Pagina } from "@/lib/paginacion";
 
 // Lecturas de entradas. Recibe el cliente: solo consultar() lo entrega.
 
@@ -32,22 +33,19 @@ const RESUMEN = {
 
 export type EntradaResumen = Prisma.MovimientoGetPayload<{ select: typeof RESUMEN }>;
 
-/** La lista se corta en 200: pasado eso, la pantalla avisa y pide afinar los filtros. */
-export const TOPE_LISTA = 200;
-
 /**
  * Borradores primero, del más recientemente tocado al más viejo; luego las
  * confirmadas por folio, del más alto al más bajo; al final las descartadas,
  * la más nueva arriba. Folio y clave de bodega se buscan como clave; la
  * referencia, el proveedor y el nombre de la bodega, sin acentos.
  */
-export async function listarEntradas(db: Db, filtro: FiltroEntradas): Promise<{ filas: EntradaResumen[]; hayMas: boolean }> {
+export async function listarEntradas(db: Db, filtro: FiltroEntradas, pedida = 1): Promise<{ filas: EntradaResumen[]; pagina: Pagina }> {
   const filtros = [sql`m.estatus::text = ANY(${ESTATUS_POR_FILTRO[filtro.estatus]}::text[])`];
   if (filtro.referencia === "con") filtros.push(sql`m.referencia IS NOT NULL`);
   if (filtro.referencia === "sin") filtros.push(sql`m.referencia IS NULL`);
   if (filtro.desde) filtros.push(sql`m.fecha >= ${filtro.desde}::date`);
   if (filtro.hasta) filtros.push(sql`m.fecha <= ${filtro.hasta}::date`);
-  const ids = await idsDeLista(db, {
+  const { ids, pagina } = await idsDeLista(db, {
     tipo: "ENTRADA",
     abiertos: ["BORRADOR"],
     abiertosPorToque: true,
@@ -56,11 +54,10 @@ export async function listarEntradas(db: Db, filtro: FiltroEntradas): Promise<{ 
     busqueda: filtro.busqueda,
     claves: [sql`m.folio`, sql`b.clave`],
     textos: [sql`m.referencia`, sql`p."nombreComercial"`, sql`b.nombre`],
-    tope: TOPE_LISTA + 1,
+    pagina: pedida,
   });
-  const visibles = ids.slice(0, TOPE_LISTA);
-  const filas = await db.movimiento.findMany({ where: { id: { in: visibles } }, select: RESUMEN });
-  return { filas: enOrden(visibles, filas), hayMas: ids.length > TOPE_LISTA };
+  const filas = await db.movimiento.findMany({ where: { id: { in: ids } }, select: RESUMEN });
+  return { filas: enOrden(ids, filas), pagina };
 }
 
 const DETALLE = {

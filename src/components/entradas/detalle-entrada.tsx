@@ -57,7 +57,8 @@ export function EncabezadoEntrada({ entrada }: { entrada: EntradaDetalle }) {
   );
 }
 
-export function PartidasEntrada({ entrada }: { entrada: EntradaDetalle }) {
+/** `pie` va entre la tabla y los totales: la paginación de las partidas. Los totales son de toda la entrada. */
+export function PartidasEntrada({ entrada, pie }: { entrada: EntradaDetalle; pie?: React.ReactNode }) {
   const m = entrada.moneda ?? "MXN";
   return (
     <>
@@ -94,6 +95,7 @@ export function PartidasEntrada({ entrada }: { entrada: EntradaDetalle }) {
           ))}
         </tbody>
       </Tabla>
+      {pie}
       <dl className="grid gap-x-8 gap-y-2 border-t border-border px-5 py-4 text-sm sm:grid-cols-3">
         <div className="flex justify-between sm:block"><dt className="text-muted">Subtotal</dt><dd className="tabular font-medium">{importe(entrada.subtotal, m)}</dd></div>
         <div className="flex justify-between sm:block"><dt className="text-muted">IVA</dt><dd className="tabular font-medium">{importe(entrada.iva, m)}</dd></div>

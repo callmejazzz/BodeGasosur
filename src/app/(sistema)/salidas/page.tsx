@@ -2,16 +2,17 @@ import { filaDeSalida } from "@/components/salidas/filas";
 import { FiltrosSalidas } from "@/components/salidas/filtros-salidas";
 import { TablaSalidas } from "@/components/salidas/tabla-salidas";
 import { ButtonLink } from "@/components/ui/button";
+import { Paginacion } from "@/components/ui/paginacion";
 import { Card, EncabezadoPagina, EstadoVacio } from "@/components/ui/superficies";
 import { consultar } from "@/lib/db";
-import { aParametros, enlaceDeTramo, hayFiltros } from "@/lib/salidas/filtros";
+import { aParametros, hayFiltros } from "@/lib/salidas/filtros";
 import { datosDeLista } from "@/lib/salidas/pantallas";
 
 export const dynamic = "force-dynamic";
 
 export default async function PaginaSalidas({ searchParams }: PageProps<"/salidas">) {
   // Sesión y permiso primero; los filtros se leen ya dentro de la puerta.
-  const { filtros, filas: resumen, devoluciones, hayMas, cursorActual, cursorSiguiente, puedeCapturar, pendientes } = await consultar("salidas:leer", async (db, usuario) =>
+  const { filtros, filas: resumen, devoluciones, pagina, puedeCapturar, pendientes } = await consultar("salidas:leer", async (db, usuario) =>
     datosDeLista(db, usuario, await searchParams),
   );
   const filtrando = hayFiltros(filtros);
@@ -39,36 +40,24 @@ export default async function PaginaSalidas({ searchParams }: PageProps<"/salida
       />
 
       <Card>
-        <FiltrosSalidas filtros={filtros} total={filas.length} hayMas={hayMas} esTramoAnterior={!!cursorActual} />
+        <FiltrosSalidas filtros={filtros} total={pagina.total} />
 
         {filas.length === 0 ? (
           <EstadoVacio
-            titulo={cursorActual ? "No quedan salidas en este tramo" : filtrando ? "Sin coincidencias" : "Todavía no hay salidas"}
+            titulo={filtrando ? "Sin coincidencias" : "Todavía no hay salidas"}
             descripcion={
-              cursorActual
-                ? "Vuelve a las más recientes o cambia los filtros."
-                : filtrando
+              filtrando
                 ? "Prueba con otra búsqueda o cambia el filtro."
                 : puedeCapturar
                   ? "Captura la primera solicitud de material para empezar."
                   : "Nadie ha solicitado ninguna todavía."
             }
-            accion={
-              cursorActual ? (
-                <ButtonLink href={enlaceDeTramo(filtros)} tamano="sm">Volver a las más recientes</ButtonLink>
-              ) : !filtrando && puedeCapturar ? (
-                <ButtonLink href="/salidas/nueva" tamano="sm" prefetch={false}>Nueva salida</ButtonLink>
-              ) : undefined
-            }
+            accion={!filtrando && puedeCapturar ? <ButtonLink href="/salidas/nueva" tamano="sm" prefetch={false}>Nueva salida</ButtonLink> : undefined}
           />
         ) : (
-          <TablaSalidas
-            key={`${aParametros(filtros)}:${cursorActual ?? ""}`}
-            filas={filas}
-            siguienteHref={cursorSiguiente ? enlaceDeTramo(filtros, cursorSiguiente) : null}
-            inicioHref={cursorActual ? enlaceDeTramo(filtros) : null}
-          />
+          <TablaSalidas filas={filas} />
         )}
+        <Paginacion pagina={pagina} ruta="/salidas" parametros={aParametros(filtros)} sustantivo="salidas" />
       </Card>
     </>
   );

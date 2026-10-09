@@ -6,9 +6,11 @@ import { RevertirMovimiento } from "@/components/inventario/revertir";
 import { AccionesSalida } from "@/components/salidas/acciones-salida";
 import { AvisosDeRetiro, EncabezadoSalida, HistorialSalida, PartidasSalida, ValuacionSalida } from "@/components/salidas/detalle-salida";
 import { ButtonLink } from "@/components/ui/button";
+import { Paginacion } from "@/components/ui/paginacion";
 import { Card, CardHeader, EncabezadoPagina } from "@/components/ui/superficies";
 import { consultar } from "@/lib/db";
 import { relacionesDeSalida } from "@/lib/inventario/pantallas";
+import { leerPagina, paginar, parametrosDePaginas } from "@/lib/paginacion";
 import { datosDeDetalle } from "@/lib/salidas/pantallas";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +26,7 @@ const DESCRIPCION: Record<string, string> = {
 
 const ACCIONES = { autorizar: autorizarSalida, rechazar: rechazarSalida, cancelar: cancelarSalida, retirar: retirarSalida, recibir: confirmarRecepcion };
 
-export default async function PaginaSalida({ params }: PageProps<"/salidas/[id]">) {
+export default async function PaginaSalida({ params, searchParams }: PageProps<"/salidas/[id]">) {
   // Sesión y permiso primero; el id se valida ya dentro de la puerta.
   const datos = await consultar("salidas:leer", async (db, usuario) => {
     const detalle = await datosDeDetalle(db, usuario, (await params).id);
@@ -32,6 +34,14 @@ export default async function PaginaSalida({ params }: PageProps<"/salidas/[id]"
   });
   if (!datos) notFound();
   const { salida, puede, existencias, valuacion, avisos, relaciones } = datos;
+
+  // Cada lista del detalle pagina por su cuenta: ?partidas=2&saldo=2&devoluciones=3
+  const sp = await searchParams;
+  const partidas = paginar(salida.partidas, leerPagina(sp.partidas));
+  const saldo = relaciones?.saldo ? paginar(relaciones.saldo, leerPagina(sp.saldo)) : null;
+  const devoluciones = relaciones ? paginar(relaciones.devoluciones, leerPagina(sp.devoluciones)) : null;
+  const paginas = parametrosDePaginas({ partidas: partidas.pagina, saldo: saldo?.pagina, devoluciones: devoluciones?.pagina });
+  const ruta = `/salidas/${salida.id}`;
 
   return (
     <>
@@ -50,13 +60,22 @@ export default async function PaginaSalida({ params }: PageProps<"/salidas/[id]"
           {relaciones?.revertir && salida.folio && <RevertirMovimiento id={salida.id} folio={salida.folio} revertir={revertirMovimiento} />}
         </Card>
 
-        {relaciones?.saldo && (
-          <Card>
+        {relaciones?.saldo && saldo && devoluciones && (
+          <Card id="saldo" className="scroll-mt-4">
             <CardHeader
               titulo={salida.esPrestamo ? "Préstamo" : "Devoluciones"}
               descripcion="Lo que volvió en devoluciones vigentes ligadas a esta salida. Una devolución sin salida no cuenta aquí."
             />
-            <SaldoDeSalida salidaId={salida.id} saldo={relaciones.saldo} devoluciones={relaciones.devoluciones} esPrestamo={salida.esPrestamo} puedeDevolver={relaciones.puedeDevolver} />
+            <SaldoDeSalida
+              salidaId={salida.id}
+              saldo={saldo.filas}
+              abierto={relaciones.saldo.some((s) => s.pendiente > 0)}
+              devoluciones={devoluciones.filas}
+              esPrestamo={salida.esPrestamo}
+              puedeDevolver={relaciones.puedeDevolver}
+              pieSaldo={<Paginacion pagina={saldo.pagina} ruta={ruta} parametros={paginas} parametro="saldo" ancla="saldo" sustantivo="artículos" />}
+              pieDevoluciones={<Paginacion pagina={devoluciones.pagina} ruta={ruta} parametros={paginas} parametro="devoluciones" ancla="saldo" sustantivo="devoluciones" />}
+            />
           </Card>
         )}
 
@@ -67,7 +86,7 @@ export default async function PaginaSalida({ params }: PageProps<"/salidas/[id]"
           </Card>
         )}
 
-        <Card>
+        <Card id="partidas" className="scroll-mt-4">
           <CardHeader
             titulo="Partidas"
             descripcion={
@@ -78,7 +97,8 @@ export default async function PaginaSalida({ params }: PageProps<"/salidas/[id]"
                   : undefined
             }
           />
-          <PartidasSalida salida={salida} existencias={existencias} />
+          <PartidasSalida salida={{ ...salida, partidas: partidas.filas }} existencias={existencias} />
+          <Paginacion pagina={partidas.pagina} ruta={ruta} parametros={paginas} parametro="partidas" ancla="partidas" sustantivo="partidas" />
           {valuacion && <ValuacionSalida valuacion={valuacion} />}
         </Card>
 

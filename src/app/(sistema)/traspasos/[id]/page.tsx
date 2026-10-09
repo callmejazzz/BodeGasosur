@@ -6,6 +6,7 @@ import { PaginaMovimiento } from "@/components/inventario/pagina-movimiento";
 import { Card, CardHeader } from "@/components/ui/superficies";
 import { consultar } from "@/lib/db";
 import { datosDeDetalle } from "@/lib/inventario/pantallas";
+import { leerPagina } from "@/lib/paginacion";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ const DESCRIPCION: Record<string, string> = {
   CANCELADO: "Borrador descartado. No tuvo efecto en existencias.",
 };
 
-export default async function PaginaTraspaso({ params }: PageProps<"/traspasos/[id]">) {
+export default async function PaginaTraspaso({ params, searchParams }: PageProps<"/traspasos/[id]">) {
   // Sesión y permiso primero; el id se valida ya dentro de la puerta.
   const datos = await consultar("traspasos:leer", async (db, usuario) => datosDeDetalle(db, usuario, "TRASPASO", (await params).id));
   if (!datos) notFound();
@@ -34,6 +35,7 @@ export default async function PaginaTraspaso({ params }: PageProps<"/traspasos/[
         texto: "Confirmar traspaso",
       }}
       revertir={revertirMovimiento}
+      paginaPartidas={leerPagina((await searchParams).partidas)}
       edicion={
         datos.opciones && (
           <Card>

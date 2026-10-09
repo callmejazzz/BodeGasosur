@@ -1,8 +1,9 @@
-import Link from "next/link";
 import { FilaAcceso } from "@/components/usuarios/fila-acceso";
+import { Paginacion } from "@/components/ui/paginacion";
 import { Card, CardHeader, EncabezadoPagina, EstadoVacio } from "@/components/ui/superficies";
 import { consultar, sesionActual, SinPermiso } from "@/lib/db";
-import { listarIdentidades, POR_PAGINA } from "@/lib/usuarios/clerk";
+import { acotarPagina, leerPagina, paginar, parametrosDePaginas } from "@/lib/paginacion";
+import { listarIdentidades } from "@/lib/usuarios/clerk";
 import { listarUsuarios, type UsuarioAdministrable } from "@/lib/usuarios/repo";
 import { guardarAcceso } from "./actions";
 
@@ -11,8 +12,8 @@ import { guardarAcceso } from "./actions";
 export const dynamic = "force-dynamic";
 
 export default async function PaginaUsuarios({ searchParams }: PageProps<"/usuarios">) {
-  const { p } = await searchParams;
-  const pagina = Math.max(1, Number(typeof p === "string" ? p : "1") || 1);
+  // Cada lista pagina por su cuenta: ?conAcceso=2&sinAcceso=3
+  const params = await searchParams;
 
   // 1. Autorizar y leer PostgreSQL. Si el rol no administra usuarios, esto
   //    lanza y se responde con una pantalla, no con un error del servidor.
@@ -35,15 +36,22 @@ export default async function PaginaUsuarios({ searchParams }: PageProps<"/usuar
   }
 
   // 2. Clerk, ya fuera de la transacción: es una petición HTTP y no puede
-  //    retener una conexión de PostgreSQL esperando a la red.
-  const { identidades, total } = await listarIdentidades(pagina);
+  //    retener una conexión de PostgreSQL esperando a la red. El total llega
+  //    con la respuesta: una página que ya no existe se pide otra vez, la última.
+  const pedida = leerPagina(params.sinAcceso);
+  let clerk = await listarIdentidades(pedida);
+  const paginaClerk = acotarPagina(pedida, clerk.total);
+  if (paginaClerk.actual !== pedida) clerk = await listarIdentidades(paginaClerk.actual);
+  const { identidades } = clerk;
 
   const sesion = await sesionActual();
   const miId = sesion.estado === "activa" ? sesion.usuario.id : null;
 
   const conAcceso = new Set(usuarios.map((u) => u.clerkUserId));
   const sinAcceso = identidades.filter((i) => !conAcceso.has(i.clerkUserId));
-  const ultimaPagina = Math.max(1, Math.ceil(total / POR_PAGINA));
+  const accesos = paginar(usuarios, leerPagina(params.conAcceso));
+  // Los enlaces de una lista conservan la página de la otra.
+  const paginas = parametrosDePaginas({ conAcceso: accesos.pagina, sinAcceso: paginaClerk });
 
   return (
     <>
@@ -60,7 +68,7 @@ export default async function PaginaUsuarios({ searchParams }: PageProps<"/usuar
         {usuarios.length === 0 ? (
           <EstadoVacio titulo="Todavía nadie tiene acceso" />
         ) : (
-          usuarios.map((u) => (
+          accesos.filas.map((u) => (
             <FilaAcceso
               key={u.clerkUserId}
               modo="con-acceso"
@@ -75,6 +83,7 @@ export default async function PaginaUsuarios({ searchParams }: PageProps<"/usuar
             />
           ))
         )}
+        <Paginacion pagina={accesos.pagina} ruta="/usuarios" parametros={paginas} parametro="conAcceso" sustantivo="usuarios con acceso" />
       </Card>
 
       <Card>
@@ -85,7 +94,7 @@ export default async function PaginaUsuarios({ searchParams }: PageProps<"/usuar
         {sinAcceso.length === 0 ? (
           <EstadoVacio
             titulo="Ninguna identidad pendiente en esta página"
-            descripcion={total > POR_PAGINA ? "Hay más identidades en otras páginas." : undefined}
+            descripcion={paginaClerk.ultima > 1 ? "Hay más identidades en otras páginas." : undefined}
           />
         ) : (
           sinAcceso.map((i) => (
@@ -100,25 +109,7 @@ export default async function PaginaUsuarios({ searchParams }: PageProps<"/usuar
           ))
         )}
 
-        {ultimaPagina > 1 && (
-          <div className="flex items-center justify-between border-t border-border px-5 py-3 text-sm">
-            <span className="text-muted">
-              Página {pagina} de {ultimaPagina} · {total} identidades en Clerk
-            </span>
-            <span className="flex gap-3">
-              {pagina > 1 && (
-                <Link href={`/usuarios?p=${pagina - 1}`} className="text-primary hover:underline">
-                  Anterior
-                </Link>
-              )}
-              {pagina < ultimaPagina && (
-                <Link href={`/usuarios?p=${pagina + 1}`} className="text-primary hover:underline">
-                  Siguiente
-                </Link>
-              )}
-            </span>
-          </div>
-        )}
+        <Paginacion pagina={paginaClerk} ruta="/usuarios" parametros={paginas} parametro="sinAcceso" sustantivo="identidades en Clerk" />
       </Card>
     </>
   );

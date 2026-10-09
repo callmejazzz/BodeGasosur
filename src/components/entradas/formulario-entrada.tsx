@@ -3,6 +3,7 @@
 import { startTransition, useActionState, useState } from "react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Campo, Input, Select, Textarea } from "@/components/ui/campos";
+import { PaginacionLocal, usePaginaLocal } from "@/components/ui/paginacion-local";
 import {
   ESTADO_INICIAL,
   PARTIDA_VACIA,
@@ -12,6 +13,7 @@ import {
   type ValoresPartida,
 } from "@/lib/entradas/formulario";
 import type { OpcionesCaptura } from "@/lib/entradas/repo";
+import { paginasConError } from "@/lib/paginacion";
 import { cn } from "@/lib/utils";
 
 const TASAS = [
@@ -45,6 +47,7 @@ export function FormularioEntrada({
   // como el servidor las numera al devolver errores.
   const [filas, setFilas] = useState<Fila[]>(() => valores.partidas.map((p, i) => ({ clave: i, valores: p })));
   const [siguiente, setSiguiente] = useState(valores.partidas.length);
+  const { contenedor, pagina, irA, visible, alFinal } = usePaginaLocal(filas.length);
 
   const cambiarEncabezado = <K extends keyof ValoresEncabezado>(campo: K, valor: ValoresEncabezado[K]) =>
     setEncabezado((e) => ({ ...e, [campo]: valor }));
@@ -53,6 +56,7 @@ export function FormularioEntrada({
   const agregar = () => {
     setFilas((f) => [...f, { clave: siguiente, valores: { ...PARTIDA_VACIA } }]);
     setSiguiente((n) => n + 1);
+    alFinal(filas.length + 1);
   };
   const quitar = (clave: number) => setFilas((f) => (f.length > 1 ? f.filter((x) => x.clave !== clave) : f));
 
@@ -134,7 +138,7 @@ export function FormularioEntrada({
         </Campo>
       </div>
 
-      <div>
+      <div ref={contenedor} className="scroll-mt-4">
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-foreground">Partidas</h3>
           <Button type="button" variante="secundario" tamano="sm" onClick={agregar}>
@@ -148,6 +152,7 @@ export function FormularioEntrada({
             <FilaPartida
               key={clave}
               posicion={i}
+              oculta={!visible(i)}
               valores={p}
               articulos={opciones.articulos}
               moneda={encabezado.moneda}
@@ -157,6 +162,7 @@ export function FormularioEntrada({
             />
           ))}
         </div>
+        <PaginacionLocal pagina={pagina} irA={irA} sustantivo="partidas" conErrores={paginasConError(estado.errores)} className="mt-3 px-0" />
       </div>
 
       <div className="flex items-center justify-end gap-2 border-t border-border pt-4">
@@ -173,6 +179,7 @@ export function FormularioEntrada({
 
 function FilaPartida({
   posicion,
+  oculta,
   valores,
   articulos,
   moneda,
@@ -181,6 +188,8 @@ function FilaPartida({
   onQuitar,
 }: {
   posicion: number;
+  /** En otra página: sigue en el formulario, sin verse. */
+  oculta: boolean;
   valores: ValoresPartida;
   articulos: OpcionesCaptura["articulos"];
   moneda: "MXN" | "USD";
@@ -198,7 +207,7 @@ function FilaPartida({
   const conError = Object.keys(errores).some((k) => k.startsWith(`partidas.${posicion}.`));
 
   return (
-    <fieldset className={cn("rounded-md border border-border p-4", conError && "border-danger/50")}>
+    <fieldset data-fila={posicion} hidden={oculta} className={cn("rounded-md border border-border p-4", conError && "border-danger/50")}>
       <div className="mb-3 flex items-center justify-between">
         <legend className="text-xs font-semibold tracking-wide text-muted uppercase">Partida {posicion + 1}</legend>
         {onQuitar && (

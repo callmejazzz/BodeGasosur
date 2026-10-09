@@ -3,6 +3,8 @@
 import { startTransition, useActionState, useState } from "react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Campo, Checkbox, Input, Select, Textarea } from "@/components/ui/campos";
+import { PaginacionLocal, usePaginaLocal } from "@/components/ui/paginacion-local";
+import { paginasConError } from "@/lib/paginacion";
 import { ESTADO_INICIAL, type EstadoSalida } from "@/lib/salidas/formulario";
 import type { OpcionesCaptura } from "@/lib/salidas/repo";
 import { cantidad, cn } from "@/lib/utils";
@@ -29,12 +31,14 @@ export function FormularioSalida({
   // intermedia; el name usa la posición, que es como el servidor numera los errores.
   const [filas, setFilas] = useState<Fila[]>([{ clave: 0, valores: { ...PARTIDA_VACIA } }]);
   const [siguiente, setSiguiente] = useState(1);
+  const { contenedor, pagina, irA, visible, alFinal } = usePaginaLocal(filas.length);
 
   const cambiarFila = (clave: number, cambio: Partial<ValoresPartida>) =>
     setFilas((f) => f.map((x) => (x.clave === clave ? { ...x, valores: { ...x.valores, ...cambio } } : x)));
   const agregar = () => {
     setFilas((f) => [...f, { clave: siguiente, valores: { ...PARTIDA_VACIA } }]);
     setSiguiente((n) => n + 1);
+    alFinal(filas.length + 1);
   };
   const quitar = (clave: number) => setFilas((f) => (f.length > 1 ? f.filter((x) => x.clave !== clave) : f));
 
@@ -107,7 +111,7 @@ export function FormularioSalida({
         </label>
       </div>
 
-      <div>
+      <div ref={contenedor} className="scroll-mt-4">
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-foreground">Partidas</h3>
           <Button type="button" variante="secundario" tamano="sm" onClick={agregar}>
@@ -121,6 +125,7 @@ export function FormularioSalida({
             <FilaPartida
               key={clave}
               posicion={i}
+              oculta={!visible(i)}
               valores={p}
               articulos={opciones.articulos}
               bodega={bodega?.nombre ?? null}
@@ -131,6 +136,7 @@ export function FormularioSalida({
             />
           ))}
         </div>
+        <PaginacionLocal pagina={pagina} irA={irA} sustantivo="partidas" conErrores={paginasConError(estado.errores)} className="mt-3 px-0" />
       </div>
 
       <div className="flex items-center justify-end gap-2 border-t border-border pt-4">
@@ -147,6 +153,7 @@ export function FormularioSalida({
 
 function FilaPartida({
   posicion,
+  oculta,
   valores,
   articulos,
   bodega,
@@ -156,6 +163,8 @@ function FilaPartida({
   onQuitar,
 }: {
   posicion: number;
+  /** En otra página: sigue en el formulario, sin verse. */
+  oculta: boolean;
   valores: ValoresPartida;
   articulos: OpcionesCaptura["articulos"];
   bodega: string | null;
@@ -178,7 +187,7 @@ function FilaPartida({
   const conError = Object.keys(errores).some((k) => k.startsWith(`partidas.${posicion}.`));
 
   return (
-    <fieldset className={cn("rounded-md border border-border p-4", conError && "border-danger/50")}>
+    <fieldset data-fila={posicion} hidden={oculta} className={cn("rounded-md border border-border p-4", conError && "border-danger/50")}>
       <div className="mb-3 flex items-center justify-between">
         <legend className="text-xs font-semibold tracking-wide text-muted uppercase">Partida {posicion + 1}</legend>
         {onQuitar && (

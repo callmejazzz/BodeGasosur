@@ -1,7 +1,9 @@
 import "server-only";
 import type { EstatusConteo, EstatusMovimiento, Prisma, TipoMovimiento } from "@prisma/client";
 import { diaSiguiente, inicioDelDiaEnMexico } from "@/lib/fechas";
-import { enOrden, idsDeLista, sql } from "@/lib/movimientos/lista";
+import { enOrden, idsDeLista, paginaDe, sql } from "@/lib/movimientos/lista";
+import { acotarPagina, POR_PAGINA, saltoDe, type Pagina } from "@/lib/paginacion";
+import { saldoDeSalida } from "./primitivas";
 
 // Lecturas de traspasos, devoluciones, ajustes, préstamos y hojas de conteo.
 // Reciben el cliente: solo consultar() lo entrega, con la sesión y el permiso
@@ -10,9 +12,6 @@ import { enOrden, idsDeLista, sql } from "@/lib/movimientos/lista";
 type Db = Prisma.TransactionClient;
 
 export type TipoInventario = Extract<TipoMovimiento, "TRASPASO" | "DEVOLUCION" | "AJUSTE">;
-
-/** Cada tramo entrega hasta 200 filas; el cursor permite ver las anteriores. */
-export const TOPE_LISTA = 200;
 
 /** A dónde lleva un movimiento según su tipo. */
 export function rutaDeMovimiento(tipo: TipoMovimiento, id: string): string {
@@ -42,22 +41,21 @@ const RESUMEN = {
 
 export type MovimientoResumen = Prisma.MovimientoGetPayload<{ select: typeof RESUMEN }>;
 
-export type FiltroMovimientos = { estatus: EstatusMovimiento | "todos"; busqueda: string; cursor?: string };
+export type FiltroMovimientos = { estatus: EstatusMovimiento | "todos"; busqueda: string };
 
 /**
  * Borradores primero; luego los confirmados por folio, del más alto al más
  * bajo; al final los descartados. Dentro de borradores y descartados, lo más
- * nuevo arriba; el id desempata y hace estable el cursor.
+ * nuevo arriba; el id desempata, así que las páginas no se enciman.
  *
  * La reversa de un traspaso no es una fila: vive en el historial del
  * revertido, y buscar su folio encuentra a ese traspaso.
  */
-export async function listarMovimientos(db: Db, tipo: TipoInventario, filtro: FiltroMovimientos) {
-  const cursor = filtro.cursor ? await db.movimiento.findFirst({ where: { id: filtro.cursor, tipo }, select: { id: true } }) : null;
+export async function listarMovimientos(db: Db, tipo: TipoInventario, filtro: FiltroMovimientos, pedida = 1) {
   const sinReversas = tipo === "TRASPASO";
   const filtros = sinReversas ? [sql`m."cancelaAId" IS NULL`] : [];
   if (filtro.estatus !== "todos") filtros.push(sql`m.estatus = ${filtro.estatus}::"EstatusMovimiento"`);
-  const ids = await idsDeLista(db, {
+  const { ids, pagina } = await idsDeLista(db, {
     tipo,
     abiertos: ["BORRADOR"],
     joins: sql`
@@ -69,13 +67,9 @@ export async function listarMovimientos(db: Db, tipo: TipoInventario, filtro: Fi
     busqueda: filtro.busqueda.slice(0, 80),
     claves: sinReversas ? [sql`m.folio`, sql`r.folio`, sql`o.clave`, sql`d.clave`, sql`s.numero`] : [sql`m.folio`, sql`o.clave`, sql`d.clave`, sql`s.numero`],
     textos: [sql`o.nombre`, sql`d.nombre`, sql`s.alias`, sql`m.motivo`, sql`m.observaciones`],
-    cursor: cursor?.id,
-    tope: TOPE_LISTA + 1,
+    pagina: pedida,
   });
-  const hayMas = ids.length > TOPE_LISTA;
-  const visibles = ids.slice(0, TOPE_LISTA);
-  const filas = enOrden(visibles, await db.movimiento.findMany({ where: { id: { in: visibles } }, select: RESUMEN }));
-  return { filas, hayMas, cursorActual: cursor?.id ?? null, cursorSiguiente: hayMas ? visibles.at(-1)! : null };
+  return { filas: enOrden(ids, await db.movimiento.findMany({ where: { id: { in: ids } }, select: RESUMEN })), pagina };
 }
 
 // ──────────────────────────────── Detalle ────────────────────────────────────
@@ -96,7 +90,7 @@ const DETALLE = {
   bodegaDestino: { select: { clave: true, nombre: true, activa: true } },
   estacion: { select: { numero: true, alias: true, activa: true } },
   conteo: { select: { id: true, motivo: true } },
-  devuelveA: { select: { ...REFERENCIA, bodegaOrigen: { select: { id: true, clave: true, nombre: true } } } },
+  devuelveA: { select: { ...REFERENCIA, esPrestamo: true, bodegaOrigen: { select: { id: true, clave: true, nombre: true } } } },
   creadoPor: { select: { correo: true } },
   confirmadoPor: { select: { correo: true } },
   canceladoPorUsuario: { select: { correo: true } },
@@ -209,37 +203,92 @@ export async function existenciasPorBodega(db: Db): Promise<Record<string, Recor
 export type SalidaDevolvible = {
   id: string;
   folio: string;
-  estacionId: string;
   esPrestamo: boolean;
+  /** La estación a la que salió: la devolución viene de ahí. */
+  estacion: Opcion;
   /** La bodega de la que salió: la devolución regresa ahí. */
   bodega: Opcion;
-  /** articuloId → lo que falta por volver. */
+  /** articuloId → lo que falta por volver; vacío si ya volvió todo. */
   pendientes: Record<string, number>;
 };
 
+/** El enlace desde una salida o un préstamo trae el id; la búsqueda del formulario, el folio. */
+export type ConsultaDeSalida = { id: string } | { folio: string };
+
+/** La salida con lo que falta por volver, o por qué no admite devolución. */
+export type SalidaConsultada = { salida: SalidaDevolvible; motivo?: undefined } | { salida?: undefined; motivo: string };
+
 /**
- * Salidas retiradas o recibidas, sin reversa, con algo pendiente por volver:
- * las que una devolución puede vincular. Las más recientes primero.
+ * Una salida para vincularla a una devolución. Las mismas reglas que la
+ * captura vuelve a exigir al guardar: retirada o recibida, sin reversa y con
+ * algo pendiente. El folio se compara como clave (S-000012, s12, 12).
  */
-export async function salidasDevolvibles(db: Db, estacionId?: string): Promise<SalidaDevolvible[]> {
-  const filas = await db.$queryRaw<{ id: string; folio: string; estacionId: string; esPrestamo: boolean; bodegaId: string; bodega: string; articuloId: string; pendiente: number }[]>`
-    SELECT m.id, m.folio, m."estacionId", m."esPrestamo", b.id AS "bodegaId", b.clave || ' · ' || b.nombre AS bodega, p."articuloId",
-           (p.cantidad - coalesce((
-             SELECT sum(c."cantidadInicial") FROM "CapaCosto" c JOIN "Movimiento" d ON d.id = c."movimientoId"
-             WHERE d."devuelveAId" = m.id AND c."articuloId" = p."articuloId" AND devolucion_vigente(d.id)), 0))::int AS pendiente
-    FROM "Movimiento" m JOIN "MovimientoPartida" p ON p."movimientoId" = m.id JOIN "Bodega" b ON b.id = m."bodegaOrigenId"
-    WHERE m.tipo = 'SALIDA' AND m.estatus IN ('RETIRADA','RECIBIDA')
-      AND (${estacionId ?? null}::uuid IS NULL OR m."estacionId" = ${estacionId ?? null}::uuid)
-      AND NOT EXISTS (SELECT 1 FROM "Movimiento" r WHERE r."cancelaAId" = m.id)
-      AND m.id IN (SELECT id FROM "Movimiento" WHERE tipo = 'SALIDA' AND estatus IN ('RETIRADA','RECIBIDA') ORDER BY "entregadoEn" DESC LIMIT 500)
-    ORDER BY m."entregadoEn" DESC, p.orden`;
-  const salidas = new Map<string, SalidaDevolvible>();
-  for (const f of filas) {
-    const s = salidas.get(f.id) ?? { id: f.id, folio: f.folio, estacionId: f.estacionId, esPrestamo: f.esPrestamo, bodega: { id: f.bodegaId, nombre: f.bodega }, pendientes: {} };
-    if (f.pendiente > 0) s.pendientes[f.articuloId] = f.pendiente;
-    salidas.set(f.id, s);
-  }
-  return [...salidas.values()].filter((s) => Object.keys(s.pendientes).length > 0);
+export async function salidaParaDevolver(db: Db, consulta: ConsultaDeSalida): Promise<SalidaConsultada> {
+  const id = "id" in consulta ? consulta.id : null;
+  const tecleado = "folio" in consulta ? consulta.folio : null;
+  // Solo el número: se entiende como folio de salida.
+  const folio = tecleado !== null && /^\d+$/.test(tecleado) ? `S-${tecleado}` : tecleado;
+  const [s] = await db.$queryRaw<{ id: string; folio: string | null; estatus: string; esPrestamo: boolean; estacionId: string; estacion: string; bodegaId: string; bodega: string; revertida: boolean }[]>`
+    SELECT m.id, m.folio, m.estatus::text AS estatus, m."esPrestamo",
+           s.id AS "estacionId", s.numero || ' · ' || s.alias AS estacion, b.id AS "bodegaId", b.clave || ' · ' || b.nombre AS bodega,
+           EXISTS (SELECT 1 FROM "Movimiento" r WHERE r."cancelaAId" = m.id) AS revertida
+    FROM "Movimiento" m
+    JOIN catalogo_gasosur."Estacion" s ON s.id = m."estacionId"
+    JOIN "Bodega" b ON b.id = m."bodegaOrigenId"
+    WHERE m.tipo = 'SALIDA' AND (m.id = ${id}::uuid OR clave_normalizada(m.folio) = clave_normalizada(${folio}))
+    LIMIT 1`;
+  if (!s) return { motivo: tecleado === null ? "La salida del enlace no existe." : `No hay una salida con el folio ${tecleado}.` };
+  if (s.estatus !== "RETIRADA" && s.estatus !== "RECIBIDA") return { motivo: "Solo se devuelve material de una salida ya retirada o recibida." };
+  if (s.revertida) return { motivo: `La salida ${s.folio} fue revertida: ya no admite devoluciones.` };
+  const pendientes = Object.fromEntries((await saldoDeSalida(db, s.id)).filter((a) => a.pendiente > 0).map((a) => [a.articuloId, a.pendiente]));
+  const salida: SalidaDevolvible = {
+    id: s.id,
+    folio: s.folio!,
+    esPrestamo: s.esPrestamo,
+    estacion: { id: s.estacionId, nombre: s.estacion },
+    bodega: { id: s.bodegaId, nombre: s.bodega },
+    pendientes,
+  };
+  return Object.keys(pendientes).length ? { salida } : { motivo: `De la salida ${s.folio} ya volvió todo lo que salió.` };
+}
+
+/**
+ * Las salidas que una devolución puede vincular —retiradas o recibidas, sin
+ * reversa y con algo pendiente—, la más reciente arriba, una página a la vez.
+ * El texto busca en folio y número de estación como clave, y en alias de
+ * estación y bodega sin acentos.
+ */
+export async function listarSalidasDevolvibles(db: Db, filtro: { estacionId: string | null; texto: string }, pedida = 1): Promise<{ filas: SalidaDevolvible[]; pagina: Pagina }> {
+  const q = filtro.texto.trim();
+  const { filas, pagina } = await paginaDe<SalidaDevolvible>(
+    db,
+    sql`
+      SELECT m.id, m.folio, m."esPrestamo", m."entregadoEn",
+             jsonb_build_object('id', s.id, 'nombre', s.numero || ' · ' || s.alias) AS estacion,
+             jsonb_build_object('id', b.id, 'nombre', b.clave || ' · ' || b.nombre) AS bodega,
+             jsonb_object_agg(p."articuloId", p.cantidad - x.devuelto) FILTER (WHERE p.cantidad > x.devuelto) AS pendientes
+      FROM "Movimiento" m
+      JOIN "MovimientoPartida" p ON p."movimientoId" = m.id
+      CROSS JOIN LATERAL (
+        SELECT coalesce(sum(c."cantidadInicial"), 0)::int AS devuelto FROM "CapaCosto" c JOIN "Movimiento" d ON d.id = c."movimientoId"
+        WHERE d."devuelveAId" = m.id AND c."articuloId" = p."articuloId" AND devolucion_vigente(d.id)) x
+      JOIN catalogo_gasosur."Estacion" s ON s.id = m."estacionId"
+      JOIN "Bodega" b ON b.id = m."bodegaOrigenId"
+      WHERE m.tipo = 'SALIDA' AND m.estatus IN ('RETIRADA','RECIBIDA')
+        AND NOT EXISTS (SELECT 1 FROM "Movimiento" r WHERE r."cancelaAId" = m.id)
+        AND (${filtro.estacionId}::uuid IS NULL OR m."estacionId" = ${filtro.estacionId}::uuid)
+        AND (${q} = ''
+          OR (clave_normalizada(${q}) <> '' AND (position(clave_normalizada(${q}) IN clave_normalizada(m.folio)) > 0
+                                              OR position(clave_normalizada(${q}) IN clave_normalizada(s.numero)) > 0))
+          OR position(texto_buscable(${q}) IN texto_buscable(s.alias)) > 0
+          OR position(texto_buscable(${q}) IN texto_buscable(b.nombre)) > 0)
+      GROUP BY m.id, s.id, b.id
+      HAVING bool_or(p.cantidad > x.devuelto)`,
+    sql`"entregadoEn" DESC, id DESC`,
+    pedida,
+  );
+  // Solo lo que el selector necesita: la fila trae además la fecha de orden y el total.
+  return { filas: filas.map((s) => ({ id: s.id, folio: s.folio, esPrestamo: s.esPrestamo, estacion: s.estacion, bodega: s.bodega, pendientes: s.pendientes })), pagina };
 }
 
 // ──────────────────────────────── Préstamos ──────────────────────────────────
@@ -260,28 +309,29 @@ export type Prestamo = {
 /**
  * Salidas marcadas como préstamo, retiradas o recibidas y sin reversa, con
  * lo retirado, lo devuelto en devoluciones vigentes y lo que falta. Abierto
- * mientras falte cualquier pieza de cualquier artículo.
+ * mientras falte cualquier pieza de cualquier artículo. El más antiguo
+ * primero: es el que lleva más tiempo fuera.
  */
-export async function listarPrestamos(db: Db, estado: EstadoPrestamo): Promise<Prestamo[]> {
-  return db.$queryRaw<Prestamo[]>`
-    WITH saldo AS (
-      SELECT p."movimientoId", p.cantidad AS retirado,
-             coalesce((SELECT sum(c."cantidadInicial") FROM "CapaCosto" c JOIN "Movimiento" d ON d.id = c."movimientoId"
-                       WHERE d."devuelveAId" = p."movimientoId" AND c."articuloId" = p."articuloId" AND devolucion_vigente(d.id)), 0) AS devuelto
-      FROM "MovimientoPartida" p
-    )
-    SELECT m.id, m.folio, m.fecha, s.alias AS estacion, b.nombre AS bodega,
-           sum(x.retirado)::int AS retirado, sum(x.devuelto)::int AS devuelto, sum(x.retirado - x.devuelto)::int AS pendiente
-    FROM "Movimiento" m
-    JOIN saldo x ON x."movimientoId" = m.id
-    JOIN catalogo_gasosur."Estacion" s ON s.id = m."estacionId"
-    JOIN "Bodega" b ON b.id = m."bodegaOrigenId"
-    WHERE m.tipo = 'SALIDA' AND m."esPrestamo" AND m.estatus IN ('RETIRADA','RECIBIDA')
-      AND NOT EXISTS (SELECT 1 FROM "Movimiento" r WHERE r."cancelaAId" = m.id)
-    GROUP BY m.id, m.folio, m.fecha, s.alias, b.nombre, m."entregadoEn"
-    HAVING ${estado} = 'todos' OR (${estado} = 'abiertos') = bool_or(x.retirado > x.devuelto)
-    ORDER BY m."entregadoEn" ASC
-    LIMIT 500`;
+export async function listarPrestamos(db: Db, estado: EstadoPrestamo, pedida = 1): Promise<{ filas: Prestamo[]; pagina: Pagina }> {
+  return paginaDe<Prestamo>(
+    db,
+    sql`
+      SELECT m.id, m.folio, m.fecha, m."entregadoEn", s.alias AS estacion, b.nombre AS bodega,
+             sum(p.cantidad)::int AS retirado, sum(x.devuelto)::int AS devuelto, sum(p.cantidad - x.devuelto)::int AS pendiente
+      FROM "Movimiento" m
+      JOIN "MovimientoPartida" p ON p."movimientoId" = m.id
+      CROSS JOIN LATERAL (
+        SELECT coalesce(sum(c."cantidadInicial"), 0) AS devuelto FROM "CapaCosto" c JOIN "Movimiento" d ON d.id = c."movimientoId"
+        WHERE d."devuelveAId" = m.id AND c."articuloId" = p."articuloId" AND devolucion_vigente(d.id)) x
+      JOIN catalogo_gasosur."Estacion" s ON s.id = m."estacionId"
+      JOIN "Bodega" b ON b.id = m."bodegaOrigenId"
+      WHERE m.tipo = 'SALIDA' AND m."esPrestamo" AND m.estatus IN ('RETIRADA','RECIBIDA')
+        AND NOT EXISTS (SELECT 1 FROM "Movimiento" r WHERE r."cancelaAId" = m.id)
+      GROUP BY m.id, s.alias, b.nombre
+      HAVING ${estado} = 'todos' OR (${estado} = 'abiertos') = bool_or(p.cantidad > x.devuelto)`,
+    sql`"entregadoEn", id`,
+    pedida,
+  );
 }
 
 export type EstadoDevolucion = "completa" | "parcial";
@@ -328,28 +378,26 @@ const RESUMEN_HOJA = {
 export type HojaResumen = Prisma.HojaConteoGetPayload<{ select: typeof RESUMEN_HOJA }>;
 
 /** La más reciente arriba. Las fechas son días de México sobre el instante en que se abrió. */
-export async function listarHojas(db: Db, filtro: { estatus: EstatusConteo | "todos"; desde?: string; hasta?: string; cursor?: string }) {
-  const cursor = filtro.cursor ? await db.hojaConteo.findFirst({ where: { id: filtro.cursor }, select: { id: true } }) : null;
+export async function listarHojas(db: Db, filtro: { estatus: EstatusConteo | "todos"; desde?: string; hasta?: string }, pedida = 1) {
+  const where: Prisma.HojaConteoWhereInput = {
+    estatus: filtro.estatus === "todos" ? undefined : filtro.estatus,
+    createdAt:
+      filtro.desde || filtro.hasta
+        ? {
+            gte: filtro.desde ? inicioDelDiaEnMexico(filtro.desde) : undefined,
+            lt: filtro.hasta ? inicioDelDiaEnMexico(diaSiguiente(filtro.hasta)) : undefined,
+          }
+        : undefined,
+  };
+  const pagina = acotarPagina(pedida, await db.hojaConteo.count({ where }));
   const filas = await db.hojaConteo.findMany({
-    where: {
-      estatus: filtro.estatus === "todos" ? undefined : filtro.estatus,
-      createdAt:
-        filtro.desde || filtro.hasta
-          ? {
-              gte: filtro.desde ? inicioDelDiaEnMexico(filtro.desde) : undefined,
-              lt: filtro.hasta ? inicioDelDiaEnMexico(diaSiguiente(filtro.hasta)) : undefined,
-            }
-          : undefined,
-    },
+    where,
     select: RESUMEN_HOJA,
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    cursor: cursor ? { id: cursor.id } : undefined,
-    skip: cursor ? 1 : undefined,
-    take: TOPE_LISTA + 1,
+    skip: saltoDe(pagina),
+    take: POR_PAGINA,
   });
-  const hayMas = filas.length > TOPE_LISTA;
-  const visibles = filas.slice(0, TOPE_LISTA);
-  return { filas: visibles, hayMas, cursorActual: cursor?.id ?? null, cursorSiguiente: hayMas ? visibles.at(-1)!.id : null };
+  return { filas, pagina };
 }
 
 const DETALLE_HOJA = {

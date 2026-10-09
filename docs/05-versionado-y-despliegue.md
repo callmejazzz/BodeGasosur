@@ -100,8 +100,8 @@ cambiar `package.json` ni el CHANGELOG. La `v0.6.0` se publicó después en un c
 versión aparte, que agrupa los cuatro commits de la fase, y la etiqueta apunta a él.
 
 **Fase 7:** se construyó completa antes del registro en Git. Su cierre funcional,
-versión `v0.7.0` y documentación se reúnen en un único commit local. La etiqueta y
-la distribución quedan para otro momento; no forman parte de este cierre.
+versión `v0.7.0` y documentación se reúnen en un único commit, `2ac6ca3`, etiquetado y
+publicado. Las correcciones de la revisión de ese código salen como el parche `v0.7.1`.
 
 Los mensajes de commit siguen siendo prosa en español que describe decisiones. **No se
 adopta Conventional Commits:** con ocho fases y un desarrollador, el changelog a mano sale

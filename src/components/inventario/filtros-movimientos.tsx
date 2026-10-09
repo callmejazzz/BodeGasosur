@@ -8,14 +8,12 @@ import { aParametros, ESTATUS, hayFiltros, SIN_FILTROS, SIN_FILTROS_DE_HOJAS, ty
 export function FiltrosMovimientos({
   filtros,
   total,
-  tramo,
   sustantivo,
   busqueda = true,
   fechas = false,
 }: {
   filtros: FiltrosDeLista;
   total: number;
-  tramo: boolean;
   sustantivo: [string, string];
   busqueda?: boolean;
   /** Rango de días, como en entradas. */
@@ -48,7 +46,7 @@ export function FiltrosMovimientos({
         )}
       </div>
       <p className="text-sm text-muted tabular" aria-live="polite">
-        {pendiente ? "Buscando…" : `${total} ${total === 1 ? sustantivo[0] : sustantivo[1]}${tramo ? " en este tramo" : ""}`}
+        {pendiente ? "Buscando…" : `${total} ${total === 1 ? sustantivo[0] : sustantivo[1]}`}
       </p>
     </div>
   );

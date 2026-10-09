@@ -2,9 +2,11 @@ import { AccionesBorrador } from "@/components/inventario/acciones-borrador";
 import { EncabezadoMovimiento, Historial, PartidasMovimiento, pasosDeMovimiento, ValuacionDeMovimiento } from "@/components/inventario/detalle-movimiento";
 import { RevertirMovimiento } from "@/components/inventario/revertir";
 import { ButtonLink } from "@/components/ui/button";
+import { Paginacion } from "@/components/ui/paginacion";
 import { Card, CardHeader, EncabezadoPagina } from "@/components/ui/superficies";
 import type { ResultadoAccion } from "@/lib/inventario/acciones";
 import type { datosDeDetalle } from "@/lib/inventario/pantallas";
+import { paginar, parametrosDePaginas } from "@/lib/paginacion";
 
 type Datos = NonNullable<Awaited<ReturnType<typeof datosDeDetalle>>>;
 
@@ -20,6 +22,7 @@ export function PaginaMovimiento({
   borrador,
   revertir,
   edicion,
+  paginaPartidas = 1,
 }: {
   datos: Datos;
   nombre: string;
@@ -29,8 +32,11 @@ export function PaginaMovimiento({
   revertir: (id: string, motivo: string) => Promise<ResultadoAccion>;
   /** El formulario de edición, ya armado por la página: solo llega si puede editar. */
   edicion?: React.ReactNode;
+  /** La página de partidas pedida en la URL (?partidas=N). */
+  paginaPartidas?: number;
 }) {
   const { movimiento: m, puede, reversa, valuacion, existencias, saldo } = datos;
+  const partidas = paginar(m.partidas, paginaPartidas);
   const pendientes = saldo ? Object.fromEntries(saldo.map((s) => [s.articuloId, s.pendiente])) : null;
 
   return (
@@ -49,7 +55,7 @@ export function PaginaMovimiento({
         </Card>
 
         {edicion ?? (
-          <Card>
+          <Card id="partidas" className="scroll-mt-4">
             <CardHeader
               titulo="Partidas"
               descripcion={
@@ -60,7 +66,15 @@ export function PaginaMovimiento({
                     : undefined
               }
             />
-            <PartidasMovimiento m={m} existencias={existencias} pendientes={pendientes} />
+            <PartidasMovimiento m={{ ...m, partidas: partidas.filas }} existencias={existencias} pendientes={pendientes} />
+            <Paginacion
+              pagina={partidas.pagina}
+              ruta={`${lista.href}/${m.id}`}
+              parametros={parametrosDePaginas({ partidas: partidas.pagina })}
+              parametro="partidas"
+              ancla="partidas"
+              sustantivo="partidas"
+            />
             {valuacion && <ValuacionDeMovimiento v={valuacion} />}
           </Card>
         )}

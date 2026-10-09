@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { ButtonLink } from "@/components/ui/button";
+import { Paginacion } from "@/components/ui/paginacion";
 import { Badge, Card, EncabezadoPagina, EstadoVacio } from "@/components/ui/superficies";
 import { Tabla, Td, Th, Tr } from "@/components/ui/tabla";
 import { consultar } from "@/lib/db";
 import { formatearFecha } from "@/lib/fechas";
 import { listarPrestamos, type EstadoPrestamo } from "@/lib/inventario/repo";
+import { acotarPagina, leerPagina } from "@/lib/paginacion";
 import { usuarioTienePermiso } from "@/lib/permisos";
 import { cantidad } from "@/lib/utils";
 
@@ -17,13 +19,14 @@ const ESTADOS: { valor: EstadoPrestamo; etiqueta: string }[] = [
 ];
 
 export default async function PaginaPrestamos({ searchParams }: PageProps<"/prestamos">) {
-  const { estado: crudo } = await searchParams;
-  const estado = ESTADOS.find((e) => e.valor === crudo)?.valor ?? "abiertos";
+  const params = await searchParams;
+  const estado = ESTADOS.find((e) => e.valor === params.estado)?.valor ?? "abiertos";
   // Préstamo es una salida; lo que vuelve es una devolución: se piden los dos permisos de lectura.
-  const { prestamos, puedeDevolver } = await consultar("devoluciones:leer", async (db, usuario) => {
-    if (!usuarioTienePermiso(usuario, "salidas:leer")) return { prestamos: [], puedeDevolver: false };
-    return { prestamos: await listarPrestamos(db, estado), puedeDevolver: usuarioTienePermiso(usuario, "devoluciones:capturar") };
+  const { lista, puedeDevolver } = await consultar("devoluciones:leer", async (db, usuario) => {
+    if (!usuarioTienePermiso(usuario, "salidas:leer")) return { lista: { filas: [], pagina: acotarPagina(1, 0) }, puedeDevolver: false };
+    return { lista: await listarPrestamos(db, estado, leerPagina(params.pagina)), puedeDevolver: usuarioTienePermiso(usuario, "devoluciones:capturar") };
   });
+  const { filas: prestamos, pagina } = lista;
 
   return (
     <>
@@ -80,6 +83,7 @@ export default async function PaginaPrestamos({ searchParams }: PageProps<"/pres
             </tbody>
           </Tabla>
         )}
+        <Paginacion pagina={pagina} ruta="/prestamos" parametros={new URLSearchParams({ estado })} sustantivo="préstamos" />
       </Card>
     </>
   );

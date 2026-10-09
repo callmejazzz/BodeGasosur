@@ -97,8 +97,29 @@ const CONFIRMACION = () => ({
   total: "417.60",
 });
 
+/** Lo que deja la recepción: una capa por partida, con su existencia (995-entrada-con-sus-capas.sql). */
+async function recibir(tx: Prisma.TransactionClient, id: string) {
+  const m = await tx.movimiento.findUniqueOrThrow({ where: { id }, include: { partidas: true } });
+  for (const p of m.partidas) {
+    await tx.capaCosto.create({
+      data: {
+        bodegaId, articuloId: p.articuloId, movimientoId: id, fecha: m.fecha, fechaOriginal: m.fecha,
+        cantidadInicial: p.cantidad, cantidadRestante: p.cantidad, costoUnitario: p.costoUnitario, costoUnitarioConIva: p.costoUnitarioConIva,
+      },
+    });
+    await tx.existencia.upsert({
+      where: { bodegaId_articuloId: { bodegaId, articuloId: p.articuloId } },
+      create: { bodegaId, articuloId: p.articuloId, cantidad: p.cantidad },
+      update: { cantidad: { increment: p.cantidad } },
+    });
+  }
+}
+
 function confirmar(id: string, extra: Partial<Prisma.MovimientoUncheckedUpdateInput> = {}) {
-  return prisma.movimiento.update({ where: { id }, data: { ...CONFIRMACION(), ...extra } });
+  return prisma.$transaction(async (tx) => {
+    await recibir(tx, id);
+    return tx.movimiento.update({ where: { id }, data: { ...CONFIRMACION(), ...extra } });
+  });
 }
 
 async function confirmada() {
@@ -356,6 +377,7 @@ describe("partidas y confirmación toman el mismo bloqueo", () => {
       );
       const espera = new Promise<string>((r) => setTimeout(() => r("bloqueada"), 300));
       await expect(Promise.race([intento, espera])).resolves.toBe("bloqueada");
+      await recibir(tx, m.id);
       await tx.movimiento.update({ where: { id: m.id }, data: CONFIRMACION() });
     });
 

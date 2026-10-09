@@ -1,8 +1,9 @@
 /*
-  Frontera SQL de la fase 7 (990-traspasos-devoluciones-conteo.sql y
-  991-devolucion-a-su-bodega.sql) ante un escritor directo: traspasos, devoluciones, ajustes, reversas y hojas de
-  conteo concilian con sus partidas al confirmar la transacción, o no se
-  guarda nada. Los servicios no participan: se escribe fila por fila.
+  Frontera SQL de la fase 7 (990-traspasos-devoluciones-conteo.sql,
+  991-devolucion-a-su-bodega.sql y 995-entrada-con-sus-capas.sql) ante un
+  escritor directo: entradas, traspasos, devoluciones, ajustes, reversas y
+  hojas de conteo concilian con sus partidas al confirmar la transacción, o no
+  se guarda nada. Los servicios no participan: se escribe fila por fila.
 */
 import type { Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
@@ -223,6 +224,122 @@ async function devolver(
   await confirmar(tx, d.id, "D");
   return d;
 }
+
+// ──────────────────────────────── Entradas ──────────────────────────────────
+
+type PartidaEntrada = { articuloId: string; cantidad: number };
+const COSTO = ["10.0000", "11.6000"] as const;
+
+/** Una entrada en borrador con costo y tasa en cada partida, como la deja la captura. */
+const entradaEnBorrador = (tx: Tx, partidas: PartidaEntrada[]) =>
+  tx.movimiento.create({
+    data: {
+      tipo: "ENTRADA", estatus: "BORRADOR", fecha: hoy, moneda: "MXN", proveedorId: e.proveedorId, bodegaDestinoId: e.bodegaId,
+      creadoPorId: e.usuarios.COMPRAS.id, llaveIdempotencia: randomUUID(),
+      partidas: {
+        create: partidas.map((p, i) => ({
+          orden: i + 1, articuloId: p.articuloId, presentacionCapturada: "UNIDAD" as const, cantidadCapturada: p.cantidad, factorConversion: 1, cantidad: p.cantidad,
+          costoUnitarioCapturado: COSTO[0], tasaIva: "0.1600", costoUnitario: COSTO[0], costoUnitarioConIva: COSTO[1],
+        })),
+      },
+    },
+  });
+
+/** La capa que la recepción crea para una partida, con su existencia; `cambios` la aparta de la partida. */
+async function recibir(tx: Tx, entradaId: string, p: PartidaEntrada, cambios: Partial<Prisma.CapaCostoUncheckedCreateInput> = {}) {
+  const capa = await tx.capaCosto.create({
+    data: {
+      bodegaId: e.bodegaId, articuloId: p.articuloId, movimientoId: entradaId, fecha: hoy, fechaOriginal: hoy,
+      cantidadInicial: p.cantidad, cantidadRestante: p.cantidad, costoUnitario: COSTO[0], costoUnitarioConIva: COSTO[1], ...cambios,
+    },
+  });
+  await mover(tx, capa.bodegaId, capa.articuloId, capa.cantidadRestante);
+}
+
+const confirmarEntrada = (tx: Tx, id: string) =>
+  tx.movimiento.update({
+    where: { id },
+    data: { estatus: "CONFIRMADO", folio: folio("E"), confirmadoPorId: e.usuarios.COMPRAS.id, confirmadoEn: new Date(), subtotal: "0", iva: "0", total: "0" },
+  });
+
+describe("entradas", () => {
+  const sinCapas = rechazo(/una capa por partida/);
+  const dos = async (): Promise<[PartidaEntrada, PartidaEntrada]> => [{ articuloId: await articulo(), cantidad: 3 }, { articuloId: await articulo(), cantidad: 2 }];
+
+  it("con una capa por partida, igual a ella, se confirma y la existencia sube lo recibido", async () => {
+    const [p, q] = await dos();
+    await prisma.$transaction(async (tx) => {
+      const m = await entradaEnBorrador(tx, [p, q]);
+      await recibir(tx, m.id, p);
+      await recibir(tx, m.id, q);
+      await confirmarEntrada(tx, m.id);
+    });
+    await expect(existencia(e.bodegaId, p.articuloId)).resolves.toBe(3);
+    await expect(existencia(e.bodegaId, q.articuloId)).resolves.toBe(2);
+  });
+
+  it("no se confirma sin capas ni existencia, ni con capas de menos", async () => {
+    const [p, q] = await dos();
+    const m = await entradaEnBorrador(prisma, [p, q]);
+    await expect(prisma.$transaction((tx) => confirmarEntrada(tx, m.id))).rejects.toEqual(sinCapas);
+    await expect(prisma.$transaction(async (tx) => {
+      await recibir(tx, m.id, p);
+      await confirmarEntrada(tx, m.id);
+    })).rejects.toEqual(sinCapas);
+    await expect(prisma.movimiento.findUniqueOrThrow({ where: { id: m.id } })).resolves.toMatchObject({ estatus: "BORRADOR", folio: null });
+    await expect(existencia(e.bodegaId, p.articuloId)).resolves.toBe(0);
+  });
+
+  it("ni con una capa distinta de su partida o de más", async () => {
+    const otraFecha = aFechaDeBase("2026-01-01");
+    const variantes: [string, (p: PartidaEntrada) => Partial<Prisma.CapaCostoUncheckedCreateInput>][] = [
+      ["más piezas", () => ({ cantidadInicial: 4, cantidadRestante: 4 })],
+      ["otro costo", () => ({ costoUnitario: "9.0000", costoUnitarioConIva: "10.4400" })],
+      ["sin costo", () => ({ costoUnitario: null, costoUnitarioConIva: null })],
+      ["otra fecha original", () => ({ fechaOriginal: otraFecha })],
+      ["otra bodega", () => ({ bodegaId: e.otraBodegaId })],
+    ];
+    for (const [nombre, cambios] of variantes) {
+      const [p] = await dos();
+      await expect(prisma.$transaction(async (tx) => {
+        const m = await entradaEnBorrador(tx, [p]);
+        await recibir(tx, m.id, p, cambios(p));
+        await confirmarEntrada(tx, m.id);
+      }), nombre).rejects.toEqual(rechazo(/no concilia/));
+    }
+    const [p, q] = await dos();
+    await expect(prisma.$transaction(async (tx) => {
+      const m = await entradaEnBorrador(tx, [p]);
+      await recibir(tx, m.id, p);
+      await recibir(tx, m.id, q);
+      await confirmarEntrada(tx, m.id);
+    }), "artículo ajeno").rejects.toEqual(sinCapas);
+  });
+
+  it("adelantar la comprobación no la evita", async () => {
+    const [p] = await dos();
+    const m = await entradaEnBorrador(prisma, [p]);
+    await expect(prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe("SET CONSTRAINTS ALL IMMEDIATE");
+      await confirmarEntrada(tx, m.id);
+    })).rejects.toEqual(sinCapas);
+  });
+
+  it("el preflight encuentra la entrada que ya se confirmó sin capas", async () => {
+    const [p] = await dos();
+    const m = await entradaEnBorrador(prisma, [p]);
+    await sinDefensas(prisma, (tx) => confirmarEntrada(tx, m.id));
+    await expect(prisma.$queryRaw`SELECT problema FROM movimientos_sin_conciliar() WHERE movimiento = ${m.id}::uuid`).resolves.toEqual([
+      { problema: expect.stringMatching(/una capa por partida/) },
+    ]);
+  });
+
+  it("la migración es copia fiel de prisma/sql/despues", () => {
+    const RAIZ = join(import.meta.dirname, "../..");
+    const migracion = readFileSync(join(RAIZ, "prisma/migrations/20261008100000_entrada_con_sus_capas/migration.sql"), "utf8");
+    expect(migracion).toContain(readFileSync(join(RAIZ, "prisma/sql/despues/995-entrada-con-sus-capas.sql"), "utf8"));
+  });
+});
 
 describe("devoluciones", () => {
   it("parciales heredan costo y fecha original hasta completar lo retirado, nunca más", async () => {

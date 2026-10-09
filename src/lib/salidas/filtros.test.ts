@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aFiltroDeRepo, aParametros, enlaceDeTramo, hayFiltros, leerFiltros, listaDeEstatus, SIN_FILTROS } from "./filtros";
+import { aFiltroDeRepo, aParametros, hayFiltros, leerFiltros, SIN_FILTROS } from "./filtros";
 
 describe("filtros de la lista de salidas en la URL", () => {
   it("lee lo reconocido y descarta lo demás", () => {
@@ -12,9 +12,7 @@ describe("filtros de la lista de salidas en la URL", () => {
   it("solo escribe en la URL lo que se aparta del valor por omisión", () => {
     expect(aParametros(SIN_FILTROS).toString()).toBe("");
     expect(aParametros({ estatus: "canceladas", busqueda: "gerente", prestamo: false }).toString()).toBe("q=gerente&estatus=canceladas");
-    expect(enlaceDeTramo(SIN_FILTROS)).toBe("/salidas");
-    expect(enlaceDeTramo({ estatus: "autorizadas", busqueda: "caja", prestamo: true }, "c0556ba8-6b55-42a5-a89e-dedac3fb3298"))
-      .toBe("/salidas?q=caja&estatus=autorizadas&prestamo=1&cursor=c0556ba8-6b55-42a5-a89e-dedac3fb3298");
+    expect(aParametros({ estatus: "autorizadas", busqueda: "caja", prestamo: true }).toString()).toBe("q=caja&estatus=autorizadas&prestamo=1");
     expect(hayFiltros(SIN_FILTROS)).toBe(false);
     expect(hayFiltros({ ...SIN_FILTROS, estatus: "recibidas" })).toBe(true);
     expect(hayFiltros({ ...SIN_FILTROS, prestamo: true })).toBe(true);
@@ -23,7 +21,5 @@ describe("filtros de la lista de salidas en la URL", () => {
   it("traduce al estatus de la base y de vuelta", () => {
     expect(aFiltroDeRepo({ estatus: "canceladas", busqueda: "x", prestamo: true })).toEqual({ estatus: "CANCELADO", busqueda: "x", soloPrestamos: true });
     expect(aFiltroDeRepo(SIN_FILTROS)).toEqual({ estatus: "todas", busqueda: "", soloPrestamos: false });
-    expect(listaDeEstatus("AUTORIZADA")).toBe("/salidas?estatus=autorizadas");
-    expect(leerFiltros(Object.fromEntries(new URL(listaDeEstatus("SOLICITADA"), "http://x").searchParams))).toMatchObject({ estatus: "solicitadas" });
   });
 });

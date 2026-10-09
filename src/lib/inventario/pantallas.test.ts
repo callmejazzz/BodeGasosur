@@ -17,6 +17,7 @@ import type { UsuarioSesion } from "../db";
 import { aFechaDeBase, deFechaDeBase, hoyEnMexico } from "../fechas";
 import { autorizarSalida, retirarSalida, solicitarSalida } from "../salidas/servicio";
 import { confirmarDevolucion, crearDevolucion } from "./devoluciones";
+import type { EstadoPrestamo } from "./repo";
 import { revertirMovimiento } from "./reversas";
 import { confirmarTraspaso, crearTraspaso, descartarTraspaso } from "./traspasos";
 
@@ -27,13 +28,14 @@ vi.mock("./repo", async (original) => {
     ...real,
     opcionesDeArticulos: vi.fn(real.opcionesDeArticulos),
     existenciasPorBodega: vi.fn(real.existenciasPorBodega),
-    salidasDevolvibles: vi.fn(real.salidasDevolvibles),
+    salidaParaDevolver: vi.fn(real.salidaParaDevolver),
+    listarSalidasDevolvibles: vi.fn(real.listarSalidasDevolvibles),
     reversaDe: vi.fn(real.reversaDe),
     devolucionesDe: vi.fn(real.devolucionesDe),
   };
 });
 const repo = await import("./repo");
-const { datosDeDetalle, datosDeHoja, datosDeLista, datosDeListaHojas, relacionesDeSalida } = await import("./pantallas");
+const { datosDeDetalle, datosDeHoja, datosDeLista, datosDeListaHojas, relacionesDeSalida, salidaDelEnlace, salidasDelSelector } = await import("./pantallas");
 const salidas = await import("../salidas/pantallas");
 
 const prisma = crearCliente(URL_PRUEBAS);
@@ -60,20 +62,20 @@ async function traspaso(confirmado: boolean) {
   return id;
 }
 
-async function salidaRetirada(cantidad: number, esPrestamo = true) {
+async function salidaRetirada(cantidad: number, esPrestamo = true, estacionId = e.estacionId) {
   const u = e.usuarios.COMPRAS;
   const { id } = await como(prisma, u, "salidas:capturar", (tx) =>
-    solicitarSalida(tx, u, randomUUID(), { encabezado: { bodegaOrigenId: e.bodegaId, estacionId: e.estacionId, esPrestamo }, partidas: unidades(cantidad) }),
+    solicitarSalida(tx, u, randomUUID(), { encabezado: { bodegaOrigenId: e.bodegaId, estacionId, esPrestamo }, partidas: unidades(cantidad) }),
   );
   await como(prisma, e.autorizadores.JEFE, "salidas:autorizar", (tx) => autorizarSalida(tx, e.autorizadores.JEFE, id));
   await como(prisma, u, "salidas:retirar", (tx) => retirarSalida(tx, u, id, "Mensajero"));
   return id;
 }
 
-async function devolver(salidaId: string | null, cantidad: number) {
+async function devolver(salidaId: string | null, cantidad: number, estacionId = e.estacionId) {
   const u = e.usuarios.COMPRAS;
   const { id } = await como(prisma, u, "devoluciones:capturar", (tx) =>
-    crearDevolucion(tx, u, randomUUID(), { encabezado: { estacionId: e.estacionId, bodegaDestinoId: e.bodegaId, salidaId }, partidas: unidades(cantidad) }),
+    crearDevolucion(tx, u, randomUUID(), { encabezado: { estacionId, bodegaDestinoId: e.bodegaId, salidaId }, partidas: unidades(cantidad) }),
   );
   await como(prisma, u, "devoluciones:confirmar", (tx) => confirmarDevolucion(tx, u, id));
   return id;
@@ -126,27 +128,36 @@ describe("reversa en pantalla", () => {
   });
 });
 
+/** Todas las páginas de préstamos: la base es compartida y puede haber más de 100. */
+async function prestamos(estado: EstadoPrestamo) {
+  const primera = await leer((db) => repo.listarPrestamos(db, estado));
+  const filas = [...primera.filas];
+  for (let n = 2; n <= primera.pagina.ultima; n++) filas.push(...(await leer((db) => repo.listarPrestamos(db, estado, n))).filas);
+  expect(filas).toHaveLength(primera.pagina.total);
+  return filas;
+}
+
 describe("préstamos y salidas devolvibles", () => {
   it("abierto mientras falte algo; la devolución sin salida no lo cierra; la salida revertida deja de contar", async () => {
     const s = await salidaRetirada(3);
-    const abiertos = () => leer((db) => repo.listarPrestamos(db, "abiertos"));
-    const cerrados = () => leer((db) => repo.listarPrestamos(db, "cerrados"));
+    const abiertos = () => prestamos("abiertos");
+    const cerrados = () => prestamos("cerrados");
     await expect(abiertos()).resolves.toContainEqual(expect.objectContaining({ id: s, retirado: 3, devuelto: 0, pendiente: 3 }));
 
     await devolver(null, 3);
     await expect(abiertos()).resolves.toContainEqual(expect.objectContaining({ id: s, pendiente: 3 }));
     await devolver(s, 2);
     await expect(abiertos()).resolves.toContainEqual(expect.objectContaining({ id: s, devuelto: 2, pendiente: 1 }));
-    await expect(leer((db) => repo.salidasDevolvibles(db, e.estacionId))).resolves.toContainEqual(expect.objectContaining({ id: s, pendientes: { [articuloId]: 1 } }));
+    await expect(leer((db) => repo.salidaParaDevolver(db, { id: s }))).resolves.toMatchObject({ salida: { id: s, pendientes: { [articuloId]: 1 } } });
     await devolver(s, 1);
     await expect(abiertos()).resolves.not.toContainEqual(expect.objectContaining({ id: s }));
     await expect(cerrados()).resolves.toContainEqual(expect.objectContaining({ id: s, pendiente: 0 }));
-    await expect(leer((db) => repo.salidasDevolvibles(db, e.estacionId))).resolves.not.toContainEqual(expect.objectContaining({ id: s }));
+    await expect(leer((db) => repo.salidaParaDevolver(db, { id: s }))).resolves.toEqual({ motivo: expect.stringMatching(/ya volvió todo lo que salió/) });
 
     const otra = await salidaRetirada(1);
     const admin = e.usuarios.SUPERADMIN;
     await como(prisma, admin, "movimientos:revertir", (tx) => revertirMovimiento(tx, admin, otra, "No salió"));
-    const todos = await leer((db) => repo.listarPrestamos(db, "todos"));
+    const todos = await prestamos("todos");
     expect(todos.some((p) => p.id === otra)).toBe(false);
   });
 
@@ -175,8 +186,8 @@ describe("préstamos y salidas devolvibles", () => {
 
   it("una salida que no es préstamo no aparece como préstamo, pero sí admite devoluciones", async () => {
     const s = await salidaRetirada(2, false);
-    await expect(leer((db) => repo.listarPrestamos(db, "todos"))).resolves.not.toContainEqual(expect.objectContaining({ id: s }));
-    await expect(leer((db) => repo.salidasDevolvibles(db))).resolves.toContainEqual(expect.objectContaining({ id: s, esPrestamo: false }));
+    await expect(prestamos("todos")).resolves.not.toContainEqual(expect.objectContaining({ id: s }));
+    await expect(leer((db) => repo.salidaParaDevolver(db, { id: s }))).resolves.toMatchObject({ salida: { id: s, esPrestamo: false } });
   });
 
   it("las relaciones de una salida retirada; una sin retirar no consulta nada", async () => {
@@ -190,6 +201,105 @@ describe("préstamos y salidas devolvibles", () => {
     await expect(leer((db) => relacionesDeSalida(db, e.usuarios.SUPERADMIN, { id: s, estatus: "AUTORIZADA" }))).resolves.toBeNull();
     expect(repo.reversaDe).not.toHaveBeenCalled();
     expect(repo.devolucionesDe).not.toHaveBeenCalled();
+  });
+});
+
+describe("la salida de una devolución", () => {
+  it("la del enlace se consulta y se valida; si no admite devolución, dice por qué", async () => {
+    const s = await salidaRetirada(2);
+    const enlace = (crudo: unknown) => leer((db) => salidaDelEnlace(db, crudo));
+    await expect(enlace(s)).resolves.toMatchObject({
+      salida: { id: s, estacion: { id: e.estacionId }, bodega: { id: e.bodegaId }, pendientes: { [articuloId]: 2 } },
+      aviso: null,
+    });
+    await expect(enlace(undefined)).resolves.toEqual({ salida: null, aviso: null });
+    expect(repo.salidaParaDevolver).toHaveBeenCalledTimes(1);
+    for (const raro of ["' OR 1=1 --", ["x"], ""]) {
+      await expect(enlace(raro), String(raro)).resolves.toEqual({ salida: null, aviso: "El enlace no trae una salida válida." });
+    }
+    expect(repo.salidaParaDevolver).toHaveBeenCalledTimes(1);
+    await expect(enlace(randomUUID())).resolves.toEqual({ salida: null, aviso: "La salida del enlace no existe." });
+    // Un traspaso no es una salida, aunque el id exista.
+    await expect(enlace(await traspaso(true))).resolves.toEqual({ salida: null, aviso: "La salida del enlace no existe." });
+
+    const u = e.usuarios.COMPRAS;
+    const { id: solicitada } = await como(prisma, u, "salidas:capturar", (tx) =>
+      solicitarSalida(tx, u, randomUUID(), { encabezado: { bodegaOrigenId: e.bodegaId, estacionId: e.estacionId }, partidas: unidades(1) }),
+    );
+    await expect(enlace(solicitada)).resolves.toMatchObject({ salida: null, aviso: expect.stringMatching(/ya retirada o recibida/) });
+    const admin = e.usuarios.SUPERADMIN;
+    await como(prisma, admin, "movimientos:revertir", (tx) => revertirMovimiento(tx, admin, s, "No salió"));
+    await expect(enlace(s)).resolves.toMatchObject({ salida: null, aviso: expect.stringMatching(/fue revertida/) });
+  });
+
+  it("el selector lista lo devolvible de la estación, lo más reciente arriba, y se busca tecleando", async () => {
+    // Estación propia: la base es compartida con las demás pruebas.
+    const empresa = await prisma.empresa.create({ data: { razonSocial: `Empresa ${randomUUID().slice(0, 8)}` } });
+    const estacion = (await prisma.estacion.create({ data: { numero: `ES${randomUUID().slice(0, 8)}`, alias: "Cañada Ñuñez", empresaId: empresa.id } })).id;
+    const vieja = await salidaRetirada(2, true, estacion);
+    const nueva = await salidaRetirada(1, false, estacion);
+    const devuelta = await salidaRetirada(1, false, estacion);
+    await devolver(devuelta, 1, estacion);
+    const ajena = await salidaRetirada(1);
+    const folioDe = async (id: string) => (await prisma.movimiento.findUniqueOrThrow({ where: { id } })).folio!;
+    const selector = (texto: string, pagina = 1) => leer((db) => salidasDelSelector(db, { estacionId: estacion, texto, pagina }));
+
+    const todo = await selector("");
+    expect(todo.salidas.map((x) => x.id)).toEqual([nueva, vieja]);
+    expect(todo.pagina).toEqual({ actual: 1, ultima: 1, total: 2 });
+    expect(todo.salidas[1]).toMatchObject({ esPrestamo: true, estacion: { id: estacion }, bodega: { id: e.bodegaId }, pendientes: { [articuloId]: 2 } });
+    // Una página que no existe muestra la última.
+    await expect(selector("", 9)).resolves.toEqual(todo);
+
+    const folio = await folioDe(vieja);
+    const numero = String(Number(folio.replace(/\D/g, "")));
+    for (const tecleado of [folio, folio.toLowerCase(), folio.replace("-", ""), numero]) {
+      await expect(selector(tecleado).then((r) => r.salidas.map((x) => x.id)), tecleado).resolves.toContain(vieja);
+    }
+    // Sin acentos ni mayúsculas, también por el alias de la estación.
+    await expect(selector("canada nunez").then((r) => r.salidas.length)).resolves.toBe(2);
+
+    // Lo que no aparece, dice por qué.
+    await expect(selector(await folioDe(devuelta))).resolves.toEqual({ salidas: [], pagina: expect.objectContaining({ total: 0 }), aviso: expect.stringMatching(/ya volvió todo/) });
+    await expect(selector(await folioDe(ajena))).resolves.toMatchObject({ salidas: [], aviso: expect.stringMatching(/salió a/) });
+    await expect(selector("zzz")).resolves.toEqual({ salidas: [], pagina: expect.objectContaining({ total: 0 }), aviso: null });
+  });
+
+  it("una búsqueda que no pasa el esquema ni llega a la base", async () => {
+    vi.clearAllMocks();
+    const raros: unknown[] = [
+      null,
+      "S-1",
+      { estacionId: "' OR 1=1 --", texto: "", pagina: 1 },
+      { estacionId: e.estacionId, texto: "S-1'; DROP TABLE x", pagina: 1 },
+      { estacionId: e.estacionId, texto: "x".repeat(41), pagina: 1 },
+      { estacionId: e.estacionId, texto: "", pagina: 0 },
+      { estacionId: e.estacionId, texto: "", pagina: "2" },
+      { estacionId: e.estacionId, pagina: 1 },
+    ];
+    for (const raro of raros) {
+      await expect(leer((db) => salidasDelSelector(db, raro)), JSON.stringify(raro)).resolves.toMatchObject({ salidas: [], aviso: expect.stringMatching(/^Elige la estación/) });
+    }
+    expect(repo.listarSalidasDevolvibles).not.toHaveBeenCalled();
+    expect(repo.salidaParaDevolver).not.toHaveBeenCalled();
+  });
+
+  it("el borrador conserva su salida aunque ya no tenga saldo, con el aviso; quien no edita no la consulta", async () => {
+    const s = await salidaRetirada(2);
+    const u = e.usuarios.COMPRAS;
+    const { id: borrador } = await como(prisma, u, "devoluciones:capturar", (tx) =>
+      crearDevolucion(tx, u, randomUUID(), { encabezado: { estacionId: e.estacionId, bodegaDestinoId: e.bodegaId, salidaId: s }, partidas: unidades(1) }),
+    );
+    const vinculada = (quien: UsuarioSesion) => leer((db) => datosDeDetalle(db, quien, "DEVOLUCION", borrador)).then((d) => d?.vinculada);
+    await expect(vinculada(u)).resolves.toMatchObject({ salida: { id: s, pendientes: { [articuloId]: 2 } }, aviso: null });
+    await devolver(s, 2);
+    await expect(vinculada(u)).resolves.toEqual({
+      salida: expect.objectContaining({ id: s, estacion: expect.objectContaining({ id: e.estacionId }), bodega: expect.objectContaining({ id: e.bodegaId }), pendientes: {} }),
+      aviso: expect.stringMatching(/ya volvió todo lo que salió/),
+    });
+    vi.clearAllMocks();
+    await expect(vinculada(e.usuarios.JEFE)).resolves.toBeNull();
+    expect(repo.salidaParaDevolver).not.toHaveBeenCalled();
   });
 });
 

@@ -1,6 +1,7 @@
 import "server-only";
 import type { Prisma } from "@prisma/client";
 import { enOrden, idsDeLista, sql } from "@/lib/movimientos/lista";
+import { acotarPagina, POR_PAGINA, saltoDe, type Pagina } from "@/lib/paginacion";
 import { usuarioTienePermiso, type Permiso, type SujetoDePermisos } from "@/lib/permisos";
 import type { EstatusSalida } from "./servicio";
 
@@ -29,29 +30,24 @@ const RESUMEN = {
 
 export type SalidaResumen = Prisma.MovimientoGetPayload<{ select: typeof RESUMEN }>;
 
-/** Cada tramo entrega hasta 200 salidas; el cursor permite consultar las anteriores. */
-export const TOPE_LISTA = 200;
-
 export type FiltroSalidas = {
   estatus: EstatusSalida | "todas";
   /** Folio, clave de bodega o número de estación (tolerante); nombre de bodega, alias, solicitante o quién retiró. */
   busqueda: string;
   soloPrestamos?: boolean;
-  cursor?: string;
 };
 
 /**
  * Lo que sigue en curso primero (solicitadas y autorizadas, sin folio todavía);
  * luego las retiradas o recibidas por folio, del más alto al más bajo; al
- * final rechazadas y canceladas, la más nueva arriba. El id desempata y hace
- * estable el cursor.
+ * final rechazadas y canceladas, la más nueva arriba. El id desempata, así
+ * que las páginas no se enciman.
  */
-export async function listarSalidas(db: Db, filtro: FiltroSalidas): Promise<{ filas: SalidaResumen[]; hayMas: boolean; cursorActual: string | null; cursorSiguiente: string | null }> {
-  const cursor = filtro.cursor ? await db.movimiento.findFirst({ where: { id: filtro.cursor, tipo: "SALIDA" }, select: { id: true } }) : null;
+export async function listarSalidas(db: Db, filtro: FiltroSalidas, pedida = 1): Promise<{ filas: SalidaResumen[]; pagina: Pagina }> {
   const filtros = [];
   if (filtro.estatus !== "todas") filtros.push(sql`m.estatus = ${filtro.estatus}::"EstatusMovimiento"`);
   if (filtro.soloPrestamos) filtros.push(sql`m."esPrestamo"`);
-  const ids = await idsDeLista(db, {
+  const { ids, pagina } = await idsDeLista(db, {
     tipo: "SALIDA",
     abiertos: ["SOLICITADA", "AUTORIZADA"],
     joins: sql`
@@ -62,13 +58,9 @@ export async function listarSalidas(db: Db, filtro: FiltroSalidas): Promise<{ fi
     busqueda: filtro.busqueda.slice(0, 80),
     claves: [sql`m.folio`, sql`b.clave`, sql`s.numero`],
     textos: [sql`b.nombre`, sql`s.alias`, sql`p.nombre`, sql`m."entregadoA"`],
-    cursor: cursor?.id,
-    tope: TOPE_LISTA + 1,
+    pagina: pedida,
   });
-  const hayMas = ids.length > TOPE_LISTA;
-  const visibles = ids.slice(0, TOPE_LISTA);
-  const filas = enOrden(visibles, await db.movimiento.findMany({ where: { id: { in: visibles } }, select: RESUMEN }));
-  return { filas, hayMas, cursorActual: cursor?.id ?? null, cursorSiguiente: hayMas ? visibles.at(-1)! : null };
+  return { filas: enOrden(ids, await db.movimiento.findMany({ where: { id: { in: ids } }, select: RESUMEN })), pagina };
 }
 
 const DETALLE = {
@@ -142,8 +134,6 @@ export async function valuarSalida(db: Db, id: string): Promise<Valuacion> {
 
 // ──────────────────────────────── Bandeja ────────────────────────────────────
 
-const TOPE_BANDEJA = 50;
-
 /** Cada sección espera a quien tiene su permiso: autorizar, retirar o confirmar recepción. */
 export const SECCIONES = [
   { clave: "porAutorizar", estatus: "SOLICITADA", permiso: "salidas:autorizar" },
@@ -152,7 +142,7 @@ export const SECCIONES = [
 ] as const satisfies readonly { clave: string; estatus: EstatusSalida; permiso: Permiso }[];
 
 export type ClaveSeccion = (typeof SECCIONES)[number]["clave"];
-export type SeccionBandeja = { clave: ClaveSeccion; estatus: EstatusSalida; filas: SalidaResumen[]; total: number };
+export type SeccionBandeja = { clave: ClaveSeccion; estatus: EstatusSalida; filas: SalidaResumen[]; pagina: Pagina };
 
 const seccionesDe = (usuario: SujetoDePermisos) => SECCIONES.filter((s) => usuarioTienePermiso(usuario, s.permiso));
 
@@ -162,19 +152,23 @@ function ordenDeBandeja(estatus: EstatusSalida): Prisma.MovimientoOrderByWithRel
   return [{ entregadoEn: "asc" }, { id: "asc" }];
 }
 
-/** Lo que espera al usuario, la más antigua primero. Las secciones en las que no puede actuar no se consultan. */
-export async function bandejaDeSalidas(db: Db, usuario: SujetoDePermisos): Promise<SeccionBandeja[]> {
+/**
+ * Lo que espera al usuario, la más antigua primero, cada sección en su página.
+ * Las secciones en las que no puede actuar no se consultan.
+ */
+export async function bandejaDeSalidas(db: Db, usuario: SujetoDePermisos, paginas: Partial<Record<ClaveSeccion, number>> = {}): Promise<SeccionBandeja[]> {
   const bandeja: SeccionBandeja[] = [];
   // Secuencial a propósito: dentro de una transacción hay una sola conexión.
   for (const { clave, estatus } of seccionesDe(usuario)) {
+    const pagina = acotarPagina(paginas[clave] ?? 1, await db.movimiento.count({ where: { tipo: "SALIDA", estatus } }));
     const filas = await db.movimiento.findMany({
       where: { tipo: "SALIDA", estatus },
       select: RESUMEN,
       orderBy: ordenDeBandeja(estatus),
-      take: TOPE_BANDEJA,
+      skip: saltoDe(pagina),
+      take: POR_PAGINA,
     });
-    const total = await db.movimiento.count({ where: { tipo: "SALIDA", estatus } });
-    bandeja.push({ clave, estatus, filas, total });
+    bandeja.push({ clave, estatus, filas, pagina });
   }
   return bandeja;
 }
