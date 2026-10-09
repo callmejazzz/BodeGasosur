@@ -73,7 +73,7 @@ export function SelectorBuscable<O extends { id: string }>({
       }
       if (n !== ultima.current) return;
       setResultado(r);
-      setActiva(0);
+      setActiva(r.opciones.length > 0 ? 1 : 0);
       setCargando(false);
     }, retardo);
   };
@@ -113,7 +113,9 @@ export function SelectorBuscable<O extends { id: string }>({
     } else if (ev.key === "Enter") {
       // Elige; no envía el formulario.
       ev.preventDefault();
-      if (!cargando && activa < elementos.length) elegir(elementos[activa]);
+      if (!cargando && activa < elementos.length && (activa > 0 || !texto.trim())) {
+        elegir(elementos[activa])
+      }
     } else if (ev.key === "Escape") {
       ev.preventDefault();
       cerrar(true);
