@@ -1,6 +1,6 @@
 # BodeGasosur — contrato de la fase 6: Salidas
 
-**Estado:** fase 6 construida en desarrollo. La matriz de permisos, las restricciones y conciliación SQL, el dominio transaccional, las seis Server Actions y las pantallas de Salidas están implementados y probados. Complementa el [modelo de datos](../02-modelo-de-datos.md) y el [contrato de Entradas](02-fase-5-entradas.md).
+**Estado:** fase 6 construida y publicada en `v0.6.0`. Este contrato registra el alcance de Salidas en su cierre; las devoluciones, reversas y la paginación incorporadas después se documentan en el [contrato de la Fase 7](05-fase-7-traspasos-devoluciones-conteo.md). La matriz de permisos, las restricciones y conciliación SQL, el dominio transaccional, las seis Server Actions y las pantallas de Salidas están implementados y probados. Complementa el [modelo de datos](../02-modelo-de-datos.md) y el [contrato de Entradas](02-fase-5-entradas.md).
 
 ## 1. Resultado y alcance
 
@@ -11,8 +11,8 @@ autorizado con `RETIRADA`; en ese acto el sistema asigna folio, consume capas PE
 descuenta existencia en una transacción. Después confirma en `RECIBIDA` que la estación
 lo recibió, con el usuario y el instante de la confirmación. `RECIBIDA` cierra la salida.
 
-Quedan para la fase 7 la devolución de préstamos, el asiento inverso de una salida ya
-entregada y los traspasos. El histórico de salidas tampoco se importa en esta fase.
+La devolución de préstamos, el asiento inverso de una salida ya retirada y los traspasos
+se incorporaron en la Fase 7. El histórico de salidas no se importó.
 
 **Decisión de alcance comunicada el 2026-09-23:** no se genera ni imprime vale de salida.
 La confirmación de recepción es un estado del sistema, sin documento imprimible.
@@ -41,7 +41,7 @@ En `SOLICITADA` y `AUTORIZADA` no hay folio, consumos ni efecto en existencia.
 `RETIRADA` conserva partidas, folio, costos, consumos y existencia descontada; solo
 admite la transición a `RECIBIDA`. La recepción guarda `recibidoPorId` y
 `recibidoEn`, sin volver a mover inventario. `RECIBIDA` es terminal. Una salida
-retirada no se cancela cambiando estatus: la reversa por asiento pertenece a la fase 7.
+retirada no se cancela cambiando estatus: desde la Fase 7 se corrige con una reversa.
 
 El folio `S-000001` se toma al entregar, dentro de la transacción y con el mecanismo
 `Folio` existente. No se asigna al solicitar ni al autorizar; la autorización no
@@ -156,8 +156,8 @@ Clerk mediante `seguridad.fijar_actor()`; la bitácora obtiene de esa liga al ac
 `jti`, y la base rechaza escrituras ordinarias sin ella. El trigger de autorización lee
 `puedeAutorizar` bajo `FOR SHARE` para cubrir también SQL directo. La lista, la bandeja de
 pendientes, la captura y el detalle usan estas acciones y lecturas. La bandeja ordena
-cada sección por el instante en que comenzó a esperar; la lista recorre las salidas
-anteriores por cursor estable, incluso cuando supera 200 registros.
+cada sección por el instante en que comenzó a esperar; la lista usó un cursor al cerrar
+la Fase 6 y desde `v0.7.1` muestra páginas de 100 con filtros conservados.
 
 ## 7. Pruebas de aceptación
 
@@ -180,7 +180,7 @@ anteriores por cursor estable, incluso cuando supera 200 registros.
    descuento. `RECIBIDA` es terminal incluso para escrituras SQL directas.
 10. Las Server Actions directas rechazan falta de sesión, usuario inactivo, rol sin permiso, y autorizador sin bandera, aun si conoce la URL o el identificador.
 11. Una escritura SQL directa no puede retirar sin autorización ni cambiar partidas de una solicitud autorizada; la bitácora conserva cada transición permitida.
-12. La lista permite llegar a las salidas anteriores a las primeras 200 sin repetir ni omitir
+12. La lista permite llegar a todas las salidas mediante páginas de 100 sin repetir ni omitir
     filas, incluso con fechas de captura iguales. La bandeja ordena autorización, retiro
     y recepción por el instante en que comenzó cada espera, no por la captura inicial.
 

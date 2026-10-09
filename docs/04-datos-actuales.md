@@ -1,7 +1,10 @@
 # BodeGasosur — Análisis del inventario actual
 
 Fuente: `MACRO STOCK CONTROL BODEGA.xlsx` (agosto 2026). Es el sistema que BodeGasosur
-viene a reemplazar, y el origen de la migración.
+viene a reemplazar. Este documento conserva el análisis del archivo y del plan original de
+migración; el [Plan B vigente](contratos-otros/01-plan-b-produccion.md) descarta importar
+proveedores, artículos, existencias e histórico mientras no exista una normalización
+confiable. La producción arrancará sin esos datos operativos.
 
 ## 1. Estructura del archivo
 
@@ -78,18 +81,18 @@ Ausencias que definen hasta dónde llega la migración:
 | **Unidad de medida** | No hay columna. Todo parece manejarse por pieza |
 | **Moneda y tipo de cambio** | No aplica: no hay costos |
 
-Esto tiene una consecuencia directa y hay que decirla claro: **el inventario migra con
-cantidades, sin valor**. El valor del inventario y el gasto por estación empiezan a
-construirse desde la primera entrada capturada en el sistema nuevo. No hay forma de
-reconstruirlos hacia atrás con este archivo.
+En el plan original, **el inventario habría migrado con cantidades, sin valor**. El Plan B
+no importa esas existencias: el valor del inventario y el gasto por estación se construyen
+desde las entradas que se capturen en el sistema nuevo. No hay forma de reconstruirlos
+hacia atrás con este archivo.
 
 **Decisión tomada:** no se capturan los 225 costos a mano. El valor del inventario se
-construye con las compras nuevas: cada artículo adquiere costo la primera vez que se
-registra una entrada suya. Hasta entonces figura sin valuar, y así se le explicará a
+construye con las compras nuevas: cada entrada crea capas con el costo conocido y cualquier
+capa incorporada sin costo sigue identificada como no valuada. Así se le explicará a
 Compras.
 
-**Cómo entra ese inventario sin costo** quedó decidido después, y no es un detalle: entra
-como `AJUSTE` **con capa de costo, y con el costo nulo** — no sin capa, como se había
+**Si se autoriza una carga posterior de ese inventario sin costo**, entra como `AJUSTE`
+**con capa de costo, y con el costo nulo** — no sin capa, como se había
 planteado. Nulo no es cero: *«no sé cuánto costó»* y *«costó nada»* son afirmaciones
 distintas. Si entrara sin capa, la primera salida de un artículo no valuado encontraría
 existencia 40 y capas 0, y el sistema tendría que elegir entre bloquear una salida que sí
@@ -203,7 +206,7 @@ tiene solo 20 valores capturados, entre ellos *Refacciones*, *Papelería*, *Lumi
 *Uniformes*, *Imprenta*, *Cerrajería*, *Paquetería*, *Extintores* y *Equipos de cómputo*:
 sirve como semilla de un catálogo de giros, no como dato confiable.
 
-> **No se migran.** Por el [Plan B](01-plan-b-produccion.md), Compras crea los proveedores
+> **No se migran.** Por el [Plan B](contratos-otros/01-plan-b-produccion.md), Compras crea los proveedores
 > desde la aplicación. Lo de abajo queda como análisis de la hoja, y hay un dato que
 > conviene tener a la mano al capturarlos: el renglón **`ALCARAZ SOBERANIS, S.A. DE C.V.
 > (CHILPO 4)`** trae `MAS-950425-A11`, que es el RFC de **Muller y Asociados**; su correo,
@@ -219,7 +222,7 @@ Boulevard (2)…
 No es un error: entre empresas del grupo se factura, y por eso están ahí. Durante un
 tiempo esto justificó que `Proveedor` apuntara a la tabla `Empresa` global; **se
 revirtió**: `Empresa` es exclusivamente Gasosur y el proveedor lleva su propia razón
-social y RFC ([01-plan-b-produccion.md](01-plan-b-produccion.md)).
+social y RFC ([Plan B para producción](contratos-otros/01-plan-b-produccion.md)).
 
 Además, **12 RFC están repetidos dentro de la propia hoja**, en parte porque se escriben
 con y sin guiones (`MAS950425A11` frente a `MAS-950425-A11`). La normalización de §4 de
@@ -227,7 +230,7 @@ ese documento resuelve las dos cosas a la vez.
 
 ## 7. Plan de migración
 
-> **Superado por el [Plan B](01-plan-b-produccion.md)** (2026-09-11): de esta lista se
+> **Superado por el [Plan B](contratos-otros/01-plan-b-produccion.md)** (2026-09-11): de esta lista se
 > hicieron el paso 1 y las dos personas confirmadas del paso 4 —en
 > [`prisma/migracion-datos/`](../prisma/migracion-datos/README.md)—. Los pasos 2, 3, 5 y 6
 > no se hacen mientras Compras no entregue una normalización confiable; si la entrega,

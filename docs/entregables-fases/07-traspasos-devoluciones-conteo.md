@@ -4,7 +4,7 @@
 | -------- | --------------------------------------------------------------------------------------------------------- |
 | Estado   | Construida y publicada                                                                                    |
 | Versión  | `v0.7.0`; correcciones de su revisión en `v0.7.1`                                                        |
-| Commit   | `2ac6ca3` (`v0.7.0`); correcciones en `v0.7.1`                                                           |
+| Commits  | `2ac6ca3` (`v0.7.0`); `22c1146` (`v0.7.1`); `afcea45` (selector, sin nueva versión)                       |
 | Contrato | [Fase 7: Traspasos, devoluciones y conteo](../contratos-otros/05-fase-7-traspasos-devoluciones-conteo.md) |
 
 ## Construido
@@ -99,6 +99,10 @@ La revisión del código etiquetado encontró tres huecos, corregidos en `v0.7.1
 - **Conteo confirmable tras un guardado fallido.** La hoja marcaba los cambios como
   guardados al enviar. Ahora la marca se limpia solo cuando el servidor devuelve la
   revisión guardada ([`cambios.ts`](../../src/lib/inventario/cambios.ts)).
+
+Después de `v0.7.1`, `afcea45` corrigió la selección con Enter: una búsqueda con
+resultados activa la primera salida y una búsqueda sin coincidencias no desvincula una
+salida. Por decisión del proyecto, ese commit no tiene nueva etiqueta de versión.
 
 El cuarto hallazgo —que la cuenta de ejecución escribe en las tablas y `fijar_actor` no
 comprueba el rol de la operación— queda fuera, por decisión del 2026-10-08: los permisos

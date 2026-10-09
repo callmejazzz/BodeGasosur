@@ -54,7 +54,7 @@ erDiagram
 > **`Empresa` es exclusivamente Gasosur.** El proveedor lleva sus propios datos fiscales y
 > no apunta a este catálogo, aunque 33 renglones del Excel de proveedores compartan RFC con
 > empresas del grupo. Si una de ellas debe ser proveedora algún día, se decide como caso de
-> negocio, no con un vínculo opcional ([01-plan-b-produccion.md](01-plan-b-produccion.md)).
+> negocio, no con un vínculo opcional ([Plan B para producción](contratos-otros/01-plan-b-produccion.md)).
 
 ## 2. Campos
 
@@ -95,8 +95,8 @@ correo, y Tecámac no tiene teléfono ni móvil. El esquema los admite como nulo
 
 ## 3. Cómo se hace global
 
-Recomendación: un **esquema de PostgreSQL aparte**, `catalogo_gasosur`, en la misma base
-de datos, con `Empresa` y `Estacion` adentro. Prisma lo soporta con `multiSchema`.
+Se implementó un **esquema de PostgreSQL aparte**, `catalogo_gasosur`, en la misma base
+de datos, con `Empresa` y `Estacion` adentro. Prisma lo modela con `multiSchema`.
 
 ```prisma
 model Empresa {
@@ -132,9 +132,9 @@ model Estacion {
 > [02-modelo-de-datos.md](02-modelo-de-datos.md) §7. **Ese es el canónico**; lo de arriba
 > es un extracto para leerlo en contexto.
 
-Por qué un esquema y no otra base de datos: un proyecto futuro puede leer
-`catalogo_gasosur.estacion` con una sola conexión, y BodeGasosur conserva llaves foráneas
-reales contra él. Dos bases de datos obligarían a sincronizar copias, que es justo el
+Por qué un esquema y no otra base de datos: otro proyecto puede leer las vistas versionadas
+del catálogo con una sola conexión, y BodeGasosur conserva llaves foráneas reales contra
+`catalogo_gasosur`. Dos bases de datos obligarían a sincronizar copias, que es justo el
 problema que se quiere evitar.
 
 **Regla que lo mantiene global:** ninguna tabla de `catalogo_gasosur` apunta hacia
@@ -159,9 +159,10 @@ en la pantalla, para que la importación masiva quede sujeta a la misma regla.
 
 1. **Faltan estaciones y empresas.** Se capturan desde el sistema conforme aparezca la
    información. También faltan teléfonos y correos de Radio Faro y Tecámac. No bloquea nada.
-2. **Los destinos del histórico** son alias de estaciones existentes o estaciones aún no
-   listadas. Se resuelven con la tabla de alias y completando el catálogo. La excepción
-   son `PORBA` y `SERVI FER`: nombran a la empresa, no a la estación, y solo Compras
+2. **Los destinos del histórico** son apodos de estaciones existentes o estaciones aún no
+   listadas. Si se decide importar ese histórico, Compras debe asignarlos al alias oficial
+   y completar el catálogo; el sistema no guarda una tabla de alias alternativos. La
+   excepción son `PORBA` y `SERVI FER`: nombran a la empresa, no a la estación, y solo Compras
    puede decir a cuál de sus dos o tres estaciones se refería cada salida.
 3. **Estaciones fuera de Guerrero.** Porba México, Boulevard México, Polotitlán, Porcla y
    Tecámac tienen lada 593/55: están en el Estado de México. Es un dato operativo

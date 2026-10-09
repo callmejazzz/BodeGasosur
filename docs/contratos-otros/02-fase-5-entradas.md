@@ -1,23 +1,23 @@
 # BodeGasosur — Contrato de la Fase 5: Entradas
 
-Este documento fija el comportamiento vigente de la Fase 5. Complementa el [modelo de datos](../02-modelo-de-datos.md), la [arquitectura](../01-arquitectura.md), los [hallazgos del levantamiento](../cimientos-word/03-hallazgos-levantamiento.docx) y las decisiones de concurrencia de la [auditoría](../cimientos-word/04-auditoria-arquitectura.docx). Si una descripción anterior contradice este contrato, manda este documento y el resumen de [entregables por fase](../entregables-fases/README.md).
+Este documento fija el alcance de la Fase 5 y las reglas de Entradas que siguen vigentes. Las capacidades añadidas después —en especial las reversas de la Fase 7— se documentan en el [contrato de la Fase 7](05-fase-7-traspasos-devoluciones-conteo.md). Complementa el [modelo de datos](../02-modelo-de-datos.md), la [arquitectura](../01-arquitectura.md), los [hallazgos del levantamiento](../cimientos-word/03-hallazgos-levantamiento.docx) y las decisiones de concurrencia de la [auditoría](../cimientos-word/04-auditoria-arquitectura.docx). Si una descripción anterior contradice estos contratos, manda el comportamiento construido y el resumen de [entregables por fase](../entregables-fases/README.md).
 
-**Estado de implementación:** los pasos 1 a 9 están construidos y verificados contra
+**Estado de implementación:** los pasos 1 a 11 están construidos y verificados contra
 PostgreSQL real. Las Server Actions de las pantallas pasan por las puertas de lectura y
 escritura del sistema; su frontera real de autenticación y autorización cubre el criterio
 de aceptación 13.
 
-**Decisión operativa:** la migración vigente ya está aplicada tanto en la base aislada de
-pruebas como en la base local de desarrollo. El paso 7 dejó el esquema Zod y el estado de
-formulario compartido; el paso 8 agregó listado, filtros y paginación, captura, edición de
-borradores y detalle de entradas, conservando en PostgreSQL los cálculos canónicos de dinero
-y existencias.
+**Decisión operativa:** las migraciones están versionadas; la base aislada de pruebas se
+recrea en cada corrida y `npm run db:reset` alinea una base local de desarrollo. El paso 7
+dejó el esquema Zod y el estado de formulario compartido; el paso 8 agregó listado,
+filtros y paginación, captura, edición de borradores y detalle de entradas, conservando en
+PostgreSQL los cálculos canónicos de dinero y existencias.
 
 ## 1. Resultado de la fase
 
 Compras puede crear un borrador de entrada y confirmar que el material fue recibido. La confirmación convierte el borrador, una sola vez y de forma atómica, en un asiento del libro de inventario: asigna folio, crea una capa de costo por partida e incrementa la existencia de la bodega.
 
-Una entrada confirmada no se edita ni se borra. La cancelación mediante asiento inverso se construye en la fase 7; hasta entonces, la fase 5 debe impedir modificar el movimiento ya confirmado.
+Una entrada confirmada no se edita ni se borra. Desde la Fase 7 se corrige mediante un asiento nuevo de reversa, siempre que las capas creadas por la entrada sigan intactas.
 
 ## 2. Alcance y fuera de alcance
 
@@ -40,7 +40,7 @@ Quedan fuera:
 - Cálculo de cantidades pendientes por recibir
 - Archivos adjuntos de facturas o remisiones; en esta fase solo se guarda la referencia
 - Consumo de capas PEPS, que empieza con las salidas
-- Cancelación con asiento inverso, que pertenece a la fase 7
+- Reversa mediante asiento inverso, incorporada después en la Fase 7
 - Migración del histórico de movimientos
 
 ## 3. Identidad de quienes intervienen

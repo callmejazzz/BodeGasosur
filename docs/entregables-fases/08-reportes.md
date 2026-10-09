@@ -11,8 +11,9 @@
 
 1. Cerrar el contrato de columnas, filtros y cortes para cada reporte.
 2. Construir el reporte semanal del viernes con entradas, salidas y existencia final.
-3. Construir existencias por bodega, alerta de mínimos y conteo separado de piezas sin
-   valuación.
+3. Construir existencias por bodega, indicador de stock bajo el mínimo en el reporte y
+   conteo separado de piezas sin valuación. Las alertas en pantalla y por correo son de la
+   fase 9.
 4. Construir kardex por artículo, gasto acumulado por estación y frecuencia de consumo.
 5. Definir e implementar exportación a Excel del lado del servidor para todos los
    listados, sin introducir cálculos monetarios paralelos en JavaScript.

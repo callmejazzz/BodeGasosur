@@ -101,11 +101,14 @@ versión aparte, que agrupa los cuatro commits de la fase, y la etiqueta apunta 
 
 **Fase 7:** se construyó completa antes del registro en Git. Su cierre funcional,
 versión `v0.7.0` y documentación se reúnen en un único commit, `2ac6ca3`, etiquetado y
-publicado. Las correcciones de la revisión de ese código salen como el parche `v0.7.1`.
+publicado. Las correcciones de la revisión se publicaron como `v0.7.1` en `22c1146`.
+El ajuste posterior del teclado del selector está en `afcea45`, sin nueva etiqueta por
+decisión del proyecto: `main` va por delante de la última versión etiquetada.
 
 Los mensajes de commit siguen siendo prosa en español que describe decisiones. **No se
-adopta Conventional Commits:** con ocho fases y un desarrollador, el changelog a mano sale
-mejor escrito que uno generado, y los mensajes actuales documentan mejor el porqué.
+adopta Conventional Commits:** con este desarrollo por fases y un desarrollador, el
+changelog a mano sale mejor escrito que uno generado, y los mensajes actuales documentan
+mejor el porqué.
 
 ## 7. Ramas: mezclar y desplegar son dos actos distintos
 

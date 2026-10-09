@@ -6,7 +6,7 @@
 | Versión      | `v0.6.0`                                                                                                                                                                       |
 | Commits      | `bd3d30e` — contrato y frontera SQL; `6ef2605` — dominio, conciliación y acciones; `ae7741d` — actor verificable y guardas de acceso; `8fe9805` — pantallas; cierre de versión |
 | Etiqueta Git | `v0.6.0`                                                                                                                                                                       |
-| Contrato     | [Fase 6: Salidas](04-fase-6-salidas.md)                                                                                                                    |
+| Contrato     | [Fase 6: Salidas](../contratos-otros/04-fase-6-salidas.md)                                                                                                                    |
 
 ## Construido
 
@@ -27,9 +27,10 @@
 - Actor verificable: JWT RS256 de Clerk verificado en PostgreSQL y ligado a la bitácora,
   con guardas de privilegios en `Usuario`.
 - Usuario de ejecución separado del de migraciones, con sus privilegios probados.
-- Lista con búsqueda, filtros y cursor; pendientes por sección; captura con existencia
-  informativa; detalle con acciones, consumos PEPS, valuación e historial. Cada pantalla
-  consulta solo lo que el usuario puede ver.
+- Lista con búsqueda y filtros (cursor en `v0.6.0`, páginas de 100 desde `v0.7.1`);
+  pendientes por sección; captura con existencia informativa; detalle con acciones,
+  consumos PEPS, valuación e historial. Cada pantalla consulta solo lo que el usuario
+  puede ver.
 - 344 pruebas sobre PostgreSQL real, con concurrencia, idempotencia, doble clic,
   escrituras SQL directas y vectores Wycheproof para la firma.
 

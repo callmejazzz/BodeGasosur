@@ -10,6 +10,8 @@ puede hacer ahora que antes no se podía.
 
 ## v0.7.1 — 2026-10-09
 
+Commit `22c1146`, con su etiqueta.
+
 Última migración incluida: `20261008100000_entrada_con_sus_capas`.
 
 Correcciones de la revisión de `v0.7.0`.
