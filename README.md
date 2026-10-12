@@ -41,6 +41,7 @@ La aplicación queda en <http://localhost:3000>.
 | `npm run db:up` / `db:down` | Levanta o baja PostgreSQL |
 | `npm run db:reset` | **Desarrollo.** Borra todo, remigra, crea el usuario de ejecución, carga las llaves públicas de Clerk y encadena configuración, catálogos reales, fixtures y Superadmin |
 | `npm run prod:bootstrap` | **Producción.** Manual y con confirmación: migraciones, usuario de ejecución, llaves de Clerk, configuración, catálogos reales y Superadmin. Sin fixtures — ver [Plan B](docs/contratos-otros/01-plan-b-produccion.md) |
+| `npm run db:migrar-remota -- <archivo>` | Migraciones pendientes en una base remota (Supabase), desde un contenedor Linux: en macOS Prisma no acepta su certificado. Ver [docs/05](docs/05-versionado-y-despliegue.md) §8 |
 | `npm run db:usuario-app` / `db:llaves-clerk` | Crea el usuario de ejecución sin propiedad y carga manualmente las llaves públicas de Clerk |
 | `npm run db:configuracion` | Bodegas, áreas, unidad `PZA` y folios. Solo crea lo que falta |
 | `npm run datos:migrar` | Empresas, estaciones y personas desde `prisma/migracion-datos/`. Se detiene ante divergencias; `-- --sincronizar` sobrescribe, `-- --simular` solo muestra |

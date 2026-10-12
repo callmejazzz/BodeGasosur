@@ -72,10 +72,19 @@ export async function asegurarUsuarioDeEjecucion(urlMigraciones: string | undefi
     if (existe) {
       const { rows: miembro } = await cliente.query<{ es: boolean }>("SELECT pg_has_role($1, current_user, 'MEMBER') AS es", [app.usuario]);
       if (miembro[0].es) throw new Error(`${app.usuario} es miembro del rol dueño; usa un usuario sin esa pertenencia.`);
+      // Desde PostgreSQL 16 un dueño sin SUPERUSER (Supabase) no puede nombrar
+      // estos atributos en ALTER ROLE ni para negarlos: se exigen en falso.
+      const { rows: reservados } = await cliente.query<{ alguno: boolean }>(
+        "SELECT rolsuper OR rolreplication OR rolbypassrls AS alguno FROM pg_roles WHERE rolname = $1",
+        [app.usuario],
+      );
+      if (reservados[0].alguno) throw new Error(`${app.usuario} es superusuario, de replicación o salta RLS; usa otro usuario para la aplicación.`);
     }
 
     // DDL no admite parámetros: format() cita en el servidor el nombre y la contraseña.
-    const atributos = "LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS INHERIT";
+    const atributos = existe
+      ? "LOGIN NOCREATEDB NOCREATEROLE INHERIT"
+      : "LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS INHERIT";
     const plantilla = existe ? `ALTER ROLE %I WITH ${atributos} PASSWORD %L` : `CREATE ROLE %I WITH ${atributos} PASSWORD %L`;
     const { rows } = await cliente.query<{ sql: string }>("SELECT format($1, $2::text, $3::text) AS sql", [plantilla, app.usuario, app.contrasena]);
     await cliente.query(rows[0].sql);

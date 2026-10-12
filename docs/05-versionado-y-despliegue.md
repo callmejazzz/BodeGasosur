@@ -146,8 +146,8 @@ Mientras dure el desarrollo el sistema sigue siendo local
 |---|---|
 | Aplicación | Sevalla Application Hosting, **Ashburn** (`us-east4`, después `us-ashburn-1` en OCI), con el [`Dockerfile`](../Dockerfile), un pod S1 y una instancia |
 | Base | Supabase Pro, **`us-east-1`** (Virginia del Norte) |
-| Conexión de la aplicación | Supavisor en modo **sesión** (puerto 5432) o directa con el complemento IPv4. Nunca el modo transacción (6543) |
-| Conexión del dueño | **Directa** (`db.<proyecto>.supabase.co`), desde una terminal |
+| Conexión de la aplicación | **Directa** (`db.<proyecto>.supabase.co`), con el complemento IPv4. Supavisor en modo sesión (5432) solo como alternativa; nunca el modo transacción (6543) |
+| Conexión del dueño | **Directa**, desde una terminal |
 
 **La base va donde está la aplicación.** El tablero hace once consultas seguidas y
 confirmar un movimiento encadena varias con candados puestos: dentro de Ashburn cada ida y
@@ -174,6 +174,18 @@ en su rol —la base enseña la hora de México—, así que los scripts que esc
 
 ### Supabase, el día que se crea el proyecto
 
+- **Complemento IPv4** (*Add-ons → Dedicated IPv4 address*). Sin él, la conexión directa
+  solo existe por IPv6, y ni Sevalla ni muchas redes domésticas lo tienen.
+- **Sin permisos por omisión para los roles de Supabase.** En `public`, todo lo que crea
+  `postgres` nace con todos los permisos para `anon`, `authenticated` y `service_role`. Se
+  quitan **antes** de la primera migración, como `postgres`:
+
+  ```sql
+  ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated, service_role;
+  ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON SEQUENCES FROM anon, authenticated, service_role;
+  ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM anon, authenticated, service_role;
+  ```
+
 - **Data API apagada antes de la primera migración** (*Integrations → Data API*). El esquema
   no define políticas RLS; con la API encendida, la llave pública podría leer costos y
   proveedores sin pasar por la aplicación.
@@ -188,8 +200,11 @@ en su rol —la base enseña la hora de México—, así que los scripts que esc
 - **Network Restrictions**: la IP de salida de Sevalla y, mientras dure la operación, la de
   quien migra. Las IPs de salida de Sevalla son compartidas por centro de datos: la lista
   reduce quién puede intentar conectarse, pero la defensa es la credencial.
-- **La misma versión mayor de PostgreSQL** en `docker-compose.yml` que en Supabase, con
-  `npm run test` corrido sobre ella.
+- **La versión de PostgreSQL.** Supabase está en 17 y `docker-compose.yml` en 16. La suite
+  pasa en 17, también con un dueño sin superusuario como el de Supabase, salvo las doce
+  pruebas que fabrican inventario dañado con `session_replication_role`, que exige
+  superusuario (verificado el 2026-10-12). Alinear el `docker-compose.yml` obliga a recrear
+  el volumen local de cada desarrollador; queda pendiente.
 - **Después del bootstrap**, `anon` y `authenticated` no deben tener privilegios en
   `public` ni en `catalogo_gasosur`:
 
@@ -236,7 +251,17 @@ distinto al arrancar lo pisaría.
 
 **Las migraciones son parte del despliegue, no del build.** Durante la prueba se corren a
 mano desde una terminal, con `DATABASE_URL_MIGRACIONES` por la conexión directa:
-`npx prisma migrate deploy`, nunca `migrate dev`, que es interactivo y puede resetear. Van
+`npm run db:migrar-remota -- .env.supabase`, nunca `migrate dev`, que es interactivo y puede
+resetear. Corre `prisma migrate deploy` dentro de un contenedor Linux: en macOS, el motor de
+migraciones de Prisma valida TLS con el sistema, que rechaza el certificado de Supabase
+(cinco años de vigencia, sin EKU `serverAuth`); OpenSSL lo verifica con el mismo CA. Los
+demás scripts usan `pg`, que ya va por OpenSSL. Por la misma razón, `prod:bootstrap` no puede
+aplicar las migraciones desde macOS: hay que prepararlo para el contenedor antes de `v1.0.0`.
+
+**La terminal no debe traer las variables del `.env` local.** `dotenv` nunca sobrescribe una
+variable que ya existe, y una terminal de VS Code puede traer `DATABASE_URL` del `.env`: los
+scripts correrían contra `localhost` sin avisar. Antes de usar `.env.supabase`, `unset` de
+`DATABASE_URL`, `DATABASE_URL_MIGRACIONES` y las variables de Clerk. Van
 **antes** de promover la aplicación, y las migraciones expansivas de §5 garantizan que la
 versión anterior siga funcionando con el esquema nuevo. La credencial del dueño vive en el
 gestor de contraseñas, no en Sevalla.
