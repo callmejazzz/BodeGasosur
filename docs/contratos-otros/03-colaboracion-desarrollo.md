@@ -16,7 +16,7 @@ promoción deliberada a `production`.
 
 ## 2. Base local propia
 
-La persona instala Node 20+, Docker y clona el repositorio. Luego ejecuta:
+La persona instala Node 24+, Docker y clona el repositorio. Luego ejecuta:
 
 ```bash
 npm install

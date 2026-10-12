@@ -17,7 +17,7 @@ a qué costo unitario, a qué área se destina y con qué observaciones.
 | Autenticación   | **Clerk**                                                                  | Identidad delegada: contraseñas, sesiones y bloqueo por intentos dejan de ser código nuestro (§3.6)      |
 | Autorización    | **PostgreSQL**, con tres roles y la bandera `puedeAutorizar`               | Los permisos se leen de la base en cada petición, así que revocar surte efecto de inmediato (§3.3, §3.6) |
 | Invariantes     | **En la base**, como `CHECK` y triggers                                    | La capa de servicios no es el único escritor y nunca lo será (§3.7)                                      |
-| Entorno         | **Local durante el desarrollo**; el destino se decide antes de la `v1.0.0` | Ver [05](05-versionado-y-despliegue.md) §8 y el hallazgo **D1** de la [auditoría](cimientos-word/04-auditoria-arquitectura.docx)       |
+| Entorno         | **Local durante el desarrollo**; producción en **Sevalla** (app) + **Supabase** (base), a prueba | Ver [05](05-versionado-y-despliegue.md) §8; cierra el hallazgo **D1** de la [auditoría](cimientos-word/04-auditoria-arquitectura.docx) |
 | Identificadores | **UUIDv7** nativo como llave primaria                                      | El catálogo de estaciones es global; los ids no pueden chocar entre proyectos (§3.5)                     |
 | URLs            | Por **clave de negocio**, no por id                                        | `/estaciones/ES05588`, no un UUID que nadie puede dictar por teléfono                                    |
 | Cantidades      | **Unidades base enteras**, normalizadas desde `UNIDAD` o `CAJA`            | Existencia y PEPS nunca operan con cajas; el factor usado queda congelado en cada partida                 |
@@ -354,6 +354,7 @@ BodeGasosur/
 │  ├─ arranque-superadmin.ts      # El primer Superadmin, desde su identidad en Clerk
 │  ├─ llaves-clerk.ts              # Carga manual de llaves públicas de Clerk
 │  └─ bootstrap-produccion.ts     # Plan B: producción limpia, manual y con confirmación
+├─ certificates/                  # El CA de Supabase, para sslmode=verify-full
 ├─ prisma.config.ts               # Prisma 7 lee aquí la URL de conexión
 ├─ src/
 │  ├─ app/
@@ -370,6 +371,7 @@ BodeGasosur/
 │  │  │  ├─ conteos/              # Hojas de conteo y cinco Server Actions
 │  │  │  ├─ ajustes/ · prestamos/ # Consulta de ajustes (y reversas) y de préstamos
 │  │  │  └─ reversas/             # La Server Action de reversa, solo Superadmin
+│  │  ├─ api/salud/                # Readiness y liveness del contenedor, sin base
 │  │  └─ api/webhooks/clerk/       # Sincronización firmada desde Clerk
 │  ├─ components/
 │  │  ├─ ui/                      # Primitivas: botón, campos, tabla, tarjetas
@@ -392,6 +394,7 @@ BodeGasosur/
 │     ├─ seguridad/               # Revisión periódica de las llaves públicas de Clerk
 │     └─ salidas/                 # Formulario, lecturas, PEPS, servicio y pruebas
 ├─ docker-compose.yml             # PostgreSQL local
+├─ Dockerfile                     # La imagen de producción (standalone, Node 24)
 └─ .env.example
 ```
 
@@ -517,14 +520,9 @@ Comandos útiles:
 
 ## 6. Decisiones deliberadamente diferidas
 
-No se resuelven ahora, pero la arquitectura les deja lugar:
+No se resuelven ahora, pero la arquitectura les deja lugar. *(Dónde se despliega estaba
+aquí; se decidió el 2026-10-10: [05](05-versionado-y-despliegue.md) §8.)*
 
-- **Dónde se despliega.** Estaba decidido —Vercel Pro + Supabase Pro— y la
-  [auditoría](cimientos-word/04-auditoria-arquitectura.docx) lo reabrió en **D1**: para diez usuarios en una oficina de
-  Acapulco, el serverless cobra complejidad —pooler, dos URLs de conexión, arranques en
-  frío sobre transacciones con locks— a cambio de un escalado elástico que nadie necesita.
-  Se decide antes de la `v1.0.0`. La elección no ata nada: Next.js corre igual en un
-  contenedor, en Railway o en un servidor interno del grupo.
 - **Órdenes de compra.** En la fase 5 cada entrega física es una entrada independiente;
   varias pueden compartir proveedor y referencia para agrupar y sumar lo recibido. Sin
   una cantidad comprometida no se puede afirmar cuánto falta. Si Compras necesita el ciclo
