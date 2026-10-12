@@ -1,0 +1,17 @@
+# Secretos: las variables llegan del proveedor, nunca dentro de la imagen.
+.env*
+
+.git
+node_modules
+.next
+*.tsbuildinfo
+coverage
+
+# Documentación y herramientas locales
+docs
+graphify-out
+.obsidian
+.agents
+.claude
+.github
+.DS_Store

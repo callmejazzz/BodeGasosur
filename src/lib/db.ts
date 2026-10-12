@@ -10,6 +10,7 @@ import { usuarioTienePermiso, type Permiso, type SujetoDePermisos } from "@/lib/
 // Prisma 7 exige un driver adapter explícito. La sesión va en UTC aunque la
 // base muestre la hora de México: el adapter lee y escribe timestamptz
 // suponiendo UTC, y en otra zona movería cada instante (prisma/comun.ts igual).
+// El rol de la app también lleva UTC, porque Supavisor descarta estas options.
 const createPrismaClient = () =>
   new PrismaClient({
     adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL, options: "-c TimeZone=UTC" }),

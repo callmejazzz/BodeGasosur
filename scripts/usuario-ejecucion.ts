@@ -13,13 +13,13 @@
 
 import "dotenv/config";
 import { Client } from "pg";
-import { esEjecucionDirecta } from "../prisma/comun";
+import { esEjecucionDirecta, esPoolerDeSupabase } from "../prisma/comun";
 
 export const ROL_DE_EJECUCION = "bodegasosur_ejecucion";
 
 type Destino = { usuario: string; contrasena: string; servidor: string; base: string };
 
-function leer(nombre: string, url: string | undefined): Destino {
+export function leer(nombre: string, url: string | undefined): Destino {
   if (!url) throw new Error(`Falta ${nombre}.`);
   let u: URL;
   try {
@@ -27,10 +27,15 @@ function leer(nombre: string, url: string | undefined): Destino {
   } catch {
     throw new Error(`${nombre} no es una URL de PostgreSQL válida.`);
   }
+  // Una base de Supabase se alcanza directo (db.<proyecto>.supabase.co) o por
+  // Supavisor, que recibe el usuario como «rol.<proyecto>»: se comparan por proyecto.
+  const usuario = decodeURIComponent(u.username);
+  const directo = u.hostname.match(/^db\.([a-z0-9]+)\.supabase\.co$/);
+  const pooler = esPoolerDeSupabase(url) ? usuario.match(/^(.+)\.([a-z0-9]+)$/) : null;
   return {
-    usuario: decodeURIComponent(u.username),
+    usuario: pooler ? pooler[1] : usuario,
     contrasena: decodeURIComponent(u.password),
-    servidor: `${u.hostname}:${u.port || "5432"}`,
+    servidor: directo ? `supabase:${directo[1]}` : pooler ? `supabase:${pooler[2]}` : `${u.hostname}:${u.port || "5432"}`,
     base: u.pathname.replace(/^\//, ""),
   };
 }
@@ -76,6 +81,15 @@ export async function asegurarUsuarioDeEjecucion(urlMigraciones: string | undefi
     await cliente.query(rows[0].sql);
     const concesion = await cliente.query<{ sql: string }>("SELECT format('GRANT %I TO %I', $1::text, $2::text) AS sql", [ROL_DE_EJECUCION, app.usuario]);
     await cliente.query(concesion.rows[0].sql);
+    // UTC en el rol y no solo en `options` de arranque, que Supavisor descarta
+    // (solo reenvía search_path). Y si la red se corta a media transacción, la
+    // base suelta los candados en vez de esperar al TCP.
+    for (const [parametro, valor] of [["timezone", "UTC"], ["idle_in_transaction_session_timeout", "30s"]]) {
+      const ajuste = await cliente.query<{ sql: string }>("SELECT format('ALTER ROLE %I SET %s = %L', $1::text, $2::text, $3::text) AS sql", [
+        app.usuario, parametro, valor,
+      ]);
+      await cliente.query(ajuste.rows[0].sql);
+    }
     return { usuario: app.usuario, base: app.base, servidor: app.servidor, creado: !existe };
   } finally {
     await cliente.end();

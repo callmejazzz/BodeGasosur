@@ -8,13 +8,13 @@ Controla la entrada y salida de material entre bodegas y estaciones, registrando
 
 **Estado:** fases 0 a 7 construidas en desarrollo; la fase 7 (traspasos, devoluciones, préstamos, conteo físico y reversas) se publicó como `v0.7.0` (commit `2ac6ca3`), y `v0.7.1` (commit `22c1146`) corrige lo que encontró su revisión. `main` incluye además la corrección del teclado del selector de salidas (`afcea45`), sin etiqueta nueva por decisión del proyecto. Siguen los reportes de la fase 8. Ver [entregables por fase](docs/entregables-fases/README.md).
 
-**Entorno:** local mientras dure el desarrollo. Dónde se despliega se decide antes de la
-`v1.0.0` — ver [versionado y despliegue](docs/05-versionado-y-despliegue.md) y el hallazgo
-**D1** de la [auditoría](docs/cimientos-word/04-auditoria-arquitectura.docx).
+**Entorno:** local mientras dure el desarrollo. Producción: la aplicación en Sevalla y la
+base en Supabase, con Sevalla a prueba una semana — ver
+[versionado y despliegue](docs/05-versionado-y-despliegue.md) §8.
 
 ## Arranque
 
-Requiere Node 20+ y Docker.
+Requiere Node 24+ y Docker.
 
 ```bash
 npm install

@@ -57,6 +57,14 @@ describe("usuario de ejecución", () => {
     });
   });
 
+  it("su sesión nace en UTC y no retiene candados ociosa, aunque el pooler descarte las options de arranque", async () => {
+    // `app` se conecta sin options, como llega una conexión a través de Supavisor.
+    const { rows } = await app.query<{ zona: string; espera: string }>(
+      "SELECT current_setting('TimeZone') AS zona, current_setting('idle_in_transaction_session_timeout') AS espera",
+    );
+    expect(rows[0]).toEqual({ zona: "UTC", espera: "30s" });
+  });
+
   it("no vacía tablas, no toca triggers ni restricciones, no cambia el esquema ni apaga las defensas", async () => {
     const intentos = [
       `TRUNCATE "Movimiento" CASCADE`,

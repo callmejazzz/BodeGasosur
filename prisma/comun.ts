@@ -39,7 +39,16 @@ export function crearCliente(url = process.env.DATABASE_URL): PrismaClient {
 export function crearClienteDelDueno(): PrismaClient {
   const url = process.env.DATABASE_URL_MIGRACIONES;
   if (!url) throw new Error("Falta DATABASE_URL_MIGRACIONES: los scripts de datos escriben como el dueño del esquema.");
+  // El usuario de la app lleva UTC en su rol; el dueño no (la base muestra la
+  // hora de México), así que depende de `options`, y Supavisor lo descarta.
+  if (esPoolerDeSupabase(url)) {
+    throw new Error("DATABASE_URL_MIGRACIONES pasa por Supavisor, que descarta TimeZone=UTC: usa la conexión directa (db.<proyecto>.supabase.co).");
+  }
   return crearCliente(url);
+}
+
+export function esPoolerDeSupabase(url: string): boolean {
+  return new URL(url).hostname.endsWith(".pooler.supabase.com");
 }
 
 /** `true` cuando el archivo se corrió con `tsx archivo.ts`, y no se importó. */
