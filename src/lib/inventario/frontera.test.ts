@@ -64,7 +64,7 @@ describe("frontera de la fase 7", () => {
       }
       for (const [, nombres] of codigo.matchAll(/import \{([^}]+)\} from "@\/lib\/db"/g)) {
         for (const nombre of nombres.split(",").map((n) => n.trim().replace(/^type /, "")).filter(Boolean)) {
-          expect(["consultar", "SinAcceso", "SinPermiso", "UsuarioSesion"], `${relativa(ruta)} importa ${nombre}`).toContain(nombre);
+          expect(["consultar", "consultarDesdeAccion", "SinAcceso", "SinPermiso", "UsuarioSesion"], `${relativa(ruta)} importa ${nombre}`).toContain(nombre);
         }
       }
     }
@@ -127,14 +127,14 @@ describe("frontera de la fase 7", () => {
     }
   });
 
-  it("la búsqueda de salida del formulario solo lee, dentro de consultar() con el permiso de captura", () => {
+  it("la búsqueda de salida del formulario solo lee, dentro de consultarDesdeAccion() con el permiso de captura", () => {
     const codigo = readFileSync(join(APP, "devoluciones", "consultas.ts"), "utf8");
     expect(codigo.startsWith('"use server";')).toBe(true);
     const exportadas = [...codigo.matchAll(/export async function (\w+)\(([^)]*)\)/g)];
     expect(exportadas.map((m) => m[1])).toEqual(["buscarSalidas"]);
     expect(exportadas[0][2]).not.toMatch(/usuario|creadoPor|rol/i);
-    expect(codigo).toMatch(/return await consultar\("devoluciones:capturar", \(db\) => salidasDelSelector\(db, busqueda\)\)/);
-    expect(codigo.match(/consultar\("/g)).toHaveLength(1);
+    expect(codigo).toMatch(/return await consultarDesdeAccion\("devoluciones:capturar", \(db\) => salidasDelSelector\(db, busqueda\)\)/);
+    expect(codigo.match(/consultar(DesdeAccion)?\("/g)).toHaveLength(1);
     expect(codigo).not.toMatch(/accionProtegida\(|protegida\(|servicio|\$queryRaw|\$executeRaw/);
   });
 

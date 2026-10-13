@@ -23,7 +23,7 @@ vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 vi.mock("@clerk/nextjs/server", async () => ({ auth: (await import("../../pruebas/clerk-simulado")).authSimulado(sesion) }));
 
 process.env.DATABASE_URL = inject("urlEjecucionPruebas");
-const { accionProtegida, escrituraDeSistema, IdentidadNoVerificable, registrarAccesoDenegado, SinAcceso, SinPermiso } = await import("./db");
+const { accionProtegida, consultar, consultarDesdeAccion, escrituraDeSistema, IdentidadNoVerificable, registrarAccesoDenegado, SinAcceso, SinPermiso } = await import("./db");
 const { guardarAcceso } = await import("./usuarios/repo");
 
 const prisma = crearCliente(URL_PRUEBAS);
@@ -320,6 +320,22 @@ describe("las escrituras sin sesión de usuario", () => {
     } finally {
       errores.mockRestore();
     }
+  });
+});
+
+describe("leer sin sesión", () => {
+  // La página corre en paralelo con el layout, que ya redirige: un SinAcceso
+  // aquí solo ensuciaría los logs. Las acciones sí necesitan el error.
+  it("una pantalla redirige a /sign-in; una acción recibe SinAcceso", async () => {
+    sesion.userId = null;
+    const leer = async () => 1;
+    await expect(consultar("entradas:leer", leer)).rejects.toMatchObject({ digest: expect.stringMatching(/^NEXT_REDIRECT;.*;\/sign-in;/) });
+    await expect(consultarDesdeAccion("entradas:leer", leer)).rejects.toBeInstanceOf(SinAcceso);
+  });
+
+  it("con sesión pero sin usuario en el sistema no redirige: el layout registra el acceso denegado", async () => {
+    sesion.userId = `user_sin_fila_${randomUUID().slice(0, 8)}`;
+    await expect(consultar("entradas:leer", async () => 1)).rejects.toBeInstanceOf(SinAcceso);
   });
 });
 

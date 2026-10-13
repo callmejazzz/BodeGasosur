@@ -3,6 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Prisma, PrismaClient, type Rol } from "@prisma/client";
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { cache } from "react";
 import { detalleDePostgres, esErrorDePrisma } from "@/lib/movimientos/errores";
 import { usuarioTienePermiso, type Permiso, type SujetoDePermisos } from "@/lib/permisos";
@@ -209,6 +210,17 @@ export async function comprobarPermiso(permiso: Permiso): Promise<UsuarioSesion>
  * acompañarlo.
  */
 export async function consultar<T>(
+  permiso: Permiso,
+  fn: (db: Prisma.TransactionClient, usuario: UsuarioSesion) => Promise<T>,
+): Promise<T> {
+  // Next renderiza layout y página en paralelo: sin sesión, el layout ya
+  // redirige, y un SinAcceso lanzado aquí solo quedaría como error en los logs.
+  if ((await sesionActual()).estado === "sin-sesion") redirect("/sign-in");
+  return consultarDesdeAccion(permiso, fn);
+}
+
+/** `consultar()` para una Server Action: sin sesión lanza SinAcceso y la acción decide qué responder. */
+export async function consultarDesdeAccion<T>(
   permiso: Permiso,
   fn: (db: Prisma.TransactionClient, usuario: UsuarioSesion) => Promise<T>,
 ): Promise<T> {
