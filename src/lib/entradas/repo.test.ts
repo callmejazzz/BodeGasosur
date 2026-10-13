@@ -53,9 +53,15 @@ beforeAll(async () => {
 });
 afterAll(() => prisma.$disconnect());
 
-/** Solo las entradas de esta prueba: comparten proveedor. */
+/**
+ * Solo las entradas de esta prueba: comparten proveedor. Sin otra búsqueda, se
+ * busca por él en la consulta, no después: otros archivos pueden dejar más de
+ * una página de entradas antes que estas.
+ */
 const listar = (f: Partial<FiltroEntradas>) =>
-  prisma.$transaction((tx) => listarEntradas(tx, { ...SIN_FILTROS, ...f })).then((r) => r.filas.filter((x) => x.proveedor?.nombreComercial === e.proveedorNombre));
+  prisma
+    .$transaction((tx) => listarEntradas(tx, { ...SIN_FILTROS, busqueda: e.proveedorNombre, ...f }))
+    .then((r) => r.filas.filter((x) => x.proveedor?.nombreComercial === e.proveedorNombre));
 
 describe("clave_normalizada", () => {
   it("quita guiones y ceros a la izquierda del número, y no distingue mayúsculas", async () => {
@@ -74,7 +80,8 @@ describe("listarEntradas", () => {
     }
     const bodega = await prisma.bodega.findUniqueOrThrow({ where: { id: e.bodegaId } });
     expect((await listar({ busqueda: bodega.clave.replace("-", "").replace(/0+/, "").toLowerCase() })).length).toBeGreaterThanOrEqual(4);
-    expect((await listar({ busqueda: bodega.nombre.slice(0, 6).toUpperCase() })).length).toBeGreaterThanOrEqual(4);
+    // El sufijo único del nombre: «Bodega» a secas empata las de todos los archivos y no cabe en una página.
+    expect((await listar({ busqueda: bodega.nombre.slice(-6).toUpperCase() })).length).toBeGreaterThanOrEqual(4);
     expect((await listar({ busqueda: "fac-7" })).map((x) => x.id)).toEqual([conReferencia]);
     expect((await listar({ busqueda: e.proveedorNombre })).length).toBe(4);
     expect(await listar({ busqueda: "--" })).toEqual([]);
