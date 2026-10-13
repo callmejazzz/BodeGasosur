@@ -133,14 +133,9 @@ proyecto.
 
 ## 8. Despliegue: Sevalla + Supabase *(en prueba)*
 
-**Decisión (2026-10-10):** la aplicación en **Sevalla** y la base en **Supabase**, en
-proveedores separados. Cierra el hallazgo **D1** de la
-[auditoría](cimientos-word/04-auditoria-arquitectura.docx): un contenedor con
-`node server.js` en lugar de funciones serverless. Sevalla queda **a prueba una semana**;
-si no pasa la lista del final, el plan B es Render en Virginia con la misma base.
+**Decisión (2026-10-10):** la aplicación en **Sevalla** y la base en **Supabase**, en proveedores separados. Cierra el hallazgo **D1** de la [auditoría](cimientos-word/04-auditoria-arquitectura.docx): un contenedor con `node server.js` en lugar de funciones serverless. Sevalla queda **a prueba una semana**; si no pasa la lista del final, el plan B es Render en Virginia con la misma base.
 
-Mientras dure el desarrollo el sistema sigue siendo local
-([01-arquitectura.md](01-arquitectura.md) §5). Producción con datos reales llega en `v1.0.0`.
+Mientras dure el desarrollo el sistema sigue siendo local ([01-arquitectura.md](01-arquitectura.md) §5). Producción con datos reales llega en `v1.0.0`.
 
 | Pieza | Elección |
 |---|---|
@@ -149,21 +144,15 @@ Mientras dure el desarrollo el sistema sigue siendo local
 | Conexión de la aplicación | **Directa** (`db.<proyecto>.supabase.co`), con el complemento IPv4. Supavisor en modo sesión (5432) solo como alternativa; nunca el modo transacción (6543) |
 | Conexión del dueño | **Directa**, desde una terminal |
 
-**La base va donde está la aplicación.** El tablero hace once consultas seguidas y
-confirmar un movimiento encadena varias con candados puestos: dentro de Ashburn cada ida y
-vuelta cuesta 1–2 ms; contra Ohio, 10–15 ms, y los candados duran lo mismo de más.
+**La base va donde está la aplicación.** El tablero hace once consultas seguidas y confirmar un movimiento encadena varias con candados puestos: dentro de Ashburn cada ida y vuelta cuesta 1–2 ms; contra Ohio, 10–15 ms, y los candados duran lo mismo de más.
 
 **Separadas, porque el libro contable no debe depender del hosting de la aplicación.** La
-aplicación se puede cambiar de proveedor sin tocar la base; los proyectos que lean
-`catalogo_gasosur` se conectan a la base y no a Sevalla; y la credencial del dueño nunca
+aplicación se puede cambiar de proveedor sin tocar la base; los proyectos que lean `catalogo_gasosur` se conectan a la base y no a Sevalla; y la credencial del dueño nunca
 está en el contenedor.
 
 ### La zona horaria con un pooler
 
-Supavisor **solo reenvía `search_path`** a PostgreSQL y descarta el resto de las `options`
-de arranque, incluido el `-c TimeZone=UTC` del que dependen `src/lib/db.ts` y
-`prisma/comun.ts` (§4.5 de [01](01-arquitectura.md)). A través del pooler, cada instante
-quedaría corrido seis horas sin un solo error.
+Supavisor **solo reenvía `search_path`** a PostgreSQL y descarta el resto de las `options` de arranque, incluido el `-c TimeZone=UTC` del que dependen `src/lib/db.ts` y `prisma/comun.ts` (§4.5 de [01](01-arquitectura.md)). A través del pooler, cada instante quedaría corrido seis horas sin un solo error.
 
 Por eso el usuario de ejecución lleva **`timezone = 'UTC'` en su rol**, junto con
 `idle_in_transaction_session_timeout = '30s'` para que una conexión cortada a media
