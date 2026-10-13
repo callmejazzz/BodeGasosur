@@ -164,7 +164,9 @@ describe("préstamos y salidas devolvibles", () => {
   it("la lista y el detalle de salidas marcan devuelto parcial o completo; sin salida o revertida no cuenta", async () => {
     const s = await salidaRetirada(3, false);
     const jefe = e.usuarios.JEFE;
-    const enLista = () => leer((db) => salidas.datosDeLista(db, jefe, {})).then((l) => l.devoluciones[s]);
+    // Acotada por su folio: otros archivos dejan más de una página de salidas en curso, que van primero.
+    const { folio } = await prisma.movimiento.findUniqueOrThrow({ where: { id: s }, select: { folio: true } });
+    const enLista = () => leer((db) => salidas.datosDeLista(db, jefe, { q: folio! })).then((l) => l.devoluciones[s]);
     const enDetalle = () => leer((db) => relacionesDeSalida(db, jefe, { id: s, estatus: "RETIRADA" })).then((r) => r?.devolucion);
     await expect(enLista()).resolves.toBeUndefined();
     await devolver(null, 3);
@@ -343,7 +345,12 @@ describe("listas", () => {
     const despues = await leer((db) => datosDeLista(db, u, "TRASPASO", { q }));
     expect(despues.filas.map((f) => f.id)).toEqual([borrador, nuevo, viejo, descartado]);
     expect(despues.filas.find((f) => f.id === viejo)?.canceladoPor?.folio).toBe(reversa.folio);
-    await expect(leer((db) => datosDeLista(db, u, "TRASPASO", { q: reversa.folio })).then((l) => l.filas.map((f) => f.id))).resolves.toEqual([viejo]);
+    // El folio no lleva la marca: se acota a los traspasos de esta prueba. La búsqueda es por subcadena y
+    // otros archivos siembran folios aleatorios (fase7-frontera: «T-75f81bd1-c78» contiene «t7» de «T-000007»).
+    const deEstaPrueba = new Set([borrador, nuevo, viejo, descartado]);
+    await expect(
+      leer((db) => datosDeLista(db, u, "TRASPASO", { q: reversa.folio })).then((l) => l.filas.map((f) => f.id).filter((id) => deEstaPrueba.has(id))),
+    ).resolves.toEqual([viejo]);
     await expect(leer((db) => datosDeLista(db, u, "TRASPASO", { estatus: "confirmados", q })).then((l) => l.filas.map((f) => f.id))).resolves.toEqual([nuevo, viejo]);
     await expect(detalle(admin, viejo).then((d) => d?.reversa)).resolves.toMatchObject({ id: reversa.id, folio: reversa.folio, motivo: "Destino equivocado" });
   });

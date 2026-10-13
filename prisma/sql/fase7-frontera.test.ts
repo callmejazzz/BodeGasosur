@@ -30,7 +30,9 @@ afterAll(() => prisma.$disconnect());
 
 type Tx = Prisma.TransactionClient;
 const rechazo = (patron: RegExp) => expect.objectContaining({ message: expect.stringMatching(patron) });
-const folio = (prefijo: string) => `${prefijo}-${randomUUID().slice(0, 12)}`;
+// Único y sin dígitos: la búsqueda de un folio real («t7», «e12») siempre lleva dígitos y es por subcadena,
+// así que estos folios nunca empatan la de otro archivo de prueba.
+const folio = (prefijo: string) => `${prefijo}-${randomUUID().replace(/-/g, "").slice(0, 12).replace(/[0-9a-f]/g, (c) => "ghijklmnopqrstuv"[parseInt(c, 16)])}`;
 
 const articulo = async () => (await articuloNuevo(prisma, e.unidadId, null)).id;
 const capa = (bodegaId: string, articuloId: string, cantidad: number, fechaOriginal: string, costo: [string, string] | null = null) =>
