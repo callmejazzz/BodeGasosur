@@ -60,6 +60,8 @@ fórmulas están en el §6 del contrato.
 
 ## Pendiente al cerrar
 
-- La verificación de importes en Supabase, que todavía no tiene artículos ni movimientos;
-  las pruebas usan datos controlados en PostgreSQL local.
+- Cuadrar importes en Supabase cuando tenga artículos y movimientos; hoy las pruebas usan
+  datos controlados en PostgreSQL local. Sus 18 migraciones coinciden con el repositorio y
+  los cinco reportes y las descargas ya corren ahí (PostgreSQL 17) con el usuario de la
+  aplicación en solo lectura.
 - La etiqueta `v0.8.0` al mezclar `feat-reportes` a `main`, y el despliegue en Sevalla.
