@@ -97,10 +97,21 @@ export function leerRangoDeFechas(desdeCrudo: unknown, hastaCrudo: unknown, hoy 
 
 /** El día calendario siguiente. */
 export function diaSiguiente(texto: string): string {
+  return sumarDias(texto, 1);
+}
+
+/** `n` días después; antes, si es negativo. */
+export function sumarDias(texto: string, n: number): string {
   const fecha = aFechaDeBase(texto);
-  fecha.setUTCDate(fecha.getUTCDate() + 1);
+  fecha.setUTCDate(fecha.getUTCDate() + n);
   return deFechaDeBase(fecha);
 }
+
+/** 0 es domingo, 5 viernes y 6 sábado. */
+export const diaDeLaSemana = (texto: string) => aFechaDeBase(texto).getUTCDay();
+
+export const inicioDeMes = (texto: string) => `${texto.slice(0, 7)}-01`;
+export const inicioDeAño = (texto: string) => `${texto.slice(0, 4)}-01-01`;
 
 /**
  * El instante en que empieza ese día en México: el borde para filtrar marcas
@@ -129,6 +140,12 @@ export function formatearFecha(valor: Date | string): string {
 export function formatearInstante(valor: Date): string {
   const { año, mes, dia, hora, minuto } = partesEn(ZONA_HORARIA, valor);
   return `${dia}/${mes}/${año} ${hora}:${minuto}`;
+}
+
+/** El día y el minuto que marcaba el reloj de México en ese instante. */
+export function relojDeMexico(valor: Date): { fecha: string; minuto: number } {
+  const { año, mes, dia, hora, minuto } = partesEn(ZONA_HORARIA, valor);
+  return { fecha: `${año}-${mes}-${dia}`, minuto: Number(hora) * 60 + Number(minuto) };
 }
 
 // ─────────────────────────────────── Interno ─────────────────────────────────

@@ -61,6 +61,12 @@ describe("permisos de traspasos, devoluciones y conteo", () => {
     }
   });
 
+  it("los tres roles leen reportes, con o sin la bandera de autorizar", () => {
+    for (const rol of ["SUPERADMIN", "COMPRAS", "JEFE"] as const) {
+      for (const puedeAutorizar of [false, true]) expect(usuarioTienePermiso({ rol, puedeAutorizar }, "reportes:leer"), rol).toBe(true);
+    }
+  });
+
   it("solo el Superadmin revierte, y la bandera de autorizar no lo cambia", () => {
     expect(rolTienePermiso("SUPERADMIN", "movimientos:revertir")).toBe(true);
     for (const rol of ["COMPRAS", "JEFE"] as const) {
