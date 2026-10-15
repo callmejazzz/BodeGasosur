@@ -6,7 +6,7 @@ Controla la entrada y salida de material entre bodegas y estaciones, registrando
 
 **Última versión etiquetada: `v0.7.1`** - ver [CHANGELOG.md](CHANGELOG.md).
 
-**Estado:** fases 0 a 7 construidas en desarrollo; la fase 7 (traspasos, devoluciones, préstamos, conteo físico y reversas) se publicó como `v0.7.0` (commit `2ac6ca3`), y `v0.7.1` (commit `22c1146`) corrige lo que encontró su revisión. `main` incluye además la corrección del teclado del selector de salidas (`afcea45`), sin etiqueta nueva por decisión del proyecto. Siguen los reportes de la fase 8. Ver [entregables por fase](docs/entregables-fases/README.md).
+**Estado:** fases 0 a 7 construidas en desarrollo; la fase 7 (traspasos, devoluciones, préstamos, conteo físico y reversas) se publicó como `v0.7.0` (commit `2ac6ca3`), y `v0.7.1` (commit `22c1146`) corrige lo que encontró su revisión. `main` incluye además la corrección del teclado del selector de salidas (`afcea45`), sin etiqueta nueva por decisión del proyecto. La fase 8 (reportes, kardex y exportación a Excel) está construida en la rama `feat-reportes`, por mezclarse como `v0.8.0`. Ver [entregables por fase](docs/entregables-fases/README.md).
 
 **Entorno:** local mientras dure el desarrollo. Producción: la aplicación en Sevalla y la
 base en Supabase, con Sevalla a prueba una semana — ver
@@ -73,7 +73,7 @@ El script junta `prisma/sql/antes/`, el DDL que genera Prisma desde `schema.pris
 
 El [contrato de la fase 6](docs/contratos-otros/04-fase-6-salidas.md) documenta el flujo de salidas y el [de la fase 7](docs/contratos-otros/05-fase-7-traspasos-devoluciones-conteo.md), el de traspasos, devoluciones, conteo y reversas.
 
-**Empresas, estaciones y dos personas son las reales de Gasosur**, cargadas por [`prisma/migracion-datos/`](prisma/migracion-datos/README.md). **Artículos y proveedores son fixtures de desarrollo** (`prisma/fixtures.ts`) para probar movimientos y PEPS; el kardex se construirá en la fase 8. Producción arranca sin esos fixtures, por el [Plan B](docs/contratos-otros/01-plan-b-produccion.md).
+**Empresas, estaciones y dos personas son las reales de Gasosur**, cargadas por [`prisma/migracion-datos/`](prisma/migracion-datos/README.md). **Artículos y proveedores son fixtures de desarrollo** (`prisma/fixtures.ts`) para probar movimientos y PEPS; el kardex y los demás reportes de la fase 8 los usan para mostrar historia. Producción arranca sin esos fixtures, por el [Plan B](docs/contratos-otros/01-plan-b-produccion.md).
 
 ## Documentación
 

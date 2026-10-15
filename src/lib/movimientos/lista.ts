@@ -32,6 +32,8 @@ export type ConsultaDeLista = {
   textos: Prisma.Sql[];
   /** La pedida en la URL; se acota a las que hay. */
   pagina: number;
+  /** Registros por página: las descargas leen en lotes más grandes. */
+  tamano?: number;
 };
 
 const cualquiera = (condiciones: Prisma.Sql[]) => (condiciones.length ? Prisma.join(condiciones, " OR ") : Prisma.sql`false`);
@@ -57,6 +59,7 @@ export async function idsDeLista(db: Db, c: ConsultaDeLista): Promise<{ ids: str
       WHERE m.tipo = ${c.tipo}::"TipoMovimiento" ${filtros} ${busqueda}`,
     Prisma.sql`grupo, folio DESC, orden DESC, id DESC`,
     c.pagina,
+    c.tamano,
   );
   return { ids: filas.map((f) => f.id), pagina };
 }
@@ -66,19 +69,25 @@ export async function idsDeLista(db: Db, c: ConsultaDeLista): Promise<{ ids: str
  * sola lectura. `orden` nombra columnas de la consulta sin prefijo y debe
  * terminar en una única (el id), para que las páginas no se encimen.
  */
-export async function paginaDe<T extends { id: string }>(db: Db, consulta: Prisma.Sql, orden: Prisma.Sql, pedida: number): Promise<{ filas: T[]; pagina: Pagina }> {
+export async function paginaDe<T extends { id: string }>(
+  db: Db,
+  consulta: Prisma.Sql,
+  orden: Prisma.Sql,
+  pedida: number,
+  tamano = POR_PAGINA,
+): Promise<{ filas: T[]; pagina: Pagina }> {
   // La página se acota en SQL igual que en acotarPagina(): pasada la última, la última.
   const filas = await db.$queryRaw<(T & { total_de_la_lista: number })[]>`
     WITH lista AS (${consulta}), cuenta AS (SELECT count(*)::int AS total_de_la_lista FROM lista)
     SELECT c.total_de_la_lista, p.* FROM cuenta c
     LEFT JOIN LATERAL (
       SELECT * FROM lista ORDER BY ${orden}
-      LIMIT ${POR_PAGINA}
-      OFFSET (greatest(least(${pedida}::int, ceil(c.total_de_la_lista / ${POR_PAGINA}::numeric)::int), 1) - 1) * ${POR_PAGINA}
+      LIMIT ${tamano}
+      OFFSET (greatest(least(${pedida}::int, ceil(c.total_de_la_lista / ${tamano}::numeric)::int), 1) - 1) * ${tamano}
     ) p ON true
     ORDER BY ${orden}`;
   // Sin filas en la página vuelve solo la cuenta, con id nulo.
-  return { filas: filas.filter((f) => f.id !== null), pagina: acotarPagina(pedida, filas[0]?.total_de_la_lista ?? 0) };
+  return { filas: filas.filter((f) => f.id !== null), pagina: acotarPagina(pedida, filas[0]?.total_de_la_lista ?? 0, tamano) };
 }
 
 /** Las filas hidratadas, en el orden de los ids. */

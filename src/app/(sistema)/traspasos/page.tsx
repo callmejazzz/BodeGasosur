@@ -1,6 +1,7 @@
 import { filaDeMovimiento } from "@/components/inventario/filas";
 import { FiltrosMovimientos } from "@/components/inventario/filtros-movimientos";
 import { TablaMovimientos } from "@/components/inventario/tabla-movimientos";
+import { DescargarExcel } from "@/components/ui/descargar-excel";
 import { ButtonLink } from "@/components/ui/button";
 import { Paginacion } from "@/components/ui/paginacion";
 import { Card, EncabezadoPagina, EstadoVacio } from "@/components/ui/superficies";
@@ -22,7 +23,12 @@ export default async function PaginaTraspasos({ searchParams }: PageProps<"/tras
       <EncabezadoPagina
         titulo="Traspasos"
         descripcion="Movimientos entre bodegas. Al confirmar se consume PEPS en origen y el material llega a destino con su fecha original y su costo."
-        acciones={puedeCapturar && <ButtonLink href="/traspasos/nuevo" prefetch={false}>Nuevo traspaso</ButtonLink>}
+        acciones={
+          <>
+            <DescargarExcel href={`/exportar/traspasos?${aParametros(filtros)}`} />
+            {puedeCapturar && <ButtonLink href="/traspasos/nuevo" prefetch={false}>Nuevo traspaso</ButtonLink>}
+          </>
+        }
       />
       <Card>
         <FiltrosMovimientos filtros={filtros} total={pagina.total} sustantivo={["traspaso", "traspasos"]} />

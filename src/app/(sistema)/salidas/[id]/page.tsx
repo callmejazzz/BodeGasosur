@@ -5,6 +5,7 @@ import { AvisoDeReversa, SaldoDeSalida } from "@/components/inventario/relacione
 import { RevertirMovimiento } from "@/components/inventario/revertir";
 import { AccionesSalida } from "@/components/salidas/acciones-salida";
 import { AvisosDeRetiro, EncabezadoSalida, HistorialSalida, PartidasSalida, ValuacionSalida } from "@/components/salidas/detalle-salida";
+import { DescargarExcel } from "@/components/ui/descargar-excel";
 import { ButtonLink } from "@/components/ui/button";
 import { Paginacion } from "@/components/ui/paginacion";
 import { Card, CardHeader, EncabezadoPagina } from "@/components/ui/superficies";
@@ -48,7 +49,12 @@ export default async function PaginaSalida({ params, searchParams }: PageProps<"
       <EncabezadoPagina
         titulo={salida.folio ? `Salida ${salida.folio}` : "Salida sin folio"}
         descripcion={DESCRIPCION[salida.estatus]}
-        acciones={<ButtonLink href="/salidas" variante="secundario">Todas las salidas</ButtonLink>}
+        acciones={
+          <>
+            <DescargarExcel href={`/exportar/salida?id=${salida.id}`} />
+            <ButtonLink href="/salidas" variante="secundario">Todas las salidas</ButtonLink>
+          </>
+        }
       />
 
       <div className="flex flex-col gap-6">

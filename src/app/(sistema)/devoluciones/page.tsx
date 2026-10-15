@@ -1,6 +1,7 @@
 import { filaDeMovimiento } from "@/components/inventario/filas";
 import { FiltrosMovimientos } from "@/components/inventario/filtros-movimientos";
 import { TablaMovimientos } from "@/components/inventario/tabla-movimientos";
+import { DescargarExcel } from "@/components/ui/descargar-excel";
 import { ButtonLink } from "@/components/ui/button";
 import { Paginacion } from "@/components/ui/paginacion";
 import { Card, EncabezadoPagina, EstadoVacio } from "@/components/ui/superficies";
@@ -23,6 +24,7 @@ export default async function PaginaDevoluciones({ searchParams }: PageProps<"/d
         descripcion="Material que vuelve de una estación. Ligada a su salida hereda el costo y reduce el préstamo; sin salida entra sin costo."
         acciones={
           <>
+            <DescargarExcel href={`/exportar/devoluciones?${aParametros(filtros)}`} />
             <ButtonLink href="/prestamos" variante="secundario">Préstamos</ButtonLink>
             {puedeCapturar && <ButtonLink href="/devoluciones/nueva" prefetch={false}>Nueva devolución</ButtonLink>}
           </>

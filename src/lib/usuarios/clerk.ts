@@ -37,11 +37,11 @@ function aIdentidad(u: UsuarioDeClerk): IdentidadClerk {
 }
 
 /** Una página de 100, como las demás listas; Clerk admite hasta 500 por petición. */
-export async function listarIdentidades(pagina: number) {
+export async function listarIdentidades(pagina: number, tamano = POR_PAGINA) {
   const clerk = await clerkClient();
   const { data, totalCount } = await clerk.users.getUserList({
-    limit: POR_PAGINA,
-    offset: (pagina - 1) * POR_PAGINA,
+    limit: tamano,
+    offset: (pagina - 1) * tamano,
     orderBy: "-created_at",
   });
 

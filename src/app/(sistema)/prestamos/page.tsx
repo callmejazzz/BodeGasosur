@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { DescargarExcel } from "@/components/ui/descargar-excel";
 import { ButtonLink } from "@/components/ui/button";
 import { Paginacion } from "@/components/ui/paginacion";
 import { Badge, Card, EncabezadoPagina, EstadoVacio } from "@/components/ui/superficies";
@@ -33,7 +34,12 @@ export default async function PaginaPrestamos({ searchParams }: PageProps<"/pres
       <EncabezadoPagina
         titulo="Préstamos"
         descripcion="Salidas marcadas como préstamo. Siguen abiertas mientras falte cualquier pieza; solo las devoluciones ligadas a la salida reducen lo pendiente."
-        acciones={<ButtonLink href="/devoluciones" variante="secundario">Devoluciones</ButtonLink>}
+        acciones={
+          <>
+            <DescargarExcel href={`/exportar/prestamos?estado=${estado}`} />
+            <ButtonLink href="/devoluciones" variante="secundario">Devoluciones</ButtonLink>
+          </>
+        }
       />
       <Card>
         <nav aria-label="Estado" className="flex gap-2 border-b border-border px-5 py-3 text-sm">
