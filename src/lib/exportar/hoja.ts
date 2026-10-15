@@ -14,6 +14,8 @@ export type Columna<F> = {
   enlace?: (fila: F) => string | null;
   /** Solo en pantalla: el valor como insignia. */
   insignia?: "aviso" | "peligro" | "info";
+  /** Solo en pantalla: claves y folios en una línea; el texto largo con un ancho mínimo. */
+  ancho?: "sinSalto" | "amplio";
 };
 
 export type Hoja<F = never> = {

@@ -81,8 +81,9 @@ function detalle(f: FiltrosGasto) {
     WITH g AS (SELECT *, retirado - devuelto AS neto FROM (${hechos(f)}) h)
     SELECT "estacionId", "articuloId",
            sum(retirado)::int AS retirado, sum(devuelto)::int AS devuelto, sum(neto)::int AS neto,
-           sum(${importeConSigno(sql`neto`, sql`costo`)}) AS importe,
-           sum(${importeConSigno(sql`neto`, sql`"costoConIva"`)}) AS "importeConIva",
+           -- Lo que se compensó del todo vale cero aunque su costo no se conozca.
+           coalesce(sum(${importeConSigno(sql`neto`, sql`costo`)}), CASE WHEN sum(neto) = 0 THEN 0.00 END) AS importe,
+           coalesce(sum(${importeConSigno(sql`neto`, sql`"costoConIva"`)}), CASE WHEN sum(neto) = 0 THEN 0.00 END) AS "importeConIva",
            coalesce(sum(neto) FILTER (WHERE costo IS NULL), 0)::int AS "sinCosto"
     FROM g GROUP BY "estacionId", "articuloId"`;
 }

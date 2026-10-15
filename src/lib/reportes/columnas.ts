@@ -17,9 +17,9 @@ const kardexDe = (articuloId: string, desde: string, hasta: string, bodegaId?: s
 const articulo = <F extends { articuloId: string; claveArticulo: string; descripcion: string; unidad: string; articuloActivo: boolean }>(
   enlace?: (f: F) => string,
 ): Columna<F>[] => [
-  { titulo: "Clave", formato: "texto", valor: (f) => f.claveArticulo, enlace },
-  { titulo: "Descripción", formato: "texto", valor: (f) => baja(f.descripcion, f.articuloActivo) },
-  { titulo: "Unidad", formato: "texto", valor: (f) => f.unidad },
+  { titulo: "Clave", formato: "texto", valor: (f) => f.claveArticulo, enlace, ancho: "sinSalto" },
+  { titulo: "Descripción", formato: "texto", valor: (f) => baja(f.descripcion, f.articuloActivo), ancho: "amplio" },
+  { titulo: "Unidad", formato: "texto", valor: (f) => f.unidad, ancho: "sinSalto" },
 ];
 
 const valor = <F extends { importe: string | null; importeConIva: string | null; sinCosto: number }>(etiqueta: string): Columna<F>[] => [
@@ -44,7 +44,7 @@ const movimientos = <F extends Movimientos>(): Columna<F>[] => [
 ];
 
 export const columnasSemanal = (semana: { inicio: string; corte: string }): Columna<FilaSemanal>[] => [
-  { titulo: "Bodega", formato: "texto", valor: (f) => baja(f.bodega, f.bodegaActiva, true) },
+  { titulo: "Bodega", formato: "texto", valor: (f) => baja(f.bodega, f.bodegaActiva, true), ancho: "sinSalto" },
   ...articulo<FilaSemanal>((f) => kardexDe(f.articuloId, semana.inicio, semana.corte, f.bodegaId)),
   ...movimientos<FilaSemanal>(),
 ];
@@ -55,7 +55,7 @@ export const columnasTotalesSemanal = (semana: { inicio: string; corte: string }
 ];
 
 export const columnasExistencias = (hoy: string): Columna<FilaExistencia>[] => [
-  { titulo: "Bodega", formato: "texto", valor: (f) => baja(f.bodega, f.bodegaActiva, true) },
+  { titulo: "Bodega", formato: "texto", valor: (f) => baja(f.bodega, f.bodegaActiva, true), ancho: "sinSalto" },
   ...articulo<FilaExistencia>((f) => kardexDe(f.articuloId, `${hoy.slice(0, 7)}-01`, hoy, f.bodegaId)),
   { titulo: "Existencia", formato: "entero", valor: (f) => f.existencia },
   { titulo: "Mínimo", formato: "entero", valor: (f) => f.minimo },
@@ -66,11 +66,17 @@ export const columnasExistencias = (hoy: string): Columna<FilaExistencia>[] => [
 
 export const columnasKardex: Columna<FilaKardex>[] = [
   { titulo: "Fecha", formato: "fecha", valor: (f) => f.fecha },
-  { titulo: "Folio", formato: "texto", valor: (f) => f.folio, enlace: (f) => rutaDeMovimiento(f.tipoMovimiento, f.movimientoId) },
-  { titulo: "Movimiento", formato: "texto", valor: (f) => f.tipo, enlace: (f) => (f.originalId && f.originalTipo ? rutaDeMovimiento(f.originalTipo, f.originalId) : null) },
-  { titulo: "Bodega", formato: "texto", valor: (f) => f.bodega },
-  { titulo: "Origen o destino", formato: "texto", valor: (f) => f.contraparte },
-  { titulo: "Referencia o motivo", formato: "texto", valor: (f) => f.referencia },
+  { titulo: "Folio", formato: "texto", valor: (f) => f.folio, enlace: (f) => rutaDeMovimiento(f.tipoMovimiento, f.movimientoId), ancho: "sinSalto" },
+  {
+    titulo: "Movimiento",
+    formato: "texto",
+    valor: (f) => f.tipo,
+    enlace: (f) => (f.originalId && f.originalTipo ? rutaDeMovimiento(f.originalTipo, f.originalId) : null),
+    ancho: "sinSalto",
+  },
+  { titulo: "Bodega", formato: "texto", valor: (f) => f.bodega, ancho: "sinSalto" },
+  { titulo: "Origen o destino", formato: "texto", valor: (f) => f.contraparte, ancho: "sinSalto" },
+  { titulo: "Referencia o motivo", formato: "texto", valor: (f) => f.referencia, ancho: "amplio" },
   { titulo: "Entra", formato: "entero", valor: (f) => f.entra || null },
   { titulo: "Sale", formato: "entero", valor: (f) => f.sale || null },
   { titulo: "Saldo en la bodega", formato: "entero", valor: (f) => f.saldo },
@@ -80,7 +86,7 @@ export const columnasKardex: Columna<FilaKardex>[] = [
 ];
 
 export const columnasResumenKardex: Columna<ResumenBodega>[] = [
-  { titulo: "Bodega", formato: "texto", valor: (f) => baja(f.bodega, f.bodegaActiva, true) },
+  { titulo: "Bodega", formato: "texto", valor: (f) => baja(f.bodega, f.bodegaActiva, true), ancho: "sinSalto" },
   { titulo: "Saldo inicial", formato: "entero", valor: (f) => f.inicial },
   { titulo: "Entradas", formato: "entero", valor: (f) => f.entradas },
   { titulo: "Salidas", formato: "entero", valor: (f) => f.salidas },
@@ -88,15 +94,15 @@ export const columnasResumenKardex: Columna<ResumenBodega>[] = [
 ];
 
 const estacion = <F extends { numeroEstacion: string; alias: string; estacionActiva: boolean }>(): Columna<F>[] => [
-  { titulo: "Estación", formato: "texto", valor: (f) => f.numeroEstacion },
-  { titulo: "Alias", formato: "texto", valor: (f) => baja(f.alias, f.estacionActiva, true) },
+  { titulo: "Estación", formato: "texto", valor: (f) => f.numeroEstacion, ancho: "sinSalto" },
+  { titulo: "Alias", formato: "texto", valor: (f) => baja(f.alias, f.estacionActiva, true), ancho: "sinSalto" },
 ];
 
 export const columnasGastoDetalle: Columna<FilaGastoDetalle>[] = [
   ...estacion<FilaGastoDetalle>(),
-  { titulo: "Clave", formato: "texto", valor: (f) => f.claveArticulo },
-  { titulo: "Descripción", formato: "texto", valor: (f) => baja(f.descripcion, f.articuloActivo) },
-  { titulo: "Unidad", formato: "texto", valor: (f) => f.unidad },
+  { titulo: "Clave", formato: "texto", valor: (f) => f.claveArticulo, ancho: "sinSalto" },
+  { titulo: "Descripción", formato: "texto", valor: (f) => baja(f.descripcion, f.articuloActivo), ancho: "amplio" },
+  { titulo: "Unidad", formato: "texto", valor: (f) => f.unidad, ancho: "sinSalto" },
   { titulo: "Retirado", formato: "entero", valor: (f) => f.retirado },
   { titulo: "Devuelto", formato: "entero", valor: (f) => f.devuelto },
   { titulo: "Neto", formato: "entero", valor: (f) => f.neto },

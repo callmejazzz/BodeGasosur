@@ -5,7 +5,7 @@ import { Checkbox, Input, Select } from "@/components/ui/campos";
 import { useFiltrosEnUrl } from "@/components/ui/filtros-en-url";
 import { SelectorBuscable, type PaginaDeOpciones } from "@/components/ui/selector-buscable";
 import { SelectorDeRango } from "@/components/ui/selector-rango";
-import { formatearFecha, hoyEnMexico, sumarDias } from "@/lib/fechas";
+import { hoyEnMexico, sumarDias } from "@/lib/fechas";
 import {
   aParametrosExistencias,
   aParametrosFrecuencia,
@@ -135,7 +135,6 @@ export function FiltrosKardex({ filtros, articulo, bodegas, buscar, total }: { f
       <SelectorDeArticulo articulo={articulo} buscar={buscar} alElegir={(articuloId) => aplicar({ articuloId })} vacio="Elige un artículo" />
       <Catalogo valor={actual.bodegaId} opciones={bodegas} todas="Todas las bodegas" etiqueta="Bodega" onChange={(bodegaId) => aplicar({ bodegaId })} />
       <SelectorDeRango valor={{ desde: actual.desde, hasta: actual.hasta }} onChange={(r) => aplicar(r)} />
-      <span className="text-sm text-muted">{formatearFecha(actual.desde)} – {formatearFecha(actual.hasta)}</span>
     </Barra>
   );
 }
@@ -145,7 +144,6 @@ export function FiltrosGasto({ filtros, articulo, estaciones, buscar, total }: {
   return (
     <Barra total={total} pendiente={pendiente} sustantivo={actual.detalle ? ["fila", "filas"] : ["estación", "estaciones"]}>
       <SelectorDeRango valor={{ desde: actual.desde, hasta: actual.hasta }} onChange={(r) => aplicar(r)} />
-      <span className="text-sm text-muted">{formatearFecha(actual.desde)} – {formatearFecha(actual.hasta)}</span>
       <Catalogo valor={actual.estacionId} opciones={estaciones} todas="Todas las estaciones" etiqueta="Estación" onChange={(estacionId) => aplicar({ estacionId })} />
       <SelectorDeArticulo articulo={articulo} buscar={buscar} alElegir={(articuloId) => aplicar({ articuloId })} vacio="Todos los artículos" />
       <Select value={actual.detalle ? "1" : ""} onChange={(ev) => aplicar({ detalle: ev.target.value === "1" })} className="h-8 w-52" aria-label="Vista">
@@ -161,7 +159,6 @@ export function FiltrosFrecuencia({ filtros, estaciones, bodegas, total }: { fil
   return (
     <Barra total={total} pendiente={pendiente} sustantivo={["artículo", "artículos"]}>
       <SelectorDeRango valor={{ desde: actual.desde, hasta: actual.hasta }} onChange={(r) => aplicar(r)} />
-      <span className="text-sm text-muted">{formatearFecha(actual.desde)} – {formatearFecha(actual.hasta)}</span>
       <Catalogo valor={actual.estacionId} opciones={estaciones} todas="Todas las estaciones" etiqueta="Estación" onChange={(estacionId) => aplicar({ estacionId })} />
       <Catalogo valor={actual.bodegaId} opciones={bodegas} todas="Todas las bodegas" etiqueta="Bodega de salida" onChange={(bodegaId) => aplicar({ bodegaId })} />
       <Busqueda valor={actual.busqueda} onChange={(busqueda) => teclear({ busqueda })} />

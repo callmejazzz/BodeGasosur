@@ -50,7 +50,14 @@ export function TablaReporte<F extends { id: string }>({ columnas, filas }: { co
               if (t && c.insignia) contenido = <Badge tono={c.insignia}>{t}</Badge>;
               else if (href) contenido = <Link href={href} className="font-medium text-primary hover:underline">{t}</Link>;
               return (
-                <Td key={c.titulo} className={cn(NUMERICO.includes(c.formato) ? "text-right tabular whitespace-nowrap" : c.formato === "fecha" && "whitespace-nowrap")}>
+                <Td
+                  key={c.titulo}
+                  className={cn(
+                    NUMERICO.includes(c.formato) && "text-right tabular",
+                    (NUMERICO.includes(c.formato) || c.formato === "fecha" || c.insignia || c.ancho === "sinSalto") && "whitespace-nowrap",
+                    c.ancho === "amplio" && "min-w-56",
+                  )}
+                >
                   {contenido}
                 </Td>
               );

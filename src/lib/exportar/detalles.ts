@@ -26,7 +26,8 @@ const idDe = (params: Params) => {
   const r = uuid.safeParse(params.id);
   return r.success ? r.data : null;
 };
-const decimal = (v: unknown) => (v === null || v === undefined ? null : String(v));
+/** Un Decimal de Prisma en notación decimal, nunca exponencial. */
+const decimal = (v: unknown) => (v === null || v === undefined ? null : typeof v === "object" && "toFixed" in v ? (v as { toFixed: () => string }).toFixed() : String(v));
 const presentacion = (p: { presentacionCapturada: string; factorConversion: number; articulo: { unidad: { clave: string } } }) =>
   p.presentacionCapturada === "CAJA" ? `Caja × ${p.factorConversion}` : p.articulo.unidad.clave;
 const baja = (texto: string, activo: boolean) => (activo ? texto : `${texto} (dado de baja)`);
@@ -54,7 +55,7 @@ export async function libroEntrada(db: Db, params: Params): Promise<Libro | null
   const hojas: Hoja<unknown>[] = [
     hoja<EntradaDetalle["partidas"][number]>({
       nombre: "Partidas",
-      titulo: `Partidas de ${nombre.toLowerCase()}`,
+      titulo: `Partidas de ${e.folio ? `la entrada ${e.folio}` : "un borrador de entrada"}`,
       filtros,
       columnas: [
         ...partidaBase(),
@@ -103,7 +104,7 @@ export async function libroSalida(db: Db, usuario: UsuarioSesion, params: Params
   const hojas: Hoja<unknown>[] = [
     hoja<SalidaDetalle["partidas"][number]>({
       nombre: "Partidas",
-      titulo: `Partidas de ${nombre.toLowerCase()}`,
+      titulo: `Partidas de ${s.folio ? `la salida ${s.folio}` : "una salida sin folio"}`,
       filtros,
       columnas: [
         ...partidaBase("Pedido"),
@@ -198,7 +199,7 @@ export async function libroMovimiento(db: Db, usuario: UsuarioSesion, tipo: Tipo
   const hojas: Hoja<unknown>[] = [
     hoja<P>({
       nombre: "Partidas",
-      titulo: `Partidas de ${nombre.toLowerCase()}`,
+      titulo: `Partidas: ${nombre}`,
       filtros,
       columnas: [
         ...partidaBase<P>(),

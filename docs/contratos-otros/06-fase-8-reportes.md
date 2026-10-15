@@ -87,9 +87,11 @@ Se leen del encabezado del reporte, en pantalla y en cada hoja de Excel, y no se
 
 El valor final del semanal es, por capa, lo que quedaba al corte (creada − consumida + restituida hasta ese día) por su costo, redondeado por capa con `importe_renglon()`. Al corte de hoy coincide con `CapaCosto.cantidadRestante`. Como ningún movimiento confirmado lleva fecha futura y solo las entradas admiten fecha anterior, una capa nunca queda negativa en una fecha pasada.
 
+Sin piezas, el valor es $0.00, no «desconocido»: un saldo o una existencia en cero, o un gasto que su reversa compensó por completo, valen cero aunque lo que hubo no tuviera costo. El importe vacío queda solo para piezas cuyo costo no se conoce.
+
 ### Columnas que el contrato dejaba abiertas
 
-- **Kardex:** el importe lleva signo: negativo cuando la pieza sale. Las piezas sin costo van sin signo. Al lado del kardex, un resumen por bodega con saldo inicial, entradas, salidas y saldo final; también se descarga.
+- **Kardex:** el importe lleva signo: negativo cuando la pieza sale. Las piezas sin costo van sin signo. La reversa de una entrada, salida o devolución, que es un `AJUSTE`, muestra como origen o destino el proveedor o la estación del original. Al lado del kardex, un resumen por bodega con saldo inicial, entradas, salidas y saldo final; también se descarga.
 - **Gasto:** las reversas se netean en su columna: la de una salida resta de «retirado» y la de una devolución, de «devuelto». La vista por estación muestra cuántos artículos tuvo y cuántos con piezas sin costo, nunca una suma de piezas de artículos distintos.
 - **Existencias:** «diferencia» es existencia menos mínimo, también con mínimo cero.
 - **Totales por artículo del semanal:** solo sin filtro de bodega; con una bodega, cada fila ya es su artículo.

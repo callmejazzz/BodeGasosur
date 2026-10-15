@@ -54,7 +54,10 @@ function base(f: FiltrosExistencias) {
              a.id AS "articuloId", a.clave AS "claveArticulo", a.descripcion, u.clave AS unidad, a.activo AS "articuloActivo",
              coalesce(e.cantidad, 0) AS existencia, a."stockMinimo" AS minimo, coalesce(e.cantidad, 0) - a."stockMinimo" AS diferencia,
              (a.activo AND b.activa AND coalesce(e.cantidad, 0) < a."stockMinimo") AS "bajoMinimo",
-             v.importe, v."importeConIva", coalesce(v."sinCosto", 0) AS "sinCosto"
+             -- Sin piezas el valor es cero, no desconocido.
+             coalesce(v.importe, CASE WHEN coalesce(e.cantidad, 0) = 0 THEN 0.00 END) AS importe,
+             coalesce(v."importeConIva", CASE WHEN coalesce(e.cantidad, 0) = 0 THEN 0.00 END) AS "importeConIva",
+             coalesce(v."sinCosto", 0) AS "sinCosto"
       FROM "Bodega" b
       CROSS JOIN "Articulo" a
       JOIN "UnidadMedida" u ON u.id = a."unidadId"

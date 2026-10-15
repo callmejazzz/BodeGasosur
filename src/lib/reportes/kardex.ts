@@ -80,12 +80,14 @@ function consultaFilas(f: FiltrosKardex) {
                 WHEN m."conteoId" IS NOT NULL THEN 'Ajuste por conteo'
                 ELSE 'Ajuste' END AS tipo,
            b.clave || ' · ' || b.nombre AS bodega,
-           CASE m.tipo
-             WHEN 'ENTRADA' THEN pr."nombreComercial"
-             WHEN 'SALIDA' THEN s.numero || ' · ' || s.alias
-             WHEN 'DEVOLUCION' THEN s.numero || ' · ' || s.alias
-             WHEN 'TRASPASO' THEN CASE WHEN x."bodegaId" = m."bodegaDestinoId" THEN 'De ' || bo.clave || ' · ' || bo.nombre
-                                       ELSE 'A ' || bd.clave || ' · ' || bd.nombre END
+           CASE
+             WHEN m.tipo = 'ENTRADA' THEN pr."nombreComercial"
+             WHEN m.tipo IN ('SALIDA', 'DEVOLUCION') THEN s.numero || ' · ' || s.alias
+             WHEN m.tipo = 'TRASPASO' THEN CASE WHEN x."bodegaId" = m."bodegaDestinoId" THEN 'De ' || bo.clave || ' · ' || bo.nombre
+                                                ELSE 'A ' || bd.clave || ' · ' || bd.nombre END
+             -- La reversa de una entrada, salida o devolución es un AJUSTE: la contraparte es la del original.
+             WHEN o.tipo = 'ENTRADA' THEN po."nombreComercial"
+             WHEN o.tipo IN ('SALIDA', 'DEVOLUCION') THEN so.numero || ' · ' || so.alias
            END AS contraparte,
            CASE m.tipo
              WHEN 'ENTRADA' THEN m.referencia
@@ -98,6 +100,8 @@ function consultaFilas(f: FiltrosKardex) {
     JOIN "Movimiento" m ON m.id = x."movimientoId"
     JOIN "Bodega" b ON b.id = x."bodegaId"
     LEFT JOIN "Movimiento" o ON o.id = m."cancelaAId"
+    LEFT JOIN "Proveedor" po ON po.id = o."proveedorId"
+    LEFT JOIN catalogo_gasosur."Estacion" so ON so.id = o."estacionId"
     LEFT JOIN "Movimiento" dv ON dv.id = m."devuelveAId"
     LEFT JOIN "Proveedor" pr ON pr.id = m."proveedorId"
     LEFT JOIN catalogo_gasosur."Estacion" s ON s.id = m."estacionId"

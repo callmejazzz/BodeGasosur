@@ -43,12 +43,12 @@ const fechar = (id: string, fecha: string) =>
   sinDefensas(prisma, (tx) => tx.$executeRaw`UPDATE "Movimiento" SET fecha = ${fecha}::date WHERE id = ${id}::uuid`);
 const unidades = (articuloId: string, n: number) => [{ articuloId, presentacion: "UNIDAD" as const, cantidadCapturada: n }];
 
-async function salida(cantidad: number, opciones: { bodegaId?: string; esPrestamo?: boolean; retirar?: boolean } = {}) {
+async function salida(cantidad: number, opciones: { bodegaId?: string; esPrestamo?: boolean; retirar?: boolean; articuloId?: string } = {}) {
   const u = e.usuarios.COMPRAS;
   const { id } = await como(prisma, u, "salidas:capturar", (tx) =>
     solicitarSalida(tx, u, randomUUID(), {
       encabezado: { bodegaOrigenId: opciones.bodegaId ?? e.bodegaId, estacionId: e.estacionId, esPrestamo: opciones.esPrestamo ?? false },
-      partidas: unidades(articulo.id, cantidad),
+      partidas: unidades(opciones.articuloId ?? articulo.id, cantidad),
     }),
   );
   if (opciones.retirar === false) return id;
@@ -200,6 +200,16 @@ describe("reporte semanal", () => {
     expect(vacio.filas).toEqual([]);
   });
 
+  it("sin piezas al corte el valor es cero, no desconocido, aunque lo que hubo no tuviera costo", async () => {
+    const agotado = await prisma.articulo.create({ data: { descripcion: `Agotado ${sufijo}`, unidadId: e.unidadId } });
+    await sembrarCapa(prisma, e, { bodegaId: e.bodegaId, articuloId: agotado.id, cantidad: 2, fechaOriginal: "2026-08-31", costo: null });
+    ids.agotado = agotado.id;
+    ids.SA = await salida(2, { articuloId: agotado.id });
+    await fechar(ids.SA, "2026-09-01");
+    const { filas } = await leer((db) => filasSemanal(db, { inicio: "2026-08-29", corte: "2026-09-04", bodegaId: e.bodegaId, busqueda: agotado.descripcion }));
+    expect(filas).toEqual([expect.objectContaining({ ajustesMas: 2, salidas: 2, final: 0, importe: "0.00", importeConIva: "0.00", sinCosto: 0 })]);
+  });
+
   it("filtros sin coincidencias no devuelven filas ni totales inventados", async () => {
     const c = { ...SEMANA_1, bodegaId: "", busqueda: `nada-${sufijo}` };
     await expect(leer((db) => filasSemanal(db, c))).resolves.toMatchObject({ filas: [], pagina: { total: 0 } });
@@ -237,6 +247,12 @@ describe("kardex", () => {
     const original = await prisma.movimiento.findUniqueOrThrow({ where: { id: ids.D2 }, select: { folio: true } });
     expect(de(ids.R1)).toMatchObject({ tipo: `Reversa de ${original.folio}`, originalId: ids.D2, originalTipo: "DEVOLUCION", importe: null, sinCosto: 2 });
     expect(de(ids.P1)).toMatchObject({ tipo: "Salida (préstamo)", importe: "-10.00" });
+  });
+
+  it("la reversa de una salida o devolución muestra la estación del original", async () => {
+    const { filas } = await leer((db) => filasKardex(db, filtros()));
+    const s = await prisma.estacion.findUniqueOrThrow({ where: { id: e.estacionId } });
+    for (const id of [ids.R1, ids.R3]) expect(filas.find((f) => f.movimientoId === id)?.contraparte, id).toBe(`${s.numero} · ${s.alias}`);
   });
 
   it("el resumen por bodega cuadra con sus filas", async () => {
@@ -278,6 +294,13 @@ describe("gasto por estación", () => {
     const { filas } = await leer((db) => gastoPorEstacion(db, f("2026-09-01", "2026-09-30")));
     expect(filas).toEqual([expect.objectContaining({ id: e.estacionId, articulos: 1, importe: control.importe, articulosSinCosto: 0 })]);
   });
+
+  it("sin costo, lo retirado es desconocido; compensado por su reversa, vale cero", async () => {
+    await fechar(await reversa(ids.SA), "2026-09-02");
+    const g = (desde: string, hasta: string) => leer((db) => gastoPorArticulo(db, { ...f(desde, hasta), articuloId: ids.agotado }));
+    await expect(g("2026-09-01", "2026-09-01")).resolves.toMatchObject({ filas: [{ retirado: 2, neto: 2, importe: null, sinCosto: 2 }] });
+    await expect(g("2026-09-01", "2026-09-02")).resolves.toMatchObject({ filas: [{ retirado: 0, neto: 0, importe: "0.00", importeConIva: "0.00", sinCosto: 0 }] });
+  });
 });
 
 describe("frecuencia de consumo", () => {
@@ -315,7 +338,7 @@ describe("existencias por bodega y mínimo", () => {
   it("bajo mínimo se compara en cada bodega; mínimo cero sin existencia no lo es ni aparece sin buscarlo", async () => {
     const { filas } = await existencias(e.otraBodegaId);
     expect(filas.find((f) => f.articuloId === bajo)).toMatchObject({ existencia: 0, minimo: 5, diferencia: -5, bajoMinimo: true });
-    expect(filas.find((f) => f.articuloId === cero)).toMatchObject({ existencia: 0, minimo: 0, bajoMinimo: false });
+    expect(filas.find((f) => f.articuloId === cero)).toMatchObject({ existencia: 0, minimo: 0, bajoMinimo: false, importe: "0.00", importeConIva: "0.00" });
     const sinBuscar = await leer((db) => filasExistencias(db, { bodegaId: e.otraBodegaId, busqueda: "", bajoMinimo: false }));
     expect(sinBuscar.filas.some((f) => f.articuloId === cero)).toBe(false);
     expect(sinBuscar.filas.some((f) => f.articuloId === bajo)).toBe(true);
@@ -337,7 +360,8 @@ describe("existencias por bodega y mínimo", () => {
   it("el total suma el valor conocido y cuenta lo bajo mínimo", async () => {
     await expect(leer((db) => totalExistencias(db, { bodegaId: e.bodegaId, busqueda: sufijo, bajoMinimo: false }))).resolves.toMatchObject({
       bajoMinimo: 1,
-      filasSinCosto: 2,
+      // El artículo de la prueba, el dado de baja y el agotado, que recuperó sus piezas sin costo con la reversa.
+      filasSinCosto: 3,
     });
   });
 });

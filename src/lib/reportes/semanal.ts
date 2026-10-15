@@ -83,7 +83,10 @@ function base(c: ConsultaSemanal) {
       SELECT c."bodegaId"::text || ':' || c."articuloId"::text AS id, c."bodegaId", b.clave AS "claveBodega", b.clave || ' · ' || b.nombre AS bodega, b.activa AS "bodegaActiva",
              c."articuloId", a.clave AS "claveArticulo", a.descripcion, u.clave AS unidad, a.activo AS "articuloActivo",
              c.inicial, c.compras, c.salidas, c.recibidos, c.enviados, c.devoluciones, c."ajustesMas", c."ajustesMenos", c."reversasMas", c."reversasMenos", c.final,
-             v.importe, v."importeConIva", coalesce(v."sinCosto", 0) AS "sinCosto"
+             -- Sin piezas el valor es cero, no desconocido.
+             coalesce(v.importe, CASE WHEN c.final = 0 THEN 0.00 END) AS importe,
+             coalesce(v."importeConIva", CASE WHEN c.final = 0 THEN 0.00 END) AS "importeConIva",
+             coalesce(v."sinCosto", 0) AS "sinCosto"
       FROM cuentas c
       JOIN "Bodega" b ON b.id = c."bodegaId"
       JOIN "Articulo" a ON a.id = c."articuloId"
