@@ -189,6 +189,12 @@ en su rol —la base enseña la hora de México—, así que los scripts que esc
 - **Network Restrictions**: la IP de salida de Sevalla y, mientras dure la operación, la de
   quien migra. Las IPs de salida de Sevalla son compartidas por centro de datos: la lista
   reduce quién puede intentar conectarse, pero la defensa es la credencial.
+- **Una contraseña distinta para cada usuario**, larga, aleatoria y ASCII imprimible. La del
+  dueño se cambia en *Project Settings → Database*. La de la aplicación se cambia en
+  `DATABASE_URL` y se aplica con `DOTENV_CONFIG_PATH=.env.supabase npm run db:usuario-app`,
+  desde una terminal sin las variables del `.env` local; después va la misma URL en
+  Sevalla. Supabase escribe cada DDL en su bitácora (`log_statement = ddl`), así que el
+  script manda el verificador SCRAM, nunca la contraseña.
 - **La versión de PostgreSQL.** Supabase está en 17 y `docker-compose.yml` en 16. La suite
   pasa en 17, también con un dueño sin superusuario como el de Supabase, salvo las doce
   pruebas que fabrican inventario dañado con `session_replication_role`, que exige
