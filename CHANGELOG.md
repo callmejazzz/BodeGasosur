@@ -62,7 +62,10 @@ gastó cada estación y qué se pide más, y cualquier tabla se lleva a Excel.
   falla, no sale un archivo a medias. No se guarda en caché.
 - El texto que empieza como una fórmula de Excel se guarda como texto y no se ejecuta al
   abrir el archivo.
-- 523 pruebas contra PostgreSQL real.
+- `npm run db:usuario-app` ya no manda la contraseña de la aplicación a la base, sino su
+  verificador SCRAM: Supabase guarda cada cambio de usuarios en su bitácora, y la
+  contraseña quedaba escrita ahí.
+- 526 pruebas contra PostgreSQL real.
 
 ## v0.7.1 — 2026-10-09
 
