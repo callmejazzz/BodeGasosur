@@ -245,14 +245,21 @@ describe("solicitudes repetidas y abuso", () => {
     return { espia, soltar: () => abrir() };
   }
 
+  /** El estado de una descarga ya recibida completa. */
+  const recibir = async (ruta: string) => {
+    const r = await pedir(ruta);
+    await r.arrayBuffer();
+    return r.status;
+  };
+
   it("un segundo clic u otra pestaña espera el mismo libro; no arma otro", async () => {
     como("JEFE");
     const r = retener("existencias");
-    const turno = vi.spyOn(generaciones, "turno");
+    const admitir = vi.spyOn(generaciones, "admitir");
     try {
       const primera = pedir("/exportar/existencias?q=casco");
       const segunda = pedir("/exportar/existencias?pagina=2&q=%20casco%20");
-      await vi.waitFor(() => expect(turno).toHaveBeenCalledTimes(2));
+      await vi.waitFor(() => expect(admitir).toHaveBeenCalledTimes(2));
       r.soltar();
       const [a, b] = await Promise.all([primera, segunda]);
       expect([a.status, b.status]).toEqual([200, 200]);
@@ -260,37 +267,55 @@ describe("solicitudes repetidas y abuso", () => {
       expect(r.espia).toHaveBeenCalledTimes(1);
     } finally {
       r.espia.mockRestore();
-      turno.mockRestore();
+      admitir.mockRestore();
     }
   });
 
-  it("con dos en curso, una tercera responde 429 con Retry-After; repetir una de ellas sí espera", async () => {
+  it("las respuestas que comparten libro leen la misma memoria, sin copiarlo", async () => {
     como("JEFE");
     const r = retener("existencias");
-    const turno = vi.spyOn(generaciones, "turno");
+    const admitir = vi.spyOn(generaciones, "admitir");
     try {
-      const a = pedir("/exportar/existencias?q=a");
-      const b = pedir("/exportar/existencias?q=b");
-      await vi.waitFor(() => expect(r.espia).toHaveBeenCalledTimes(2));
-      const tercera = await pedir("/exportar/existencias?q=c");
-      expect(tercera.status).toBe(429);
-      expect(tercera.headers.get("Retry-After")).toBe("5");
-      expect(tercera.headers.get("Cache-Control")).toBe("private, no-store");
-      expect(await tercera.json()).toEqual({ mensaje: expect.stringMatching(/dos descargas en curso/) });
-      const repetida = pedir("/exportar/existencias?q=a");
-      await vi.waitFor(() => expect(turno).toHaveBeenCalledTimes(4));
+      const primera = pedir("/exportar/existencias?q=memoria");
+      const segunda = pedir("/exportar/existencias?q=memoria");
+      await vi.waitFor(() => expect(admitir).toHaveBeenCalledTimes(2));
       r.soltar();
-      expect((await Promise.all([a, b, repetida])).map((x) => x.status)).toEqual([200, 200, 200]);
-      expect(r.espia).toHaveBeenCalledTimes(2);
+      const lectores = (await Promise.all([primera, segunda])).map((x) => x.body!.getReader());
+      const [a, b] = await Promise.all(lectores.map(async (l) => (await l.read()).value!));
+      expect(a.buffer).toBe(b.buffer);
+      await Promise.all(lectores.map((l) => l.cancel()));
     } finally {
       r.espia.mockRestore();
-      turno.mockRestore();
+      admitir.mockRestore();
     }
   });
 
-  it(`más de ${GENERACIONES_POR_VENTANA} generaciones nuevas en un minuto: 429 con Retry-After, solo para ese usuario`, async () => {
+  it("una descarga está activa hasta terminar de enviarse: con dos, la tercera responde 429 con Retry-After", async () => {
     como("JEFE");
-    for (let i = 0; i < GENERACIONES_POR_VENTANA; i++) expect((await pedir(`/exportar/existencias?q=f${i}`)).status, `#${i + 1}`).toBe(200);
+    const a = await pedir("/exportar/existencias?q=a");
+    const b = await pedir("/exportar/existencias?q=b");
+    expect([a.status, b.status]).toEqual([200, 200]);
+    // Las dos ya se armaron, pero nadie ha leído su respuesta.
+    for (const ruta of ["/exportar/existencias?q=c", "/exportar/existencias?q=a"]) {
+      const r = await pedir(ruta);
+      expect(r.status, ruta).toBe(429);
+      expect(r.headers.get("Retry-After")).toBe("5");
+      expect(r.headers.get("Cache-Control")).toBe("private, no-store");
+      expect(await r.json()).toEqual({ mensaje: expect.stringMatching(/dos descargas en curso/) });
+    }
+    await a.arrayBuffer();
+    const c = await pedir("/exportar/existencias?q=c");
+    expect(c.status).toBe(200);
+    expect((await pedir("/exportar/existencias?q=d")).status).toBe(429);
+    // Cortar una descarga también libera su lugar.
+    await b.body!.cancel();
+    expect(await recibir("/exportar/existencias?q=d")).toBe(200);
+    await c.arrayBuffer();
+  });
+
+  it(`más de ${GENERACIONES_POR_VENTANA} libros nuevos en un minuto: 429 con Retry-After, solo para ese usuario`, async () => {
+    como("JEFE");
+    for (let i = 0; i < GENERACIONES_POR_VENTANA; i++) expect(await recibir(`/exportar/existencias?q=f${i}`), `#${i + 1}`).toBe(200);
     const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
       const r = await pedir("/exportar/existencias?q=otra");
@@ -299,23 +324,31 @@ describe("solicitudes repetidas y abuso", () => {
       expect(espera).toBeGreaterThan(0);
       expect(espera).toBeLessThanOrEqual(60);
       expect(await r.json()).toEqual({ mensaje: expect.stringContaining(`${espera} s`) });
-      expect(aviso).toHaveBeenCalledWith(`[exportar] existencias: rechazada por frecuencia, usuario ${e.usuarios.JEFE.id} (JEFE)`);
+      // El rechazo se registra una vez por ventana, no en cada intento.
+      expect((await pedir("/exportar/existencias?q=otra")).status).toBe(429);
+      expect(aviso.mock.calls).toEqual([[`[exportar] existencias: rechazada por generaciones, usuario ${e.usuarios.JEFE.id} (JEFE)`]]);
     } finally {
       aviso.mockRestore();
     }
     como("COMPRAS");
-    expect((await pedir("/exportar/existencias?q=otra")).status).toBe(200);
+    expect(await recibir("/exportar/existencias?q=otra")).toBe(200);
   });
 
-  it("registra quién generó cada descarga, sin filtros ni filas", async () => {
+  it("registra quién descargó al terminar de enviar, o hasta dónde llegó si se cortó; sin filtros ni filas", async () => {
     como("JEFE");
     const info = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
-      expect((await pedir(`/exportar/existencias?q=Secreto${sufijo}`)).status).toBe(200);
-      expect(info).toHaveBeenCalledTimes(1);
-      const linea = String(info.mock.calls[0][0]);
-      expect(linea).toMatch(new RegExp(`^\\[exportar\\] existencias: existencias-\\d{4}-\\d{2}-\\d{2}\\.xlsx para usuario ${e.usuarios.JEFE.id} \\(JEFE\\), \\d+ filas, \\d+ bytes, \\d+ ms$`));
-      expect(linea).not.toContain(`Secreto${sufijo}`);
+      const r = await pedir(`/exportar/existencias?q=Secreto${sufijo}`);
+      expect(info).not.toHaveBeenCalled();
+      await r.arrayBuffer();
+      const cortada = await pedir(`/exportar/existencias?q=Otro${sufijo}`);
+      await cortada.body!.cancel();
+      const [entregado, cortado] = info.mock.calls.map((c) => String(c[0]));
+      const archivo = "existencias-\\d{4}-\\d{2}-\\d{2}\\.xlsx";
+      const usuario = `usuario ${e.usuarios.JEFE.id} \\(JEFE\\)`;
+      expect(entregado).toMatch(new RegExp(`^\\[exportar\\] existencias: ${archivo} entregado a ${usuario}, \\d+ filas, \\d+ bytes, generado en \\d+ ms$`));
+      expect(cortado).toMatch(new RegExp(`^\\[exportar\\] existencias: ${archivo} cortado tras \\d+ de \\d+ bytes, ${usuario}$`));
+      expect(info.mock.calls.join(" ")).not.toMatch(new RegExp(`Secreto|Otro${sufijo}`));
     } finally {
       info.mockRestore();
     }
