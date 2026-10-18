@@ -227,7 +227,8 @@ en su rol —la base enseña la hora de México—, así que los scripts que esc
   producción. Si la heredan, cualquier rama escribiría en el libro real, y eso no se
   limpia después ([01](01-arquitectura.md) §3.1).
 - **Una instancia.** Si se escala, `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` tiene que ser la
-  misma en todas, como variable de build.
+  misma en todas, como variable de build, y los límites de descargas en Excel —que viven
+  en memoria— se contarían por instancia.
 - **El webhook de Clerk** apunta a `https://<dominio>/api/webhooks/clerk`, con la instancia
   de producción de Clerk.
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 
 const TIPO_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -8,12 +8,16 @@ const TIPO_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.s
 /*
   Descarga en Excel la tabla con los filtros que se ven. El servidor arma el
   libro completo; si no puede, el mensaje se muestra aquí y no se guarda nada.
+  El ref corta el segundo clic antes de que el render deshabilite el botón.
 */
 export function DescargarExcel({ href, etiqueta = "Descargar Excel" }: { href: string; etiqueta?: string }) {
   const [generando, setGenerando] = useState(false);
   const [mensaje, setMensaje] = useState<string | null>(null);
+  const enCurso = useRef(false);
 
   const descargar = async () => {
+    if (enCurso.current) return;
+    enCurso.current = true;
     setGenerando(true);
     setMensaje(null);
     try {
@@ -37,6 +41,7 @@ export function DescargarExcel({ href, etiqueta = "Descargar Excel" }: { href: s
     } catch {
       setMensaje("No se pudo descargar. Revisa la conexión e inténtalo de nuevo.");
     } finally {
+      enCurso.current = false;
       setGenerando(false);
     }
   };

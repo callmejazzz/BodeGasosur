@@ -227,6 +227,11 @@ export async function consultarDesdeAccion<T>(
   return leer(permiso, fn);
 }
 
+/** Quién descarga, antes de leer, para limitar por usuario. Lanza SinAcceso o SinPermiso. */
+export function usuarioParaDescarga(permiso: Permiso): Promise<UsuarioSesion> {
+  return exigir(permiso);
+}
+
 /**
  * `consultar()` para una descarga de Excel: la misma instantánea de solo
  * lectura, con más tiempo para leer la tabla completa por lotes. Sin sesión
