@@ -3,11 +3,13 @@
   sin sesión o sin permiso no hay archivo; con permiso, el libro trae las
   mismas filas y en el mismo orden que la pantalla, también las de páginas
   posteriores a la primera, y el texto que parece fórmula queda como texto.
+  Cada usuario arma pocos libros a la vez y por minuto, el mismo pedido en
+  curso se comparte, y cada descarga queda en el registro sin sus filtros.
 */
 
 import { NextRequest } from "next/server";
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, inject, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, inject, it, vi } from "vitest";
 import { crearCliente } from "../../../../prisma/comun";
 import { URL_PRUEBAS } from "../../../../pruebas/base-de-pruebas";
 import { celdas, leerZip } from "../../../../pruebas/leer-xlsx";
@@ -41,7 +43,8 @@ process.env.DATABASE_URL = inject("urlEjecucionPruebas");
 const { GET } = await import("./route");
 const { listarEntradas } = await import("@/lib/entradas/repo");
 const { leerFiltros } = await import("@/lib/entradas/filtros");
-const { CLAVES_DE_DESCARGA } = await import("@/lib/exportar/descargas");
+const { CLAVES_DE_DESCARGA, descargaDe } = await import("@/lib/exportar/descargas");
+const { generaciones, GENERACIONES_POR_VENTANA } = await import("@/lib/exportar/generaciones");
 const { abrirHoja } = await import("@/lib/inventario/conteos");
 const { confirmarDevolucion, crearDevolucion } = await import("@/lib/inventario/devoluciones");
 const { confirmarTraspaso, crearTraspaso } = await import("@/lib/inventario/traspasos");
@@ -60,6 +63,8 @@ beforeAll(async () => {
   }
 });
 afterAll(() => prisma.$disconnect());
+// Las pruebas descargan mucho más seguido que una persona: cada una empieza sin límites gastados.
+beforeEach(() => generaciones.reiniciar());
 
 const como = (rol: "SUPERADMIN" | "COMPRAS" | "JEFE" | null) => {
   sesion.userId = rol && clerkDe[rol];
@@ -214,6 +219,7 @@ describe("cada tabla registrada", () => {
     clerk.identidades = [];
     como("SUPERADMIN");
     for (const clave of CLAVES_DE_DESCARGA) {
+      generaciones.reiniciar();
       const archivos = await libro(`/exportar/${clave}${rutas[clave] ?? ""}`);
       expect(archivos["xl/worksheets/sheet1.xml"], clave).toContain("<sheetData>");
     }
@@ -222,5 +228,96 @@ describe("cada tabla registrada", () => {
     expect(datos(salidaXlsx["xl/worksheets/sheet3.xml"]).filas).toEqual([[expect.any(String), `Humo ${sufijo}`, expect.any(String), "3", "1", "2"]]);
     const traspasoXlsx = await libro(`/exportar/traspaso?id=${traspaso}`);
     expect(datos(traspasoXlsx["xl/worksheets/sheet2.xml"]).filas.map((f) => f[1]).sort()).toEqual(["Entró", "Salió"]);
+  });
+});
+
+describe("solicitudes repetidas y abuso", () => {
+  /** Detiene la lectura del libro de una tabla hasta soltarla. */
+  function retener(tabla: string) {
+    const d = descargaDe(tabla)!;
+    const original = d.libro;
+    let abrir!: () => void;
+    const puerta = new Promise<void>((resolve) => (abrir = resolve));
+    const espia = vi.spyOn(d, "libro").mockImplementation(async (leer, params) => {
+      await puerta;
+      return original.call(d, leer, params);
+    });
+    return { espia, soltar: () => abrir() };
+  }
+
+  it("un segundo clic u otra pestaña espera el mismo libro; no arma otro", async () => {
+    como("JEFE");
+    const r = retener("existencias");
+    const turno = vi.spyOn(generaciones, "turno");
+    try {
+      const primera = pedir("/exportar/existencias?q=casco");
+      const segunda = pedir("/exportar/existencias?pagina=2&q=%20casco%20");
+      await vi.waitFor(() => expect(turno).toHaveBeenCalledTimes(2));
+      r.soltar();
+      const [a, b] = await Promise.all([primera, segunda]);
+      expect([a.status, b.status]).toEqual([200, 200]);
+      expect(Buffer.from(await b.arrayBuffer())).toEqual(Buffer.from(await a.arrayBuffer()));
+      expect(r.espia).toHaveBeenCalledTimes(1);
+    } finally {
+      r.espia.mockRestore();
+      turno.mockRestore();
+    }
+  });
+
+  it("con dos en curso, una tercera responde 429 con Retry-After; repetir una de ellas sí espera", async () => {
+    como("JEFE");
+    const r = retener("existencias");
+    const turno = vi.spyOn(generaciones, "turno");
+    try {
+      const a = pedir("/exportar/existencias?q=a");
+      const b = pedir("/exportar/existencias?q=b");
+      await vi.waitFor(() => expect(r.espia).toHaveBeenCalledTimes(2));
+      const tercera = await pedir("/exportar/existencias?q=c");
+      expect(tercera.status).toBe(429);
+      expect(tercera.headers.get("Retry-After")).toBe("5");
+      expect(tercera.headers.get("Cache-Control")).toBe("private, no-store");
+      expect(await tercera.json()).toEqual({ mensaje: expect.stringMatching(/dos descargas en curso/) });
+      const repetida = pedir("/exportar/existencias?q=a");
+      await vi.waitFor(() => expect(turno).toHaveBeenCalledTimes(4));
+      r.soltar();
+      expect((await Promise.all([a, b, repetida])).map((x) => x.status)).toEqual([200, 200, 200]);
+      expect(r.espia).toHaveBeenCalledTimes(2);
+    } finally {
+      r.espia.mockRestore();
+      turno.mockRestore();
+    }
+  });
+
+  it(`más de ${GENERACIONES_POR_VENTANA} generaciones nuevas en un minuto: 429 con Retry-After, solo para ese usuario`, async () => {
+    como("JEFE");
+    for (let i = 0; i < GENERACIONES_POR_VENTANA; i++) expect((await pedir(`/exportar/existencias?q=f${i}`)).status, `#${i + 1}`).toBe(200);
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const r = await pedir("/exportar/existencias?q=otra");
+      expect(r.status).toBe(429);
+      const espera = Number(r.headers.get("Retry-After"));
+      expect(espera).toBeGreaterThan(0);
+      expect(espera).toBeLessThanOrEqual(60);
+      expect(await r.json()).toEqual({ mensaje: expect.stringContaining(`${espera} s`) });
+      expect(aviso).toHaveBeenCalledWith(`[exportar] existencias: rechazada por frecuencia, usuario ${e.usuarios.JEFE.id} (JEFE)`);
+    } finally {
+      aviso.mockRestore();
+    }
+    como("COMPRAS");
+    expect((await pedir("/exportar/existencias?q=otra")).status).toBe(200);
+  });
+
+  it("registra quién generó cada descarga, sin filtros ni filas", async () => {
+    como("JEFE");
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      expect((await pedir(`/exportar/existencias?q=Secreto${sufijo}`)).status).toBe(200);
+      expect(info).toHaveBeenCalledTimes(1);
+      const linea = String(info.mock.calls[0][0]);
+      expect(linea).toMatch(new RegExp(`^\\[exportar\\] existencias: existencias-\\d{4}-\\d{2}-\\d{2}\\.xlsx para usuario ${e.usuarios.JEFE.id} \\(JEFE\\), \\d+ filas, \\d+ bytes, \\d+ ms$`));
+      expect(linea).not.toContain(`Secreto${sufijo}`);
+    } finally {
+      info.mockRestore();
+    }
   });
 });

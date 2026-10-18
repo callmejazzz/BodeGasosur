@@ -29,11 +29,20 @@ const CODIGO = [
   ...archivosDe(join(RAIZ, "src/components/reportes")),
 ];
 
+// Lleva en un Map los libros en curso: su `.delete(` no es de Prisma. A cambio,
+// no importa nada con qué llegar a la base.
+const EN_MEMORIA = join(RAIZ, "src/lib/exportar/generaciones.ts");
+
 describe("frontera de la fase 8", () => {
   it("nada crea un cliente, abre transacciones, escribe ni arma SQL con texto", () => {
     expect(CODIGO.length).toBeGreaterThan(15);
     for (const ruta of CODIGO) {
       const codigo = readFileSync(ruta, "utf8");
+      if (ruta === EN_MEMORIA) {
+        for (const linea of codigo.split("\n").filter((l) => l.startsWith("import "))) expect(linea).toMatch(/^import (type \{|"server-only";$)/);
+        expect(codigo).not.toMatch(/PrismaClient|\$transaction|\$queryRaw|\$executeRaw|\bdb\b|\btx\b/);
+        continue;
+      }
       expect(codigo, relativa(ruta)).not.toMatch(/PrismaClient|@prisma\/adapter-pg|\$transaction|\$queryRawUnsafe|\$executeRaw|accionProtegida|\.(create|update|upsert|delete)(Many)?\(/);
       expect(codigo, relativa(ruta)).not.toMatch(/Prisma\.raw\(`[^`]*\$\{(?!k\}|nombre\})/);
     }

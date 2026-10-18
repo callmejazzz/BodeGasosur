@@ -34,6 +34,10 @@
   hojas de conteo y las tablas dentro de cada detalle. Mismos filtros, filas y orden que
   la pantalla, sin limitarse a la página que se ve; una hoja por tabla, con título,
   filtros y momento de generación; fechas de Excel y números como número.
+- **Límites por usuario**: dos libros a la vez y diez nuevos por minuto, con 429 y
+  `Retry-After`; el mismo pedido en curso se comparte en vez de repetirse, y el botón
+  ignora el segundo clic. Cada descarga queda en el registro del servidor con quién la
+  generó, sin filtros ni filas.
 - **Permiso `reportes:leer`** para Superadmin, Compras y Jefe, independiente de la facultad
   de autorizar. Cada descarga exige el permiso de su pantalla, también en el servidor.
 - Los textos de estatus se mueven a [`src/lib/estatus.ts`](../../src/lib/estatus.ts) para

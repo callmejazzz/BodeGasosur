@@ -60,12 +60,16 @@ gastó cada estación y qué se pide más, y cualquier tabla se lleva a Excel.
 - La descarga vuelve a exigir sesión y permiso, lee por lotes con la misma consulta y el
   mismo orden que la pantalla, y arma el archivo completo antes de entregarlo: si algo
   falla, no sale un archivo a medias. No se guarda en caché.
+- Cada usuario arma hasta dos archivos a la vez y diez por minuto; pasado eso, la descarga
+  pide esperar los segundos que indica. Un segundo clic u otra pestaña con el mismo pedido
+  espera el mismo archivo en vez de armar otro. Cada descarga queda en el registro del
+  servidor con quién la pidió, sin sus filtros.
 - El texto que empieza como una fórmula de Excel se guarda como texto y no se ejecuta al
   abrir el archivo.
 - `npm run db:usuario-app` ya no manda la contraseña de la aplicación a la base, sino su
   verificador SCRAM: Supabase guarda cada cambio de usuarios en su bitácora, y la
   contraseña quedaba escrita ahí.
-- 526 pruebas contra PostgreSQL real.
+- 537 pruebas contra PostgreSQL real.
 
 ## v0.7.1 — 2026-10-09
 
