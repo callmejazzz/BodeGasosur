@@ -20,25 +20,26 @@ const COLUMNAS: Columna<Fila>[] = [
 
 const generado = new Date("2026-10-15T18:30:00Z"); // 12:30 en la Ciudad de México
 
+const libro = await libroXlsx(
+  [
+    hoja({
+      nombre: "Movimientos [1/2]",
+      titulo: "Prueba",
+      filtros: [["Búsqueda", "tornillo"]],
+      columnas: COLUMNAS,
+      filas: [
+        { folio: "E-000001", fecha: "2026-10-09", cantidad: -3, importe: "-30.00", nota: '=HYPERLINK("http://x","clic")' },
+        { folio: "E-000002", fecha: "1900-03-01", cantidad: 1234567, importe: null, nota: "Tornillos <M8> & tuercas\u0007" },
+        { folio: "+52 744", fecha: "2026-10-09", cantidad: 0, importe: "0.10", nota: "@SUMA(A1)" },
+      ],
+    }),
+    hoja({ nombre: "Movimientos [1/2]", titulo: "Vacía", filtros: [], columnas: COLUMNAS, filas: [] }),
+  ],
+  generado,
+  "Prueba",
+);
+
 describe("libro xlsx", () => {
-  const libro = libroXlsx(
-    [
-      hoja({
-        nombre: "Movimientos [1/2]",
-        titulo: "Prueba",
-        filtros: [["Búsqueda", "tornillo"]],
-        columnas: COLUMNAS,
-        filas: [
-          { folio: "E-000001", fecha: "2026-10-09", cantidad: -3, importe: "-30.00", nota: '=HYPERLINK("http://x","clic")' },
-          { folio: "E-000002", fecha: "1900-03-01", cantidad: 1234567, importe: null, nota: "Tornillos <M8> & tuercas\u0007" },
-          { folio: "+52 744", fecha: "2026-10-09", cantidad: 0, importe: "0.10", nota: "@SUMA(A1)" },
-        ],
-      }),
-      hoja({ nombre: "Movimientos [1/2]", titulo: "Vacía", filtros: [], columnas: COLUMNAS, filas: [] }),
-    ],
-    generado,
-    "Prueba",
-  );
   const archivos = leerZip(libro);
   const hoja1 = archivos["xl/worksheets/sheet1.xml"];
 
@@ -90,13 +91,37 @@ describe("libro xlsx", () => {
     expect(archivos["xl/workbook.xml"]).toContain("'Movimientos 1 2'!$A$5:$E$8");
   });
 
-  it("un valor que no es número, fecha o instante no se escribe a medias", () => {
+  it("un valor que no es número, fecha o instante no se escribe a medias", async () => {
     const mal = (formato: Columna<null>["formato"], valor: unknown) =>
       libroXlsx([hoja({ nombre: "x", titulo: "x", filtros: [], columnas: [{ titulo: "x", formato, valor: () => valor as never }], filas: [null] })], generado, "x");
-    expect(() => mal("importe", "1e5")).toThrow(ValorNoExportable);
-    expect(() => mal("entero", "12,5")).toThrow(ValorNoExportable);
-    expect(() => mal("fecha", "2026-02-30")).toThrow(ValorNoExportable);
-    expect(() => mal("instante", "2026-10-15")).toThrow(ValorNoExportable);
+    await expect(mal("importe", "1e5")).rejects.toThrow(ValorNoExportable);
+    await expect(mal("entero", "12,5")).rejects.toThrow(ValorNoExportable);
+    await expect(mal("fecha", "2026-02-30")).rejects.toThrow(ValorNoExportable);
+    await expect(mal("instante", "2026-10-15")).rejects.toThrow(ValorNoExportable);
+  });
+
+  it("una hoja grande se escribe por partes, cediendo el event loop, y sale igual que entera", async () => {
+    const filas = Array.from({ length: 2_345 }, (_, i): Fila => ({ folio: `E-${i}`, fecha: "2026-10-09", cantidad: i, importe: `${i}.25`, nota: "ñ" }));
+    let vueltas = 0;
+    let girando = true;
+    const girar = () => {
+      vueltas++;
+      if (girando) setImmediate(girar);
+    };
+    setImmediate(girar);
+    const grande = leerZip(await libroXlsx([hoja({ nombre: "G", titulo: "G", filtros: [], columnas: COLUMNAS, filas })], generado, "G"));
+    girando = false;
+    // Veinticuatro partes de filas: el event loop corrió entre ellas.
+    expect(vueltas).toBeGreaterThanOrEqual(5);
+    const xml = grande["xl/worksheets/sheet1.xml"];
+    expect(xml.match(/<row /g)).toHaveLength(5 + 2_345);
+    expect(xml).toContain('<row r="2350"><c r="A2350" t="inlineStr"><is><t>E-2344</t></is></c>');
+    expect(xml).toMatch(/<\/sheetData><autoFilter ref="A5:E2350"\/>\n<\/worksheet>$/);
+  });
+
+  it("un valor inválido después de varias partes rechaza el libro entero", async () => {
+    const filas = Array.from({ length: 1_200 }, (_, i): Fila => ({ folio: "x", fecha: "2026-10-09", cantidad: i, importe: i === 1_100 ? "1e5" : "1.00", nota: "" }));
+    await expect(libroXlsx([hoja({ nombre: "x", titulo: "x", filtros: [], columnas: COLUMNAS, filas })], generado, "x")).rejects.toThrow(ValorNoExportable);
   });
 
   it("nombra columnas como Excel", () => {

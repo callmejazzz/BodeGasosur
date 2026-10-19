@@ -45,7 +45,7 @@ async function generar(descarga: Descarga, params: Params): Promise<Archivo | nu
   if (!libro) return null;
   const ahora = new Date();
   return {
-    contenido: libroXlsx(libro.hojas, ahora, descarga.titulo),
+    contenido: await libroXlsx(libro.hojas, ahora, descarga.titulo),
     nombre: `${libro.archivo ?? descarga.archivo}-${relojDeMexico(ahora).fecha}.xlsx`.replace(/[^A-Za-z0-9._-]+/g, "-"),
     filas: libro.hojas.reduce((n, h) => n + h.filas.length, 0),
     ms: Date.now() - inicio,

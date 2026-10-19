@@ -60,8 +60,9 @@
 
 No hubo migración: los reportes leen las tablas de la fase 7. La exportación no usa una
 librería de Excel; el libro se escribe con el ZIP de Node y XML mínimo, lo que evita una
-dependencia con historial de vulnerabilidades. Las decisiones de columnas, tope de filas y
-fórmulas están en el §6 del contrato.
+dependencia con historial de vulnerabilidades. Se escribe y comprime por partes, sin el XML
+completo en memoria ni bloquear el servidor. Las decisiones de columnas, tope de filas,
+fórmulas, límites y escritura por partes están en el §6 del contrato.
 
 ## Pendiente al cerrar
 
