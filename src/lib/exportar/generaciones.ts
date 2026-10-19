@@ -10,7 +10,7 @@ import type { Params } from "./descargas";
 
 /** Por usuario: armándose, esperando un libro en curso o transfiriéndose. */
 export const MAXIMO_ACTIVAS = 2;
-/** Libros armándose a la vez en el proceso; medido en el §6 del contrato. */
+/** Libros armándose a la vez en el proceso. Con una CPU, más no arma más rápido; medido en el §6 del contrato. */
 export const MAXIMO_GENERANDO = 3;
 export const GENERACIONES_POR_VENTANA = 10;
 export const PETICIONES_POR_VENTANA = 30;

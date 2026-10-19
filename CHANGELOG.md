@@ -66,12 +66,15 @@ gastó cada estación y qué se pide más, y cualquier tabla se lleva a Excel.
   espera el mismo archivo en vez de armar otro, y entregarlo varias veces no lo copia en
   memoria. Cada descarga queda en el registro del servidor con quién la pidió, al terminar
   de enviarse y sin sus filtros.
+- El archivo se arma por partes y comprimido: uno de 20,000 filas ocupa la tercera parte de
+  memoria que antes y ya no detiene al servidor medio segundo mientras se arma; los demás
+  usuarios siguen trabajando sin esperar.
 - El texto que empieza como una fórmula de Excel se guarda como texto y no se ejecuta al
   abrir el archivo.
 - `npm run db:usuario-app` ya no manda la contraseña de la aplicación a la base, sino su
   verificador SCRAM: Supabase guarda cada cambio de usuarios en su bitácora, y la
   contraseña quedaba escrita ahí.
-- 541 pruebas contra PostgreSQL real.
+- 543 pruebas contra PostgreSQL real.
 
 ## v0.7.1 — 2026-10-09
 
