@@ -15,7 +15,7 @@ no se construye— junto con sus archivos, commits y versión de referencia.
 | [5 — Entradas](05-entradas.md)                                              | Construida | `v0.5.0`              | `d831f1e` | Borradores, confirmación, costos, capas y existencias          |
 | [6 — Salidas](06-salidas.md)                                                | Construida | `v0.6.0`              | `bd3d30e`–`8fe9805` | Solicitud, retiro PEPS, recepción y pantallas completas |
 | [7 — Traspasos, devoluciones y conteo](07-traspasos-devoluciones-conteo.md) | Construida | `v0.7.0`, `v0.7.1`    | `2ac6ca3`, `22c1146` | Traspasos, devoluciones, préstamos, conteo físico y reversas   |
-| [8 — Reportes](08-reportes.md)                                              | Construida en `feat-reportes` | objetivo `v0.8.0` | — | Cinco reportes, kardex y exportación a Excel de toda tabla |
+| [8 — Reportes](08-reportes.md)                                              | Construida | `v0.8.0` | PR #7 a #13 | Cinco reportes, kardex y exportación a Excel de toda tabla |
 | [9 — Acabado](09-acabado.md)                                                | Pendiente  | objetivo `v0.9.0`     | —                    | Tablero, alertas y experiencia responsiva                      |
 
 ## Qué falta
@@ -24,9 +24,9 @@ La **fase 7** está construida, probada, documentada y publicada: su cierre es `
 (commit `2ac6ca3`), y `v0.7.1` (commit `22c1146`) corrige lo que encontró su revisión.
 El ajuste posterior del selector (`afcea45`) no lleva versión nueva.
 
-La **fase 8** —reportes, kardex y exportación a Excel— está construida y probada en la rama
-`feat-reportes`; falta mezclarla a `main`, etiquetar `v0.8.0` y desplegarla. Después sigue
-la fase 9.
+La **fase 8** —reportes, kardex y exportación a Excel— se construyó en la rama
+`feat-reportes` con un PR por entrega (#7 a #13) y se publica como `v0.8.0`; falta
+desplegarla en Sevalla. Después sigue la fase 9.
 
 También permanecen tareas transversales para antes de `v1.0.0`: CI, destino de despliegue,
 política de respaldos con prueba de restauración, observabilidad y cierre del registro de

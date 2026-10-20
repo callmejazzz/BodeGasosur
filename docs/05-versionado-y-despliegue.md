@@ -105,6 +105,10 @@ publicado. Las correcciones de la revisión se publicaron como `v0.7.1` en `22c1
 El ajuste posterior del teclado del selector está en `afcea45`, sin nueva etiqueta por
 decisión del proyecto: `main` va por delante de la última versión etiquetada.
 
+**Fase 8:** se construyó en la rama `feat-reportes`, con un PR por entrega (#7 a #13) que
+ya traía `package.json` en `0.8.0` y su entrada del CHANGELOG. Se publica como `v0.8.0` al
+mezclar `feat-reportes` a `main` en un solo commit, que es el que lleva la etiqueta.
+
 Los mensajes de commit siguen siendo prosa en español que describe decisiones. **No se
 adopta Conventional Commits:** con este desarrollo por fases y un desarrollador, el
 changelog a mano sale mejor escrito que uno generado, y los mensajes actuales documentan

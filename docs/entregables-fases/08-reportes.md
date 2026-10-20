@@ -2,9 +2,9 @@
 
 | Campo | Referencia |
 |---|---|
-| Estado | Construida en la rama `feat-reportes`; pendiente de mezclar a `main` |
-| Versión | `v0.8.0`, sin etiqueta todavía |
-| Commits | En `feat-reportes`, por PR desde `fase-8-reportes` |
+| Estado | Construida y publicada |
+| Versión | `v0.8.0` |
+| Commits | PR #7 a #13 en `feat-reportes`, mezclados a `main` en el commit de `v0.8.0` |
 | Contrato | [Fase 8: Reportes y exportación](../contratos-otros/06-fase-8-reportes.md) |
 
 ## Construido
@@ -70,4 +70,4 @@ fórmulas, límites y escritura por partes están en el §6 del contrato.
   datos controlados en PostgreSQL local. Sus 18 migraciones coinciden con el repositorio y
   los cinco reportes y las descargas ya corren ahí (PostgreSQL 17) con el usuario de la
   aplicación en solo lectura.
-- La etiqueta `v0.8.0` al mezclar `feat-reportes` a `main`, y el despliegue en Sevalla.
+- El despliegue de `v0.8.0` en Sevalla. La versión no trae migraciones.

@@ -8,9 +8,7 @@ puede hacer ahora que antes no se podía.
 
 ---
 
-## v0.8.0 — por publicar
-
-En la rama `feat-reportes`, sin etiqueta todavía.
+## v0.8.0 — 2026-10-20
 
 Última migración incluida: `20261008100000_entrada_con_sus_capas`. La fase no agrega
 migraciones: los reportes leen lo que ya registra el sistema.
@@ -60,26 +58,23 @@ gastó cada estación y qué se pide más, y cualquier tabla se lleva a Excel.
 - La descarga vuelve a exigir sesión y permiso, lee por lotes con la misma consulta y el
   mismo orden que la pantalla, y arma el archivo completo antes de entregarlo: si algo
   falla, no sale un archivo a medias. No se guarda en caché.
-- Cada usuario tiene hasta dos descargas en curso, hasta que terminan de enviarse, y un
-  tope por minuto; el servidor arma hasta tres archivos a la vez. Pasado eso, la descarga
-  pide esperar los segundos que indica. Un segundo clic u otra pestaña con el mismo pedido
-  espera el mismo archivo en vez de armar otro, y entregarlo varias veces no lo copia en
-  memoria. Cada descarga queda en el registro del servidor con quién la pidió, al terminar
-  de enviarse y sin sus filtros.
-- El archivo se arma por partes y comprimido: uno de 20,000 filas ocupa la tercera parte de
-  memoria que antes y ya no detiene al servidor medio segundo mientras se arma; los demás
-  usuarios siguen trabajando sin esperar.
+- **Pocas descargas a la vez.** Cada usuario tiene hasta dos descargas en curso, hasta
+  que terminan de enviarse, y un tope de intentos y de archivos nuevos por minuto que
+  cuenta también los rechazados; el servidor arma hasta tres archivos a la vez. Pasado
+  eso, la descarga pide esperar los segundos que indica. Un segundo clic u otra pestaña
+  con el mismo pedido espera el mismo archivo en vez de armar otro.
+- **Plazos.** Un archivo que no termina de armarse en 90 segundos se cancela y quienes lo
+  esperaban reciben aviso; una descarga que lleva dos minutos activa se corta. Si Clerk
+  no responde, la lista de usuarios deja de esperarlo a los 15 segundos.
+- **Sin frenar a los demás.** El archivo se arma por partes y comprimido, sin detener al
+  servidor mientras tanto, y entregarlo a varias peticiones no lo copia en memoria.
+- **Registro.** Cada descarga queda en el registro del servidor con quién la pidió, al
+  terminar de enviarse y sin sus filtros. Los errores de Excel se registran sin el dato de
+  la celda.
 - El texto que empieza como una fórmula de Excel se guarda como texto y no se ejecuta al
   abrir el archivo.
-- `npm run db:usuario-app` ya no manda la contraseña de la aplicación a la base, sino su
-  verificador SCRAM: Supabase guarda cada cambio de usuarios en su bitácora, y la
-  contraseña quedaba escrita ahí.
-- Insistir con descargas rechazadas también cuenta para el tope por minuto, y el rechazo
-  ya no consulta la base. Una descarga que lleva dos minutos activa se corta y queda en
-  el registro. Los errores de Excel se registran sin el dato de la celda.
-- Un archivo que no termina de armarse en 90 segundos se cancela: quienes lo esperaban
-  reciben aviso de inmediato y el servidor no se queda sin lugar para otras descargas.
-  Si Clerk no responde, la lista de usuarios deja de esperarlo a los 15 segundos.
+- `npm run db:usuario-app` manda a la base el verificador SCRAM de la contraseña de la
+  aplicación, no la contraseña: Supabase guarda cada cambio de usuarios en su bitácora.
 - 551 pruebas contra PostgreSQL real.
 
 ## v0.7.1 — 2026-10-09
