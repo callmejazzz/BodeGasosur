@@ -288,13 +288,25 @@ export const hojaSinAcceso = (identidades: IdentidadClerk[]) =>
     filas: identidades,
   });
 
+/** Lo que se espera a Clerk por página antes de dejar de esperarlo. */
+export const ESPERA_DE_CLERK_MS = 15_000;
+
 /** Clerk, fuera de la transacción: todas sus páginas, sin quienes ya tienen acceso. */
-export async function identidadesSinAcceso(usuarios: UsuarioAdministrable[]): Promise<IdentidadClerk[]> {
+export async function identidadesSinAcceso(usuarios: UsuarioAdministrable[], senial: AbortSignal): Promise<IdentidadClerk[]> {
   const conAcceso = new Set(usuarios.map((u) => u.clerkUserId));
   const tamano = 500;
-  const primera = await listarIdentidades(1, tamano);
+  const pagina = async (n: number) => {
+    const tiempo = new AbortController();
+    const reloj = setTimeout(() => tiempo.abort(new Error(`Clerk no respondió en ${ESPERA_DE_CLERK_MS / 1000} s.`)), ESPERA_DE_CLERK_MS);
+    try {
+      return await listarIdentidades(n, tamano, AbortSignal.any([senial, tiempo.signal]));
+    } finally {
+      clearTimeout(reloj);
+    }
+  };
+  const primera = await pagina(1);
   if (primera.total > MAXIMO_DE_FILAS) throw new DemasiadasFilas(primera.total);
   const todas = [...primera.identidades];
-  for (let n = 2; (n - 1) * tamano < primera.total; n++) todas.push(...(await listarIdentidades(n, tamano)).identidades);
+  for (let n = 2; (n - 1) * tamano < primera.total; n++) todas.push(...(await pagina(n)).identidades);
   return todas.filter((i) => !conAcceso.has(i.clerkUserId));
 }

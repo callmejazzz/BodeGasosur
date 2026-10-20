@@ -4,7 +4,9 @@ import type { Params } from "./descargas";
 /*
   Las descargas de Excel en curso y su frecuencia. Cada intento autenticado
   cuenta, aunque se rechace. Una descarga está activa desde que se admite
-  hasta que su respuesta termina de enviarse, se corta o vence su plazo.
+  hasta que su respuesta termina de enviarse, se corta o vence su plazo. El
+  libro compartido tiene su propio plazo: al vencer deja de compartirse, quien
+  lo espera se entera y el trabajo recibe la señal para detenerse.
   El estado vive en memoria porque la aplicación corre en una sola instancia
   (docs/05); si se escala, cada instancia llevaría su propia cuenta.
 */
@@ -20,6 +22,24 @@ export const VENTANA_MS = 60_000;
 export const ESPERA_S = 5;
 /** Plazo de una descarga activa: al vencer, el cupo vuelve y la respuesta se corta. */
 export const VIDA_MAXIMA_MS = 120_000;
+/** Plazo del libro compartido: más que los 60 s de la lectura, menos que el de cada descarga. */
+export const PLAZO_GENERACION_MS = 90_000;
+/** Un trabajo que sigue vivo tanto después de su plazo no atiende la señal: se registra. */
+export const GRACIA_MS = 30_000;
+
+export class DescargaVencida extends Error {
+  constructor() {
+    super("La descarga llegó a su plazo máximo.");
+    this.name = "DescargaVencida";
+  }
+}
+
+export class GeneracionVencida extends Error {
+  constructor() {
+    super("El libro no se terminó de armar en su plazo.");
+    this.name = "GeneracionVencida";
+  }
+}
 
 /** Mismo usuario, tabla y filtros, sin importar su orden, los vacíos ni la página. */
 export function claveDeGeneracion(usuarioId: string, tabla: string, params: Params): string {
@@ -40,7 +60,10 @@ export type Admision<T> =
   | { estado: "nueva" | "compartida"; resultado: Promise<T>; liberar: () => void; /** Se aborta al vencer el plazo. */ plazo: AbortSignal };
 
 export function crearGeneraciones(ahora: () => number = Date.now) {
+  /** Libros que se pueden compartir, por clave; salen al terminar o al vencer. */
   const enCurso = new Map<string, Promise<unknown>>();
+  /** Trabajos que siguen corriendo, vencidos o no: ocupan el cupo del proceso. */
+  const vivos = new Set<symbol>();
   const activas = new Map<string, Set<symbol>>();
   const generadas = new Map<string, number[]>();
   const pedidas = new Map<string, number[]>();
@@ -57,6 +80,36 @@ export function crearGeneraciones(ahora: () => number = Date.now) {
     const avisar = (avisos.get(clave) ?? -Infinity) <= t - VENTANA_MS;
     if (avisar) avisos.set(clave, t);
     return { estado: "limitada", motivo, reintentarEn, avisar };
+  };
+
+  /**
+   * Arma el libro con su propio plazo. Quien lo espera se entera al vencer; el
+   * lugar en el cupo del proceso vuelve cuando el trabajo termina de verdad.
+   */
+  const generacion = <T>(usuarioId: string, generar: (senial: AbortSignal) => Promise<T>): Promise<T> => {
+    const ficha = Symbol();
+    vivos.add(ficha);
+    const control = new AbortController();
+    let aviso: ReturnType<typeof setTimeout> | undefined;
+    const reloj = setTimeout(() => {
+      control.abort(new GeneracionVencida());
+      aviso = setTimeout(() => {
+        if (vivos.has(ficha)) console.error(`[exportar] el libro de usuario ${usuarioId} sigue armándose ${GRACIA_MS / 1000} s después de su plazo y ocupa el cupo del proceso.`);
+      }, GRACIA_MS);
+      aviso.unref?.();
+    }, PLAZO_GENERACION_MS);
+    reloj.unref?.();
+
+    const trabajo = Promise.resolve().then(() => generar(control.signal));
+    const fin = () => {
+      vivos.delete(ficha);
+      clearTimeout(reloj);
+      clearTimeout(aviso);
+    };
+    trabajo.then(fin, fin);
+    const vencida = new Promise<never>((_, rechazar) => control.signal.addEventListener("abort", () => rechazar(control.signal.reason), { once: true }));
+    vencida.catch(() => {});
+    return Promise.race([trabajo, vencida]);
   };
 
   return {
@@ -77,7 +130,7 @@ export function crearGeneraciones(ahora: () => number = Date.now) {
      * Revisa los límites y comparte el libro si el mismo pedido ya se arma.
      * Sin await entre revisar y anotar: dos peticiones no se cuelan.
      */
-    admitir<T>(usuarioId: string, clave: string, generar: () => Promise<T>): Admision<T> {
+    admitir<T>(usuarioId: string, clave: string, generar: (senial: AbortSignal) => Promise<T>): Admision<T> {
       const t = ahora();
       const suyas = activas.get(usuarioId) ?? new Set<symbol>();
       if (suyas.size >= MAXIMO_ACTIVAS) return limitada(usuarioId, "activas", ESPERA_S, t);
@@ -85,11 +138,11 @@ export function crearGeneraciones(ahora: () => number = Date.now) {
       let resultado = enCurso.get(clave) as Promise<T> | undefined;
       const estado = resultado ? "compartida" : "nueva";
       if (!resultado) {
-        if (enCurso.size >= MAXIMO_GENERANDO) return limitada(usuarioId, "servidor", ESPERA_S, t);
+        if (vivos.size >= MAXIMO_GENERANDO) return limitada(usuarioId, "servidor", ESPERA_S, t);
         const nuevas = recientes(generadas, usuarioId, t);
         if (nuevas.length >= GENERACIONES_POR_VENTANA) return limitada(usuarioId, "generaciones", faltan(nuevas, t), t);
         nuevas.push(t);
-        const r = Promise.resolve().then(generar);
+        const r = generacion(usuarioId, generar);
         enCurso.set(clave, r);
         const quitar = () => {
           if (enCurso.get(clave) === r) enCurso.delete(clave);
@@ -109,7 +162,7 @@ export function crearGeneraciones(ahora: () => number = Date.now) {
       };
       const reloj = setTimeout(() => {
         liberar();
-        plazo.abort();
+        plazo.abort(new DescargaVencida());
       }, VIDA_MAXIMA_MS);
       reloj.unref?.();
       return { estado, resultado, liberar, plazo: plazo.signal };
@@ -117,7 +170,7 @@ export function crearGeneraciones(ahora: () => number = Date.now) {
 
     /** Solo para pruebas. */
     reiniciar() {
-      for (const m of [enCurso, activas, generadas, pedidas, avisos]) m.clear();
+      for (const m of [enCurso, vivos, activas, generadas, pedidas, avisos]) m.clear();
     },
   };
 }

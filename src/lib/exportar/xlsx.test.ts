@@ -123,6 +123,24 @@ describe("libro xlsx", () => {
     expect(xml).toMatch(/<\/sheetData><autoFilter ref="A5:E2350"\/>\n<\/worksheet>$/);
   });
 
+  it("al abortarse la señal deja de armar y comprimir el libro entre partes", async () => {
+    let llamadas = 0;
+    const columnas: Columna<number>[] = [{ titulo: "n", formato: "entero", valor: (n) => (llamadas++, n) }];
+    const libroDe = (senial: AbortSignal) => libroXlsx([hoja({ nombre: "x", titulo: "x", filtros: [], columnas, filas: Array.from({ length: 20_000 }, (_, i) => i) })], generado, "x", senial);
+    const control = new AbortController();
+    const promesa = libroDe(control.signal);
+    while (llamadas === 0) await new Promise<void>((listo) => setImmediate(listo));
+    control.abort(new Error("vencido"));
+    await expect(promesa).rejects.toThrow();
+    expect(llamadas).toBeLessThan(20_000);
+    // Con la señal ya abortada no arma nada.
+    llamadas = 0;
+    const antes = new AbortController();
+    antes.abort(new Error("antes"));
+    await expect(libroDe(antes.signal)).rejects.toThrow("antes");
+    expect(llamadas).toBe(0);
+  });
+
   it("un valor inválido después de varias partes rechaza el libro entero", async () => {
     const filas = Array.from({ length: 1_200 }, (_, i): Fila => ({ folio: "x", fecha: "2026-10-09", cantidad: i, importe: i === 1_100 ? "1e5" : "1.00", nota: "" }));
     await expect(libroXlsx([hoja({ nombre: "x", titulo: "x", filtros: [], columnas: COLUMNAS, filas })], generado, "x")).rejects.toThrow(ValorNoExportable);

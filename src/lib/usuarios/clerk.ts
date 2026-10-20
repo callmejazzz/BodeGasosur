@@ -1,6 +1,7 @@
 import "server-only";
 import { clerkClient } from "@clerk/nextjs/server";
 import { POR_PAGINA } from "@/lib/paginacion";
+import { hastaElPlazo } from "@/lib/plazo";
 
 /**
  * Lectura de identidades en Clerk.
@@ -36,14 +37,19 @@ function aIdentidad(u: UsuarioDeClerk): IdentidadClerk {
   };
 }
 
-/** Una página de 100, como las demás listas; Clerk admite hasta 500 por petición. */
-export async function listarIdentidades(pagina: number, tamano = POR_PAGINA) {
+/**
+ * Una página de 100, como las demás listas; Clerk admite hasta 500 por petición.
+ * Su SDK no acepta señal: al abortarse se deja de esperar y la petición se
+ * cierra sola después.
+ */
+export async function listarIdentidades(pagina: number, tamano = POR_PAGINA, senial?: AbortSignal) {
   const clerk = await clerkClient();
-  const { data, totalCount } = await clerk.users.getUserList({
+  const lista = clerk.users.getUserList({
     limit: tamano,
     offset: (pagina - 1) * tamano,
     orderBy: "-created_at",
   });
+  const { data, totalCount } = await (senial ? hastaElPlazo(lista, senial) : lista);
 
   return { identidades: data.map(aIdentidad), total: totalCount };
 }

@@ -1,4 +1,4 @@
-import { diaDeLaSemana, esFechaOperativa, hoyEnMexico, inicioDeAño, inicioDeMes, leerRangoDeFechas, sumarDias } from "@/lib/fechas";
+import { diaDeLaSemana, esFechaOperativa, hoyEnMexico, inicioDeAnio, inicioDeMes, leerRangoDeFechas, sumarDias } from "@/lib/fechas";
 import { uuid } from "@/lib/movimientos/formulario";
 
 // Los filtros de los reportes viven en la URL, ya normalizados: lo que no se
@@ -74,7 +74,7 @@ export type FiltrosGasto = { desde: string; hasta: string; estacionId: string; a
 
 /** Por omisión, del 1 de enero hasta hoy. */
 export function leerFiltrosGasto(p: Params, hoy = hoyEnMexico()): FiltrosGasto {
-  return { ...rango(p, hoy, inicioDeAño), estacionId: id(p, "estacion"), articuloId: id(p, "articulo"), detalle: texto(p, "detalle") === "1" };
+  return { ...rango(p, hoy, inicioDeAnio), estacionId: id(p, "estacion"), articuloId: id(p, "articulo"), detalle: texto(p, "detalle") === "1" };
 }
 
 export const aParametrosGasto = (f: FiltrosGasto) =>
@@ -85,7 +85,7 @@ export const aParametrosGasto = (f: FiltrosGasto) =>
 export type FiltrosFrecuencia = { desde: string; hasta: string; estacionId: string; bodegaId: string; busqueda: string };
 
 export function leerFiltrosFrecuencia(p: Params, hoy = hoyEnMexico()): FiltrosFrecuencia {
-  return { ...rango(p, hoy, inicioDeAño), estacionId: id(p, "estacion"), bodegaId: id(p, "bodega"), busqueda: busqueda(p) };
+  return { ...rango(p, hoy, inicioDeAnio), estacionId: id(p, "estacion"), bodegaId: id(p, "bodega"), busqueda: busqueda(p) };
 }
 
 export const aParametrosFrecuencia = (f: FiltrosFrecuencia) =>
