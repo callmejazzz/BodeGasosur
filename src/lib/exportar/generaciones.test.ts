@@ -108,19 +108,6 @@ describe("admitir", () => {
     expect(gen.admitir("u1", "una-mas", async () => 0)).toMatchObject({ motivo: "generaciones", reintentarEn: 1 });
   });
 
-  it(`no más de ${PETICIONES_POR_VENTANA} peticiones por minuto, aunque compartan libro`, () => {
-    let t = 0;
-    const gen = crearGeneraciones(() => t);
-    const p = pendiente("libro");
-    for (let i = 0; i < PETICIONES_POR_VENTANA; i++) {
-      admitida(gen.admitir("u1", "k", p.trabajo)).liberar();
-      t += 100;
-    }
-    expect(p.trabajo).toHaveBeenCalledTimes(0);
-    expect(gen.admitir("u1", "k", p.trabajo)).toMatchObject({ estado: "limitada", motivo: "peticiones", reintentarEn: 57 });
-    p.soltar();
-  });
-
   it("avisa el primer rechazo de cada motivo por ventana, no cada uno", () => {
     let t = 0;
     const gen = crearGeneraciones(() => t);
@@ -136,15 +123,20 @@ describe("admitir", () => {
     p.soltar();
   });
 
-  it("un cupo que nadie libera vuelve solo", () => {
+  it("al vencer el plazo, el cupo vuelve y se avisa a quien entrega la respuesta", () => {
     vi.useFakeTimers();
     const gen = crearGeneraciones();
     const p = pendiente(0);
-    gen.admitir("u1", "a", p.trabajo);
-    gen.admitir("u1", "b", p.trabajo);
-    expect(gen.admitir("u1", "c", p.trabajo).estado).toBe("limitada");
-    vi.advanceTimersByTime(VIDA_MAXIMA_MS);
-    expect(gen.admitir("u1", "c", p.trabajo).estado).not.toBe("limitada");
+    const a = admitida(gen.admitir("u1", "a", p.trabajo));
+    const b = admitida(gen.admitir("u1", "b", p.trabajo));
+    b.liberar();
+    const c = admitida(gen.admitir("u1", "c", p.trabajo));
+    expect(gen.admitir("u1", "a", p.trabajo)).toMatchObject({ motivo: "activas" });
+    vi.advanceTimersByTime(VIDA_MAXIMA_MS - 1);
+    expect([a.plazo.aborted, c.plazo.aborted]).toEqual([false, false]);
+    vi.advanceTimersByTime(1);
+    expect([a.plazo.aborted, b.plazo.aborted, c.plazo.aborted]).toEqual([true, false, true]);
+    expect(gen.admitir("u1", "a", p.trabajo).estado).toBe("compartida");
     p.soltar();
   });
 
@@ -159,5 +151,27 @@ describe("admitir", () => {
     primero.liberar();
     segundo.liberar();
     expect(gen.admitir("u1", "k", async () => "x").estado).toBe("nueva");
+  });
+});
+
+describe("intento", () => {
+  it(`cuenta cada intento, también los rechazados: el ${PETICIONES_POR_VENTANA + 1}.º del minuto responde con lo que falta`, () => {
+    let t = 0;
+    const gen = crearGeneraciones(() => t);
+    for (let i = 0; i < PETICIONES_POR_VENTANA; i++) {
+      expect(gen.intento("s1"), `#${i + 1}`).toBeNull();
+      t += 100;
+    }
+    // Los últimos 30 empiezan en el de t = 100 ms: sale de la ventana a los 60.1 s.
+    expect(gen.intento("s1")).toEqual({ estado: "limitada", motivo: "peticiones", reintentarEn: 58, avisar: true });
+    expect(gen.intento("s2")).toBeNull();
+    // Insistir también cuenta: cada rechazo recorre la espera.
+    t = 4_000;
+    expect(gen.intento("s1")).toMatchObject({ motivo: "peticiones", reintentarEn: 57, avisar: false });
+    t = 4_000 + 56_000;
+    expect(gen.intento("s1")).toMatchObject({ motivo: "peticiones" });
+    // Quien deja de insistir y espera lo indicado vuelve a pasar.
+    t = 60_000 + 57_000;
+    expect(gen.intento("s1")).toBeNull();
   });
 });

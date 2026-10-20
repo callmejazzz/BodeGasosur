@@ -98,6 +98,10 @@ describe("libro xlsx", () => {
     await expect(mal("entero", "12,5")).rejects.toThrow(ValorNoExportable);
     await expect(mal("fecha", "2026-02-30")).rejects.toThrow(ValorNoExportable);
     await expect(mal("instante", "2026-10-15")).rejects.toThrow(ValorNoExportable);
+    // El mensaje llega al registro del servidor: conserva el formato, no el valor.
+    const rechazo = await mal("costo", "SECRETO-4471").catch((e: unknown) => e);
+    expect(rechazo).toMatchObject({ name: "ValorNoExportable", formato: "costo", message: "Una celda no se puede escribir como costo." });
+    expect(String((rechazo as Error).stack)).not.toContain("SECRETO-4471");
   });
 
   it("una hoja grande se escribe por partes, cediendo el event loop, y sale igual que entera", async () => {

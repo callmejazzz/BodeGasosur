@@ -2,8 +2,9 @@ import "server-only";
 import type { Params } from "./descargas";
 
 /*
-  Las descargas de Excel en curso y su frecuencia. Una descarga está activa
-  desde que se admite hasta que su respuesta termina de enviarse o se corta.
+  Las descargas de Excel en curso y su frecuencia. Cada intento autenticado
+  cuenta, aunque se rechace. Una descarga está activa desde que se admite
+  hasta que su respuesta termina de enviarse, se corta o vence su plazo.
   El estado vive en memoria porque la aplicación corre en una sola instancia
   (docs/05); si se escala, cada instancia llevaría su propia cuenta.
 */
@@ -17,7 +18,7 @@ export const PETICIONES_POR_VENTANA = 30;
 export const VENTANA_MS = 60_000;
 /** Lo sugerido cuando falta cupo: un libro tarda segundos. */
 export const ESPERA_S = 5;
-/** Un cupo que nadie libera —una respuesta que nunca se lee— vuelve solo. */
+/** Plazo de una descarga activa: al vencer, el cupo vuelve y la respuesta se corta. */
 export const VIDA_MAXIMA_MS = 120_000;
 
 /** Mismo usuario, tabla y filtros, sin importar su orden, los vacíos ni la página. */
@@ -32,9 +33,11 @@ export function claveDeGeneracion(usuarioId: string, tabla: string, params: Para
 
 export type Motivo = "activas" | "peticiones" | "servidor" | "generaciones";
 
+export type Limitada = { estado: "limitada"; motivo: Motivo; reintentarEn: number; /** El primer rechazo por ese motivo en la ventana. */ avisar: boolean };
+
 export type Admision<T> =
-  | { estado: "limitada"; motivo: Motivo; reintentarEn: number; /** El primer rechazo del usuario por ese motivo en la ventana. */ avisar: boolean }
-  | { estado: "nueva" | "compartida"; resultado: Promise<T>; liberar: () => void };
+  | Limitada
+  | { estado: "nueva" | "compartida"; resultado: Promise<T>; liberar: () => void; /** Se aborta al vencer el plazo. */ plazo: AbortSignal };
 
 export function crearGeneraciones(ahora: () => number = Date.now) {
   const enCurso = new Map<string, Promise<unknown>>();
@@ -49,14 +52,27 @@ export function crearGeneraciones(ahora: () => number = Date.now) {
     return r;
   };
   const faltan = (r: number[], t: number) => Math.max(1, Math.ceil((r[0] + VENTANA_MS - t) / 1000));
-  const limitada = (usuarioId: string, motivo: Motivo, reintentarEn: number, t: number): Admision<never> => {
-    const clave = `${usuarioId}:${motivo}`;
+  const limitada = (quien: string, motivo: Motivo, reintentarEn: number, t: number): Limitada => {
+    const clave = `${quien}:${motivo}`;
     const avisar = (avisos.get(clave) ?? -Infinity) <= t - VENTANA_MS;
     if (avisar) avisos.set(clave, t);
     return { estado: "limitada", motivo, reintentarEn, avisar };
   };
 
   return {
+    /**
+     * Cuenta el intento, también si se rechaza, antes de revisar cupos o leer
+     * la base. De cada sesión guarda solo los últimos que caben en la ventana.
+     */
+    intento(identidad: string): Limitada | null {
+      const t = ahora();
+      const previos = (pedidas.get(identidad) ?? []).filter((i) => i > t - VENTANA_MS);
+      const marcas = [...previos, t].slice(-PETICIONES_POR_VENTANA);
+      pedidas.set(identidad, marcas);
+      // Vuelve a pasar cuando el más antiguo de esos últimos sale de la ventana.
+      return previos.length >= PETICIONES_POR_VENTANA ? limitada(identidad, "peticiones", faltan(marcas, t), t) : null;
+    },
+
     /**
      * Revisa los límites y comparte el libro si el mismo pedido ya se arma.
      * Sin await entre revisar y anotar: dos peticiones no se cuelan.
@@ -65,8 +81,6 @@ export function crearGeneraciones(ahora: () => number = Date.now) {
       const t = ahora();
       const suyas = activas.get(usuarioId) ?? new Set<symbol>();
       if (suyas.size >= MAXIMO_ACTIVAS) return limitada(usuarioId, "activas", ESPERA_S, t);
-      const peticiones = recientes(pedidas, usuarioId, t);
-      if (peticiones.length >= PETICIONES_POR_VENTANA) return limitada(usuarioId, "peticiones", faltan(peticiones, t), t);
 
       let resultado = enCurso.get(clave) as Promise<T> | undefined;
       const estado = resultado ? "compartida" : "nueva";
@@ -84,18 +98,21 @@ export function crearGeneraciones(ahora: () => number = Date.now) {
         resultado = r;
       }
 
-      peticiones.push(t);
       const ficha = Symbol();
       suyas.add(ficha);
       activas.set(usuarioId, suyas);
+      const plazo = new AbortController();
       const liberar = () => {
         clearTimeout(reloj);
         suyas.delete(ficha);
         if (suyas.size === 0 && activas.get(usuarioId) === suyas) activas.delete(usuarioId);
       };
-      const reloj = setTimeout(liberar, VIDA_MAXIMA_MS);
+      const reloj = setTimeout(() => {
+        liberar();
+        plazo.abort();
+      }, VIDA_MAXIMA_MS);
       reloj.unref?.();
-      return { estado, resultado, liberar };
+      return { estado, resultado, liberar, plazo: plazo.signal };
     },
 
     /** Solo para pruebas. */

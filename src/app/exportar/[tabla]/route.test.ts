@@ -9,6 +9,7 @@
 
 import { NextRequest } from "next/server";
 import { randomUUID } from "node:crypto";
+import { inspect } from "node:util";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it, vi } from "vitest";
 import { crearCliente } from "../../../../prisma/comun";
 import { URL_PRUEBAS } from "../../../../pruebas/base-de-pruebas";
@@ -19,8 +20,20 @@ import type { EntornoSalidas } from "../../../../pruebas/semilla-salidas";
 
 const sesion = vi.hoisted(() => ({ userId: null as string | null }));
 const clerk = vi.hoisted(() => ({ identidades: [] as { id: string; correo: string; nombre: string }[] }));
+const lecturasDeUsuario = vi.hoisted(() => ({ n: 0 }));
 
 vi.mock("server-only", () => ({}));
+// La base se consulta por usuario solo si el intento pasa el límite de peticiones.
+vi.mock("@/lib/db", async (original) => {
+  const db = await original<typeof import("@/lib/db")>();
+  return {
+    ...db,
+    usuarioParaDescarga: (...a: Parameters<typeof db.usuarioParaDescarga>) => {
+      lecturasDeUsuario.n++;
+      return db.usuarioParaDescarga(...a);
+    },
+  };
+});
 vi.mock("@clerk/nextjs/server", async () => ({
   auth: (await import("../../../../pruebas/clerk-simulado")).authSimulado(sesion),
   clerkClient: async () => ({
@@ -44,7 +57,8 @@ const { GET } = await import("./route");
 const { listarEntradas } = await import("@/lib/entradas/repo");
 const { leerFiltros } = await import("@/lib/entradas/filtros");
 const { CLAVES_DE_DESCARGA, descargaDe } = await import("@/lib/exportar/descargas");
-const { generaciones, GENERACIONES_POR_VENTANA } = await import("@/lib/exportar/generaciones");
+const { generaciones, GENERACIONES_POR_VENTANA, PETICIONES_POR_VENTANA } = await import("@/lib/exportar/generaciones");
+const { hoja } = await import("@/lib/exportar/hoja");
 const { abrirHoja } = await import("@/lib/inventario/conteos");
 const { confirmarDevolucion, crearDevolucion } = await import("@/lib/inventario/devoluciones");
 const { confirmarTraspaso, crearTraspaso } = await import("@/lib/inventario/traspasos");
@@ -351,6 +365,93 @@ describe("solicitudes repetidas y abuso", () => {
       expect(info.mock.calls.join(" ")).not.toMatch(new RegExp(`Secreto|Otro${sufijo}`));
     } finally {
       info.mockRestore();
+    }
+  });
+
+  it(`cada intento con sesión cuenta, también los 429: el ${PETICIONES_POR_VENTANA + 1}.º del minuto se rechaza sin consultar la base`, async () => {
+    como("JEFE");
+    const a = await pedir("/exportar/existencias?q=a");
+    const b = await pedir("/exportar/existencias?q=b");
+    // Con dos activas, los siguientes intentos se rechazan, pero cuentan.
+    for (let i = 2; i < PETICIONES_POR_VENTANA; i++) {
+      const r = await pedir(`/exportar/existencias?q=${i}`);
+      expect(r.status, `#${i + 1}`).toBe(429);
+      expect(await r.json()).toEqual({ mensaje: expect.stringMatching(/dos descargas en curso/) });
+    }
+    const lecturas = lecturasDeUsuario.n;
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await a.arrayBuffer();
+      const r = await pedir("/exportar/existencias?q=otra");
+      expect(r.status).toBe(429);
+      expect(Number(r.headers.get("Retry-After"))).toBeGreaterThan(0);
+      expect(await r.json()).toEqual({ mensaje: expect.stringMatching(/demasiadas descargas seguidas/) });
+      expect(lecturasDeUsuario.n).toBe(lecturas);
+      expect(aviso).toHaveBeenCalledWith(`[exportar] existencias: rechazada por peticiones, sesión ${clerkDe.JEFE}`);
+    } finally {
+      aviso.mockRestore();
+    }
+    await b.arrayBuffer();
+    como(null);
+    expect((await pedir("/exportar/existencias")).status).toBe(401);
+  });
+
+  it("al vencer el plazo, la respuesta se corta, el cupo vuelve y queda registrado; si vence antes de enviarse, 503", async () => {
+    como("JEFE");
+    const real = generaciones.admitir.bind(generaciones);
+    const plazos: AbortController[] = [];
+    const admitir = vi.spyOn(generaciones, "admitir").mockImplementation(((usuarioId: string, clave: string, generar: () => Promise<unknown>) => {
+      const a = real(usuarioId, clave, generar);
+      if (a.estado === "limitada") return a;
+      const plazo = new AbortController();
+      plazos.push(plazo);
+      return { ...a, plazo: plazo.signal };
+    }) as typeof generaciones.admitir);
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+    let r: ReturnType<typeof retener> | undefined;
+    try {
+      const abierta = await pedir("/exportar/existencias?q=lenta");
+      const otra = await pedir("/exportar/existencias?q=otra");
+      expect([abierta.status, otra.status]).toEqual([200, 200]);
+      expect((await pedir("/exportar/existencias?q=tercera")).status).toBe(429);
+      plazos[0].abort();
+      await expect(abierta.arrayBuffer()).rejects.toThrow();
+      expect(aviso).toHaveBeenCalledWith(expect.stringMatching(new RegExp(`^\\[exportar\\] existencias: existencias-[\\d-]+\\.xlsx cortado por plazo tras \\d+ de \\d+ bytes, usuario ${e.usuarios.JEFE.id} \\(JEFE\\)$`)));
+      // El cupo que dejó el corte se puede volver a usar.
+      r = retener("existencias");
+      const tarde = pedir("/exportar/existencias?q=tarde");
+      await vi.waitFor(() => expect(plazos).toHaveLength(3));
+      plazos[2].abort();
+      r.soltar();
+      const vencida = await tarde;
+      expect(vencida.status).toBe(503);
+      expect(aviso).toHaveBeenCalledWith(expect.stringMatching(/existencias-[\d-]+\.xlsx vencido antes de enviarse, usuario /));
+      await otra.arrayBuffer();
+    } finally {
+      r?.soltar();
+      r?.espia.mockRestore();
+      admitir.mockRestore();
+      aviso.mockRestore();
+    }
+  });
+
+  it("un valor que no se puede escribir se registra con su formato, sin el valor", async () => {
+    como("JEFE");
+    const d = descargaDe("existencias")!;
+    const libro = vi.spyOn(d, "libro").mockResolvedValue({
+      hojas: [hoja({ nombre: "x", titulo: "x", filtros: [], columnas: [{ titulo: "Importe", formato: "importe", valor: (f: { v: string }) => f.v }], filas: [{ v: "SECRETO-4471" }] })],
+    });
+    const registro = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const r = await pedir("/exportar/existencias?q=valor");
+      expect(r.status).toBe(500);
+      const escrito = registro.mock.calls.map((c) => c.map((x) => inspect(x)).join(" ")).join("\n");
+      expect(escrito).toContain("ValorNoExportable");
+      expect(escrito).toContain("importe");
+      expect(escrito).not.toContain("SECRETO-4471");
+    } finally {
+      libro.mockRestore();
+      registro.mockRestore();
     }
   });
 });
