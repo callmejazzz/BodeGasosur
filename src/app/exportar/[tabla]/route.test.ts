@@ -9,6 +9,8 @@
 
 import { NextRequest } from "next/server";
 import { randomUUID } from "node:crypto";
+import { setTimeout as esperar } from "node:timers/promises";
+import { inspect } from "node:util";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it, vi } from "vitest";
 import { crearCliente } from "../../../../prisma/comun";
 import { URL_PRUEBAS } from "../../../../pruebas/base-de-pruebas";
@@ -19,8 +21,20 @@ import type { EntornoSalidas } from "../../../../pruebas/semilla-salidas";
 
 const sesion = vi.hoisted(() => ({ userId: null as string | null }));
 const clerk = vi.hoisted(() => ({ identidades: [] as { id: string; correo: string; nombre: string }[] }));
+const lecturasDeUsuario = vi.hoisted(() => ({ n: 0 }));
 
 vi.mock("server-only", () => ({}));
+// La base se consulta por usuario solo si el intento pasa el límite de peticiones.
+vi.mock("@/lib/db", async (original) => {
+  const db = await original<typeof import("@/lib/db")>();
+  return {
+    ...db,
+    usuarioParaDescarga: (...a: Parameters<typeof db.usuarioParaDescarga>) => {
+      lecturasDeUsuario.n++;
+      return db.usuarioParaDescarga(...a);
+    },
+  };
+});
 vi.mock("@clerk/nextjs/server", async () => ({
   auth: (await import("../../../../pruebas/clerk-simulado")).authSimulado(sesion),
   clerkClient: async () => ({
@@ -44,7 +58,8 @@ const { GET } = await import("./route");
 const { listarEntradas } = await import("@/lib/entradas/repo");
 const { leerFiltros } = await import("@/lib/entradas/filtros");
 const { CLAVES_DE_DESCARGA, descargaDe } = await import("@/lib/exportar/descargas");
-const { generaciones, GENERACIONES_POR_VENTANA } = await import("@/lib/exportar/generaciones");
+const { generaciones, GENERACIONES_POR_VENTANA, MAXIMO_ACTIVAS, PETICIONES_POR_VENTANA, VIDA_MAXIMA_MS } = await import("@/lib/exportar/generaciones");
+const { hoja } = await import("@/lib/exportar/hoja");
 const { abrirHoja } = await import("@/lib/inventario/conteos");
 const { confirmarDevolucion, crearDevolucion } = await import("@/lib/inventario/devoluciones");
 const { confirmarTraspaso, crearTraspaso } = await import("@/lib/inventario/traspasos");
@@ -351,6 +366,159 @@ describe("solicitudes repetidas y abuso", () => {
       expect(info.mock.calls.join(" ")).not.toMatch(new RegExp(`Secreto|Otro${sufijo}`));
     } finally {
       info.mockRestore();
+    }
+  });
+
+  it(`cada intento con sesión cuenta, también los 429: el ${PETICIONES_POR_VENTANA + 1}.º del minuto se rechaza sin consultar la base`, async () => {
+    como("JEFE");
+    const a = await pedir("/exportar/existencias?q=a");
+    const b = await pedir("/exportar/existencias?q=b");
+    // Con dos activas, los siguientes intentos se rechazan, pero cuentan.
+    for (let i = 2; i < PETICIONES_POR_VENTANA; i++) {
+      const r = await pedir(`/exportar/existencias?q=${i}`);
+      expect(r.status, `#${i + 1}`).toBe(429);
+      expect(await r.json()).toEqual({ mensaje: expect.stringMatching(/dos descargas en curso/) });
+    }
+    const lecturas = lecturasDeUsuario.n;
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await a.arrayBuffer();
+      const r = await pedir("/exportar/existencias?q=otra");
+      expect(r.status).toBe(429);
+      expect(Number(r.headers.get("Retry-After"))).toBeGreaterThan(0);
+      expect(await r.json()).toEqual({ mensaje: expect.stringMatching(/demasiadas descargas seguidas/) });
+      expect(lecturasDeUsuario.n).toBe(lecturas);
+      expect(aviso).toHaveBeenCalledWith(`[exportar] existencias: rechazada por peticiones, sesión ${clerkDe.JEFE}`);
+    } finally {
+      aviso.mockRestore();
+    }
+    await b.arrayBuffer();
+    como(null);
+    expect((await pedir("/exportar/existencias")).status).toBe(401);
+  });
+
+  it("al vencer el plazo, la respuesta se corta, el cupo vuelve y queda registrado; si vence antes de enviarse, 503", async () => {
+    como("JEFE");
+    const real = generaciones.admitir.bind(generaciones);
+    const plazos: AbortController[] = [];
+    const admitir = vi.spyOn(generaciones, "admitir").mockImplementation(((usuarioId: string, clave: string, generar: () => Promise<unknown>) => {
+      const a = real(usuarioId, clave, generar);
+      if (a.estado === "limitada") return a;
+      const plazo = new AbortController();
+      plazos.push(plazo);
+      return { ...a, plazo: plazo.signal };
+    }) as typeof generaciones.admitir);
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+    let r: ReturnType<typeof retener> | undefined;
+    try {
+      const abierta = await pedir("/exportar/existencias?q=lenta");
+      const otra = await pedir("/exportar/existencias?q=otra");
+      expect([abierta.status, otra.status]).toEqual([200, 200]);
+      expect((await pedir("/exportar/existencias?q=tercera")).status).toBe(429);
+      plazos[0].abort();
+      await expect(abierta.arrayBuffer()).rejects.toThrow();
+      expect(aviso).toHaveBeenCalledWith(expect.stringMatching(new RegExp(`^\\[exportar\\] existencias: existencias-[\\d-]+\\.xlsx cortado por plazo tras \\d+ de \\d+ bytes, usuario ${e.usuarios.JEFE.id} \\(JEFE\\)$`)));
+      // El cupo que dejó el corte se puede volver a usar.
+      r = retener("existencias");
+      const tarde = pedir("/exportar/existencias?q=tarde");
+      await vi.waitFor(() => expect(plazos).toHaveLength(3));
+      plazos[2].abort();
+      r.soltar();
+      const vencida = await tarde;
+      expect(vencida.status).toBe(503);
+      expect(aviso).toHaveBeenCalledWith(expect.stringMatching(/existencias-[\d-]+\.xlsx vencido antes de enviarse, usuario /));
+      await otra.arrayBuffer();
+    } finally {
+      r?.soltar();
+      r?.espia.mockRestore();
+      admitir.mockRestore();
+      aviso.mockRestore();
+    }
+  });
+
+  // Optativa: tarda dos minutos reales. Con --reporter=verbose se ven sus mensajes:
+  // PROBAR_PLAZO_REAL=1 npm test -- route.test.ts -t 'plazo real' --reporter=verbose
+  it.runIf(process.env.PROBAR_PLAZO_REAL === "1")("plazo real: corta una descarga aún abierta a los dos minutos", async () => {
+    como("JEFE");
+    const d = descargaDe("existencias")!;
+    const filas = Array.from({ length: 16_000 }, (_, i) => ({ valor: `${i}-${randomUUID()}` }));
+    const libro = vi.spyOn(d, "libro").mockResolvedValue({
+      hojas: [hoja({ nombre: "Prueba", titulo: "Prueba de plazo", filtros: [], columnas: [{ titulo: "Dato", formato: "texto", valor: (f: { valor: string }) => f.valor }], filas })],
+    });
+    const admitirOriginal = generaciones.admitir.bind(generaciones);
+    let admitidoEn = 0;
+    const admitir = vi.spyOn(generaciones, "admitir").mockImplementation(((...args: Parameters<typeof generaciones.admitir>) => {
+      const resultado = admitirOriginal(...args);
+      if (resultado.estado !== "limitada" && admitidoEn === 0) admitidoEn = performance.now();
+      return resultado;
+    }) as typeof generaciones.admitir);
+    const aviso = vi.spyOn(console, "warn");
+    let lector: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    try {
+      const respuesta = await pedir("/exportar/existencias?q=plazo-real");
+      expect(respuesta.status).toBe(200);
+      const bytes = Number(respuesta.headers.get("Content-Length"));
+      expect(bytes).toBeGreaterThan(4 * 64 * 1024);
+      lector = respuesta.body!.getReader();
+      const transcurrido = () => performance.now() - admitidoEn;
+      const cierre = lector.closed.then(
+        () => ({ fin: "completo", ms: transcurrido() }),
+        () => ({ fin: "vencido", ms: transcurrido() }),
+      );
+      const hasta = async (ms: number) => esperar(Math.max(0, ms - transcurrido()));
+
+      expect((await lector.read()).value?.length).toBeGreaterThan(0);
+      await hasta(50_000);
+      expect((await lector.read()).value?.length).toBeGreaterThan(0);
+      await hasta(100_000);
+      expect((await lector.read()).value?.length).toBeGreaterThan(0);
+      await hasta(115_000);
+      expect(await Promise.race([cierre, esperar(100).then(() => "abierto")])).toBe("abierto");
+      console.info("[plazo real] 115 s: el libro sigue abierto después de recibir tres trozos.");
+
+      await hasta(122_000);
+      const corte = await cierre;
+      expect(corte.fin).toBe("vencido");
+      // El plazo corre desde la admisión; el margen cubre la demora del temporizador.
+      expect(corte.ms).toBeGreaterThanOrEqual(VIDA_MAXIMA_MS - 50);
+      expect(corte.ms).toBeLessThan(VIDA_MAXIMA_MS + 1_000);
+      await expect(lector.read()).rejects.toThrow("La descarga llegó a su plazo máximo.");
+      // Tomó tres trozos de 64 KiB; el cuarto quedó en cola sin leerse.
+      const nombre = /filename="([^"]+)"/.exec(respuesta.headers.get("Content-Disposition") ?? "")?.[1];
+      expect(aviso).toHaveBeenCalledWith(`[exportar] existencias: ${nombre} cortado por plazo tras ${3 * 64 * 1024} de ${bytes} bytes, usuario ${e.usuarios.JEFE.id} (JEFE)`);
+      console.info(`[plazo real] ${(corte.ms / 1000).toFixed(1)} s: la transferencia se cortó por plazo.`);
+
+      // El cupo volvió: caben dos descargas nuevas y la siguiente se rechaza.
+      const nuevas: Response[] = [];
+      for (let i = 0; i < MAXIMO_ACTIVAS; i++) nuevas.push(await pedir(`/exportar/existencias?q=plazo-real-${i}`));
+      expect(nuevas.map((r) => r.status)).toEqual(Array(MAXIMO_ACTIVAS).fill(200));
+      expect((await pedir("/exportar/existencias?q=plazo-real-otra")).status).toBe(429);
+      await Promise.all(nuevas.map((r) => r.body!.cancel()));
+    } finally {
+      await lector?.cancel().catch(() => {});
+      libro.mockRestore();
+      admitir.mockRestore();
+      aviso.mockRestore();
+    }
+  }, 130_000);
+
+  it("un valor que no se puede escribir se registra con su formato, sin el valor", async () => {
+    como("JEFE");
+    const d = descargaDe("existencias")!;
+    const libro = vi.spyOn(d, "libro").mockResolvedValue({
+      hojas: [hoja({ nombre: "x", titulo: "x", filtros: [], columnas: [{ titulo: "Importe", formato: "importe", valor: (f: { v: string }) => f.v }], filas: [{ v: "SECRETO-4471" }] })],
+    });
+    const registro = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const r = await pedir("/exportar/existencias?q=valor");
+      expect(r.status).toBe(500);
+      const escrito = registro.mock.calls.map((c) => c.map((x) => inspect(x)).join(" ")).join("\n");
+      expect(escrito).toContain("ValorNoExportable");
+      expect(escrito).toContain("importe");
+      expect(escrito).not.toContain("SECRETO-4471");
+    } finally {
+      libro.mockRestore();
+      registro.mockRestore();
     }
   });
 });

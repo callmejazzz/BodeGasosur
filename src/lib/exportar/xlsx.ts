@@ -41,9 +41,10 @@ const ESTILOS = `${XML}<styleSheet ${NS}>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
 
+/** Sin el valor rechazado: el mensaje llega al registro del servidor. */
 export class ValorNoExportable extends Error {
-  constructor(formato: Formato, valor: unknown) {
-    super(`No se puede escribir «${String(valor)}» como ${formato}.`);
+  constructor(readonly formato: Formato) {
+    super(`Una celda no se puede escribir como ${formato}.`);
     this.name = "ValorNoExportable";
   }
 }
@@ -84,16 +85,16 @@ function celda(ref: string, formato: Formato, valor: Valor): string {
     case "importe":
     case "costo": {
       const texto = typeof valor === "number" && Number.isFinite(valor) ? String(valor) : valor;
-      if (typeof texto !== "string" || !DECIMAL.test(texto)) throw new ValorNoExportable(formato, valor);
+      if (typeof texto !== "string" || !DECIMAL.test(texto)) throw new ValorNoExportable(formato);
       return celdaNumerica(ref, texto, ESTILO[formato]);
     }
     case "fecha": {
       const dia = valor instanceof Date ? deFechaDeBase(valor) : valor;
-      if (typeof dia !== "string" || !esFechaCalendario(dia)) throw new ValorNoExportable(formato, valor);
+      if (typeof dia !== "string" || !esFechaCalendario(dia)) throw new ValorNoExportable(formato);
       return celdaNumerica(ref, String(serialDeFecha(dia)), ESTILO.fecha);
     }
     case "instante": {
-      if (!(valor instanceof Date) || Number.isNaN(valor.getTime())) throw new ValorNoExportable(formato, valor);
+      if (!(valor instanceof Date) || Number.isNaN(valor.getTime())) throw new ValorNoExportable(formato);
       // Excel no tiene zona: se escribe la hora que marcaba el reloj de México.
       const { fecha, minuto } = relojDeMexico(valor);
       return celdaNumerica(ref, (serialDeFecha(fecha) + minuto / 1440).toFixed(10).replace(/\.?0+$/, ""), ESTILO.instante);

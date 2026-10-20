@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
-import { consultarParaDescarga, SinAcceso, SinPermiso, usuarioParaDescarga, type UsuarioSesion } from "@/lib/db";
+import { consultarParaDescarga, identidadDeSesion, SinAcceso, SinPermiso, usuarioParaDescarga, type UsuarioSesion } from "@/lib/db";
 import { descargaDe, type Descarga, type Params } from "@/lib/exportar/descargas";
-import { claveDeGeneracion, generaciones, type Motivo } from "@/lib/exportar/generaciones";
+import { claveDeGeneracion, generaciones, type Limitada, type Motivo } from "@/lib/exportar/generaciones";
 import { DemasiadasFilas } from "@/lib/exportar/lotes";
 import { libroXlsx } from "@/lib/exportar/xlsx";
 import { relojDeMexico } from "@/lib/fechas";
@@ -54,39 +54,57 @@ async function generar(descarga: Descarga, params: Params): Promise<Archivo | nu
 
 const TROZO = 64 * 1024;
 
+type Fin = "entregado" | "cortado" | "vencido";
+
 /**
  * El libro en trozos que son vistas del mismo Buffer: entregarlo a varias
- * peticiones no lo copia. `alTerminar` corre una vez, al enviar el último
- * byte o al cortarse, con los bytes que ya tomó quien lee.
+ * peticiones no lo copia. Si vence el plazo, el flujo se corta con error.
+ * `alTerminar` corre una vez, con los bytes que ya tomó quien lee.
  */
-function enTrozos(contenido: Buffer, alTerminar: (completo: boolean, tomados: number) => void): ReadableStream<Uint8Array> {
+function enTrozos(contenido: Buffer, plazo: AbortSignal, alTerminar: (fin: Fin, tomados: number) => void): ReadableStream<Uint8Array> {
   let enviados = 0;
   let tomados = 0;
   let terminado = false;
-  const terminar = (completo: boolean) => {
+  let controlador!: ReadableStreamDefaultController<Uint8Array>;
+  const terminar = (fin: Fin) => {
     if (terminado) return;
     terminado = true;
-    alTerminar(completo, completo ? contenido.length : tomados);
+    plazo.removeEventListener("abort", vencer);
+    alTerminar(fin, fin === "entregado" ? contenido.length : tomados);
+  };
+  const vencer = () => {
+    if (terminado) return;
+    controlador.error(new Error("La descarga llegó a su plazo máximo."));
+    terminar("vencido");
   };
   return new ReadableStream({
+    start(c) {
+      controlador = c;
+      plazo.addEventListener("abort", vencer, { once: true });
+    },
     // Se pide el siguiente trozo cuando quien lee ya tomó el anterior.
-    pull(controlador) {
+    pull(c) {
       tomados = enviados;
       if (enviados === contenido.length) {
-        controlador.close();
-        terminar(true);
+        c.close();
+        terminar("entregado");
         return;
       }
       const trozo = contenido.subarray(enviados, enviados + TROZO);
       enviados += trozo.length;
-      controlador.enqueue(trozo);
+      c.enqueue(trozo);
     },
-    cancel: () => terminar(false),
+    cancel: () => terminar("cortado"),
   });
 }
 
 /** Quién y qué tabla; ni filtros ni filas. */
 const quien = (u: UsuarioSesion | undefined) => (u ? `usuario ${u.id} (${u.rol})` : "sin usuario");
+
+function rechazo(tabla: string, l: Limitada, quienPide: string) {
+  if (l.avisar) console.warn(`[exportar] ${tabla}: rechazada por ${l.motivo}, ${quienPide}`);
+  return error(429, LIMITADA[l.motivo](l.reintentarEn), { "Retry-After": String(l.reintentarEn) });
+}
 
 export async function GET(request: NextRequest, ctx: RouteContext<"/exportar/[tabla]">) {
   const { tabla } = await ctx.params;
@@ -98,25 +116,37 @@ export async function GET(request: NextRequest, ctx: RouteContext<"/exportar/[ta
   // Mientras sea de esta función, el cupo se libera al salir; el flujo se lo lleva al responder.
   let liberar: (() => void) | undefined;
   try {
+    // Cada intento con sesión cuenta antes de leer la base, también los que se rechazan.
+    const identidad = await identidadDeSesion();
+    if (!identidad) throw new SinAcceso();
+    const exceso = generaciones.intento(identidad);
+    if (exceso) return rechazo(tabla, exceso, `sesión ${identidad}`);
+
     usuario = await usuarioParaDescarga(descarga.permiso);
     const admision = generaciones.admitir(usuario.id, claveDeGeneracion(usuario.id, tabla, params), () => generar(descarga, params));
-    if (admision.estado === "limitada") {
-      if (admision.avisar) console.warn(`[exportar] ${tabla}: rechazada por ${admision.motivo}, ${quien(usuario)}`);
-      return error(429, LIMITADA[admision.motivo](admision.reintentarEn), { "Retry-After": String(admision.reintentarEn) });
-    }
+    if (admision.estado === "limitada") return rechazo(tabla, admision, quien(usuario));
     liberar = admision.liberar;
     const archivo = await admision.resultado;
     if (!archivo) return error(404, "Lo que se quiere descargar no existe.");
 
     const quienDescarga = quien(usuario);
-    const cuerpo = enTrozos(archivo.contenido, (completo, tomados) => {
+    const bytes = archivo.contenido.length;
+    if (admision.plazo.aborted) {
+      console.warn(`[exportar] ${tabla}: ${archivo.nombre} vencido antes de enviarse, ${quienDescarga}`);
+      return error(503, "La descarga tardó demasiado. Inténtalo de nuevo.");
+    }
+    const cuerpo = enTrozos(archivo.contenido, admision.plazo, (fin, tomados) => {
       admision.liberar();
-      console.info(
-        completo
-          ? `[exportar] ${tabla}: ${archivo.nombre} entregado a ${quienDescarga}, ${archivo.filas} filas, ${archivo.contenido.length} bytes, generado en ${archivo.ms} ms` +
-              (admision.estado === "compartida" ? ", compartido con otra petición en curso" : "")
-          : `[exportar] ${tabla}: ${archivo.nombre} cortado tras ${tomados} de ${archivo.contenido.length} bytes, ${quienDescarga}`,
-      );
+      if (fin === "entregado") {
+        console.info(
+          `[exportar] ${tabla}: ${archivo.nombre} entregado a ${quienDescarga}, ${archivo.filas} filas, ${bytes} bytes, generado en ${archivo.ms} ms` +
+            (admision.estado === "compartida" ? ", compartido con otra petición en curso" : ""),
+        );
+      } else if (fin === "cortado") {
+        console.info(`[exportar] ${tabla}: ${archivo.nombre} cortado tras ${tomados} de ${bytes} bytes, ${quienDescarga}`);
+      } else {
+        console.warn(`[exportar] ${tabla}: ${archivo.nombre} cortado por plazo tras ${tomados} de ${bytes} bytes, ${quienDescarga}`);
+      }
     });
     liberar = undefined;
     return new Response(cuerpo, {

@@ -74,7 +74,10 @@ gastó cada estación y qué se pide más, y cualquier tabla se lleva a Excel.
 - `npm run db:usuario-app` ya no manda la contraseña de la aplicación a la base, sino su
   verificador SCRAM: Supabase guarda cada cambio de usuarios en su bitácora, y la
   contraseña quedaba escrita ahí.
-- 543 pruebas contra PostgreSQL real.
+- Insistir con descargas rechazadas también cuenta para el tope por minuto, y el rechazo
+  ya no consulta la base. Una descarga que lleva dos minutos activa se corta y queda en
+  el registro. Los errores de Excel se registran sin el dato de la celda.
+- 546 pruebas contra PostgreSQL real.
 
 ## v0.7.1 — 2026-10-09
 

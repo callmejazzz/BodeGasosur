@@ -227,6 +227,11 @@ export async function consultarDesdeAccion<T>(
   return leer(permiso, fn);
 }
 
+/** La sesión según Clerk, sin leer la base: para contar intentos antes de consultar. */
+export async function identidadDeSesion(): Promise<string | null> {
+  return (await auth()).userId;
+}
+
 /** Quién descarga, antes de leer, para limitar por usuario. Lanza SinAcceso o SinPermiso. */
 export function usuarioParaDescarga(permiso: Permiso): Promise<UsuarioSesion> {
   return exigir(permiso);
