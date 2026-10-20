@@ -1,4 +1,5 @@
 import { FilaAcceso } from "@/components/usuarios/fila-acceso";
+import { DescargarExcel } from "@/components/ui/descargar-excel";
 import { Paginacion } from "@/components/ui/paginacion";
 import { Card, CardHeader, EncabezadoPagina, EstadoVacio } from "@/components/ui/superficies";
 import { consultar, sesionActual, SinPermiso } from "@/lib/db";
@@ -58,6 +59,7 @@ export default async function PaginaUsuarios({ searchParams }: PageProps<"/usuar
       <EncabezadoPagina
         titulo="Usuarios"
         descripcion="Clerk dice quién eres; esta pantalla dice qué puedes hacer. La facultad de autorizar es una bandera del usuario, independiente del rol: un Jefe puede tenerla y alguien de Compras puede no tenerla."
+        acciones={<DescargarExcel href="/exportar/usuarios" />}
       />
 
       <Card className="mb-6">

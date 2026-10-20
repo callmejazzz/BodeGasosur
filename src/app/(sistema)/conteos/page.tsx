@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { FiltrosMovimientos } from "@/components/inventario/filtros-movimientos";
 import { BadgeEstatus } from "@/components/inventario/estatus";
+import { DescargarExcel } from "@/components/ui/descargar-excel";
 import { ButtonLink } from "@/components/ui/button";
 import { Paginacion } from "@/components/ui/paginacion";
 import { Card, EncabezadoPagina, EstadoVacio } from "@/components/ui/superficies";
@@ -24,6 +25,7 @@ export default async function PaginaConteos({ searchParams }: PageProps<"/conteo
         descripcion="Hojas de conteo por bodega. Al confirmar, las diferencias se vuelven ajustes: una capa sin costo para lo que sobra, consumo PEPS para lo que falta."
         acciones={
           <>
+            <DescargarExcel href={`/exportar/conteos?${aParametros(filtros)}`} />
             <ButtonLink href="/ajustes" variante="secundario">Ajustes</ButtonLink>
             {puedeCapturar && <ButtonLink href="/conteos/nuevo" prefetch={false}>Nueva hoja</ButtonLink>}
           </>

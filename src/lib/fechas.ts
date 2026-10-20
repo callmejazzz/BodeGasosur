@@ -25,7 +25,7 @@ function partesEn(zona: string, instante: Date) {
   const valor = (tipo: Intl.DateTimeFormatPartTypes) =>
     partes.find((p) => p.type === tipo)?.value ?? "";
   return {
-    año: valor("year"),
+    anio: valor("year"),
     mes: valor("month"),
     dia: valor("day"),
     hora: valor("hour"),
@@ -36,8 +36,8 @@ function partesEn(zona: string, instante: Date) {
 // ────────────────────────────── Fechas calendario ────────────────────────────
 
 export function hoyEnMexico(ahora: Date = new Date()): string {
-  const { año, mes, dia } = partesEn(ZONA_HORARIA, ahora);
-  return `${año}-${mes}-${dia}`;
+  const { anio, mes, dia } = partesEn(ZONA_HORARIA, ahora);
+  return `${anio}-${mes}-${dia}`;
 }
 
 export function esFechaCalendario(texto: unknown): texto is string {
@@ -45,10 +45,10 @@ export function esFechaCalendario(texto: unknown): texto is string {
   const partes = FORMA_CALENDARIO.exec(texto);
   if (!partes) return false;
 
-  const [, año, mes, dia] = partes.map(Number);
-  const fecha = fechaUtc(año, mes, dia);
+  const [, anio, mes, dia] = partes.map(Number);
+  const fecha = fechaUtc(anio, mes, dia);
   return (
-    fecha.getUTCFullYear() === año &&
+    fecha.getUTCFullYear() === anio &&
     fecha.getUTCMonth() === mes - 1 &&
     fecha.getUTCDate() === dia
   );
@@ -70,13 +70,13 @@ export function esFechaOperativa(texto: unknown, hoy = hoyEnMexico()): texto is 
 
 export function aFechaDeBase(texto: string): Date {
   if (!esFechaCalendario(texto)) throw new FechaInvalida(texto);
-  const [, año, mes, dia] = FORMA_CALENDARIO.exec(texto)!.map(Number);
-  return fechaUtc(año, mes, dia);
+  const [, anio, mes, dia] = FORMA_CALENDARIO.exec(texto)!.map(Number);
+  return fechaUtc(anio, mes, dia);
 }
 
 export function deFechaDeBase(valor: Date): string {
-  const { año, mes, dia } = partesEn("UTC", valor);
-  return `${año}-${mes}-${dia}`;
+  const { anio, mes, dia } = partesEn("UTC", valor);
+  return `${anio}-${mes}-${dia}`;
 }
 
 /**
@@ -97,10 +97,21 @@ export function leerRangoDeFechas(desdeCrudo: unknown, hastaCrudo: unknown, hoy 
 
 /** El día calendario siguiente. */
 export function diaSiguiente(texto: string): string {
+  return sumarDias(texto, 1);
+}
+
+/** `n` días después; antes, si es negativo. */
+export function sumarDias(texto: string, n: number): string {
   const fecha = aFechaDeBase(texto);
-  fecha.setUTCDate(fecha.getUTCDate() + 1);
+  fecha.setUTCDate(fecha.getUTCDate() + n);
   return deFechaDeBase(fecha);
 }
+
+/** 0 es domingo, 5 viernes y 6 sábado. */
+export const diaDeLaSemana = (texto: string) => aFechaDeBase(texto).getUTCDay();
+
+export const inicioDeMes = (texto: string) => `${texto.slice(0, 7)}-01`;
+export const inicioDeAnio = (texto: string) => `${texto.slice(0, 4)}-01-01`;
 
 /**
  * El instante en que empieza ese día en México: el borde para filtrar marcas
@@ -113,7 +124,7 @@ export function inicioDelDiaEnMexico(texto: string): Date {
   // Dos pasos: el desfase de México se mide de nuevo ya en su medianoche.
   for (let i = 0; i < 2; i++) {
     const p = partesEn(ZONA_HORARIA, new Date(instante));
-    instante += medianoche - Date.UTC(Number(p.año), Number(p.mes) - 1, Number(p.dia), Number(p.hora), Number(p.minuto));
+    instante += medianoche - Date.UTC(Number(p.anio), Number(p.mes) - 1, Number(p.dia), Number(p.hora), Number(p.minuto));
   }
   return new Date(instante);
 }
@@ -122,20 +133,26 @@ export function inicioDelDiaEnMexico(texto: string): Date {
 
 export function formatearFecha(valor: Date | string): string {
   const fecha = typeof valor === "string" ? aFechaDeBase(valor) : valor;
-  const { año, mes, dia } = partesEn("UTC", fecha);
-  return `${dia}/${mes}/${año}`;
+  const { anio, mes, dia } = partesEn("UTC", fecha);
+  return `${dia}/${mes}/${anio}`;
 }
 
 export function formatearInstante(valor: Date): string {
-  const { año, mes, dia, hora, minuto } = partesEn(ZONA_HORARIA, valor);
-  return `${dia}/${mes}/${año} ${hora}:${minuto}`;
+  const { anio, mes, dia, hora, minuto } = partesEn(ZONA_HORARIA, valor);
+  return `${dia}/${mes}/${anio} ${hora}:${minuto}`;
+}
+
+/** El día y el minuto que marcaba el reloj de México en ese instante. */
+export function relojDeMexico(valor: Date): { fecha: string; minuto: number } {
+  const { anio, mes, dia, hora, minuto } = partesEn(ZONA_HORARIA, valor);
+  return { fecha: `${anio}-${mes}-${dia}`, minuto: Number(hora) * 60 + Number(minuto) };
 }
 
 // ─────────────────────────────────── Interno ─────────────────────────────────
 
-function fechaUtc(año: number, mes: number, dia: number): Date {
+function fechaUtc(anio: number, mes: number, dia: number): Date {
   const fecha = new Date(0);
-  fecha.setUTCFullYear(año, mes - 1, dia);
+  fecha.setUTCFullYear(anio, mes - 1, dia);
   fecha.setUTCHours(0, 0, 0, 0);
   return fecha;
 }

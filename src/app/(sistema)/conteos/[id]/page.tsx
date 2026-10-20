@@ -4,6 +4,7 @@ import { actualizarHoja, confirmarConteo, descartarHoja, guardarConteo } from ".
 import { BadgeEstatus } from "@/components/inventario/estatus";
 import { Historial } from "@/components/inventario/detalle-movimiento";
 import { HojaConteo } from "@/components/inventario/hoja-conteo";
+import { DescargarExcel } from "@/components/ui/descargar-excel";
 import { ButtonLink } from "@/components/ui/button";
 import { Badge, Card, CardHeader, EncabezadoPagina } from "@/components/ui/superficies";
 import { consultar } from "@/lib/db";
@@ -31,7 +32,13 @@ export default async function PaginaHoja({ params }: PageProps<"/conteos/[id]">)
       <EncabezadoPagina
         titulo={`Conteo de ${h.bodega.nombre}`}
         descripcion={DESCRIPCION[h.estatus]}
-        acciones={<ButtonLink href="/conteos" variante="secundario">Todas las hojas</ButtonLink>}
+        acciones={
+          <>
+            {/* La hoja que se captura es una rejilla de edición, no una tabla de consulta. */}
+            {!puede.capturar && <DescargarExcel href={`/exportar/conteo?id=${h.id}`} />}
+            <ButtonLink href="/conteos" variante="secundario">Todas las hojas</ButtonLink>
+          </>
+        }
       />
       <div className="flex flex-col gap-6">
         <Card>

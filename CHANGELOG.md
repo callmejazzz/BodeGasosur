@@ -8,6 +8,75 @@ puede hacer ahora que antes no se podía.
 
 ---
 
+## v0.8.0 — 2026-10-20
+
+Última migración incluida: `20261008100000_entrada_con_sus_capas`. La fase no agrega
+migraciones: los reportes leen lo que ya registra el sistema.
+
+Cierra la fase 8: reportes y exportación. Con esta versión el inventario se explica solo:
+qué entró y salió cada semana, cuánto vale lo que hay, la historia de cada artículo, lo que
+gastó cada estación y qué se pide más, y cualquier tabla se lleva a Excel.
+
+**Lo que cambia para quien va a usar el sistema**
+
+- **Reporte semanal.** Del sábado al viernes, por artículo y bodega: con qué saldo empezó
+  la semana, las compras, lo que salió a estaciones, los traspasos recibidos y enviados,
+  las devoluciones, los ajustes y las reversas, con qué saldo cerró y cuánto vale. Se elige
+  el viernes y se pasa de una semana a otra con las flechas. Sin filtro de bodega, una
+  tabla suma cada artículo en todas las bodegas. Si se consulta el mismo viernes, avisa
+  que es provisional.
+- **Existencias por bodega.** Lo que hay hoy, su valor y el mínimo del artículo. Lo que
+  está bajo el mínimo va primero, marcado; con «Solo bajo mínimo» se ve nada más eso. Un
+  artículo sin existencia ni mínimo aparece si se le busca.
+- **Kardex.** Se elige un artículo, tecleando su clave o su descripción, y se ve cada
+  movimiento en cada bodega, con el saldo de esa bodega después de cada uno. Un traspaso
+  sale de una bodega y entra en otra; una reversa aparece en su fecha y lleva al
+  movimiento que corrigió. Abajo, el saldo de cada bodega al principio y al final del
+  periodo. Por omisión, el mes en curso.
+- **Gasto por estación.** Lo que consumió cada estación: lo retirado menos lo que devolvió
+  ligado a su salida, con el costo con el que salió. Los préstamos no cuentan como gasto.
+  Por estación o por estación y artículo; por omisión, del 1 de enero a hoy.
+- **Frecuencia de consumo.** Cuántas veces salió cada artículo, cuántas fueron préstamo,
+  cuántas piezas y cuándo fue la última. Una salida revertida deja de contar.
+- **Las piezas sin costo nunca se cuentan como cero.** Los importes dicen «valor
+  conocido» y las piezas sin costo van en su columna.
+- **Descargar Excel** en los reportes y en toda lista: entradas, salidas, pendientes,
+  traspasos, devoluciones, ajustes, préstamos, conteo físico, catálogos y usuarios, y en
+  cada detalle. El archivo trae todas las filas con los filtros que se ven, no solo la
+  primera página, con el título, los filtros y la hora en que se generó. Las fechas son
+  fechas y los importes, números: se pueden sumar y filtrar en Excel. Si la tabla es
+  demasiado grande, lo dice y pide acotar los filtros.
+- **Quién ve qué.** Superadmin, Compras y Jefe consultan los reportes. Cada descarga pide
+  el mismo permiso que su pantalla: los usuarios, por ejemplo, solo los descarga el
+  Superadmin.
+
+**Por dentro**
+
+- Los reportes se calculan al consultarlos con el libro de movimientos, en una sola
+  instantánea; una entrada capturada después con fecha anterior cambia la historia al
+  volver a consultarla. PostgreSQL redondea cada renglón antes de sumar.
+- La descarga vuelve a exigir sesión y permiso, lee por lotes con la misma consulta y el
+  mismo orden que la pantalla, y arma el archivo completo antes de entregarlo: si algo
+  falla, no sale un archivo a medias. No se guarda en caché.
+- **Pocas descargas a la vez.** Cada usuario tiene hasta dos descargas en curso, hasta
+  que terminan de enviarse, y un tope de intentos y de archivos nuevos por minuto que
+  cuenta también los rechazados; el servidor arma hasta tres archivos a la vez. Pasado
+  eso, la descarga pide esperar los segundos que indica. Un segundo clic u otra pestaña
+  con el mismo pedido espera el mismo archivo en vez de armar otro.
+- **Plazos.** Un archivo que no termina de armarse en 90 segundos se cancela y quienes lo
+  esperaban reciben aviso; una descarga que lleva dos minutos activa se corta. Si Clerk
+  no responde, la lista de usuarios deja de esperarlo a los 15 segundos.
+- **Sin frenar a los demás.** El archivo se arma por partes y comprimido, sin detener al
+  servidor mientras tanto, y entregarlo a varias peticiones no lo copia en memoria.
+- **Registro.** Cada descarga queda en el registro del servidor con quién la pidió, al
+  terminar de enviarse y sin sus filtros. Los errores de Excel se registran sin el dato de
+  la celda.
+- El texto que empieza como una fórmula de Excel se guarda como texto y no se ejecuta al
+  abrir el archivo.
+- `npm run db:usuario-app` manda a la base el verificador SCRAM de la contraseña de la
+  aplicación, no la contraseña: Supabase guarda cada cambio de usuarios en su bitácora.
+- 551 pruebas contra PostgreSQL real.
+
 ## v0.7.1 — 2026-10-09
 
 Commit `22c1146`, con su etiqueta.
