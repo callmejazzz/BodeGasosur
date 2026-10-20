@@ -77,7 +77,10 @@ gastó cada estación y qué se pide más, y cualquier tabla se lleva a Excel.
 - Insistir con descargas rechazadas también cuenta para el tope por minuto, y el rechazo
   ya no consulta la base. Una descarga que lleva dos minutos activa se corta y queda en
   el registro. Los errores de Excel se registran sin el dato de la celda.
-- 546 pruebas contra PostgreSQL real.
+- Un archivo que no termina de armarse en 90 segundos se cancela: quienes lo esperaban
+  reciben aviso de inmediato y el servidor no se queda sin lugar para otras descargas.
+  Si Clerk no responde, la lista de usuarios deja de esperarlo a los 15 segundos.
+- 551 pruebas contra PostgreSQL real.
 
 ## v0.7.1 — 2026-10-09
 

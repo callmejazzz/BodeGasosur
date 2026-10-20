@@ -1,10 +1,11 @@
 import type { NextRequest } from "next/server";
 import { consultarParaDescarga, identidadDeSesion, SinAcceso, SinPermiso, usuarioParaDescarga, type UsuarioSesion } from "@/lib/db";
 import { descargaDe, type Descarga, type Params } from "@/lib/exportar/descargas";
-import { claveDeGeneracion, generaciones, type Limitada, type Motivo } from "@/lib/exportar/generaciones";
+import { claveDeGeneracion, DescargaVencida, GeneracionVencida, generaciones, type Limitada, type Motivo } from "@/lib/exportar/generaciones";
 import { DemasiadasFilas } from "@/lib/exportar/lotes";
 import { libroXlsx } from "@/lib/exportar/xlsx";
 import { relojDeMexico } from "@/lib/fechas";
+import { hastaElPlazo } from "@/lib/plazo";
 
 // La descarga en Excel de una tabla: vuelve a exigir sesión y permiso, lee los
 // filtros de la URL como la pantalla y arma el libro completo antes de
@@ -39,13 +40,14 @@ function parametrosDe(busqueda: URLSearchParams): Params {
 
 type Archivo = { contenido: Buffer; nombre: string; filas: number; ms: number };
 
-async function generar(descarga: Descarga, params: Params): Promise<Archivo | null> {
+/** La lectura se acota sola (60 s); Clerk y la compresión atienden la señal del plazo. */
+async function generar(descarga: Descarga, params: Params, señal: AbortSignal): Promise<Archivo | null> {
   const inicio = Date.now();
-  const libro = await descarga.libro((fn) => consultarParaDescarga(descarga.permiso, fn), params);
+  const libro = await descarga.libro((fn) => consultarParaDescarga(descarga.permiso, fn), params, señal);
   if (!libro) return null;
   const ahora = new Date();
   return {
-    contenido: await libroXlsx(libro.hojas, ahora, descarga.titulo),
+    contenido: await libroXlsx(libro.hojas, ahora, descarga.titulo, señal),
     nombre: `${libro.archivo ?? descarga.archivo}-${relojDeMexico(ahora).fecha}.xlsx`.replace(/[^A-Za-z0-9._-]+/g, "-"),
     filas: libro.hojas.reduce((n, h) => n + h.filas.length, 0),
     ms: Date.now() - inicio,
@@ -74,7 +76,7 @@ function enTrozos(contenido: Buffer, plazo: AbortSignal, alTerminar: (fin: Fin, 
   };
   const vencer = () => {
     if (terminado) return;
-    controlador.error(new Error("La descarga llegó a su plazo máximo."));
+    controlador.error(plazo.reason);
     terminar("vencido");
   };
   return new ReadableStream({
@@ -123,18 +125,15 @@ export async function GET(request: NextRequest, ctx: RouteContext<"/exportar/[ta
     if (exceso) return rechazo(tabla, exceso, `sesión ${identidad}`);
 
     usuario = await usuarioParaDescarga(descarga.permiso);
-    const admision = generaciones.admitir(usuario.id, claveDeGeneracion(usuario.id, tabla, params), () => generar(descarga, params));
+    const admision = generaciones.admitir(usuario.id, claveDeGeneracion(usuario.id, tabla, params), (señal) => generar(descarga, params, señal));
     if (admision.estado === "limitada") return rechazo(tabla, admision, quien(usuario));
     liberar = admision.liberar;
-    const archivo = await admision.resultado;
+    // No espera al libro más allá del plazo de esta descarga.
+    const archivo = await hastaElPlazo(admision.resultado, admision.plazo);
     if (!archivo) return error(404, "Lo que se quiere descargar no existe.");
 
     const quienDescarga = quien(usuario);
     const bytes = archivo.contenido.length;
-    if (admision.plazo.aborted) {
-      console.warn(`[exportar] ${tabla}: ${archivo.nombre} vencido antes de enviarse, ${quienDescarga}`);
-      return error(503, "La descarga tardó demasiado. Inténtalo de nuevo.");
-    }
     const cuerpo = enTrozos(archivo.contenido, admision.plazo, (fin, tomados) => {
       admision.liberar();
       if (fin === "entregado") {
@@ -161,6 +160,10 @@ export async function GET(request: NextRequest, ctx: RouteContext<"/exportar/[ta
     if (e instanceof SinAcceso) return error(401, "La sesión terminó o ya no tiene acceso. Vuelve a entrar.");
     if (e instanceof SinPermiso) return error(403, "No tienes permiso para descargar esta tabla.");
     if (e instanceof DemasiadasFilas) return error(413, e.message);
+    if (e instanceof DescargaVencida || e instanceof GeneracionVencida) {
+      console.warn(`[exportar] ${tabla}: ${e instanceof DescargaVencida ? "vencida antes de enviarse" : "el libro no se terminó de armar en su plazo"}, ${quien(usuario)}`);
+      return error(503, "La descarga tardó demasiado. Inténtalo de nuevo; si vuelve a pasar, acota los filtros.");
+    }
     console.error(`[exportar] ${tabla}, ${quien(usuario)}:`, e);
     return error(500, "No se pudo generar el archivo. Inténtalo de nuevo; si vuelve a fallar, acota los filtros.");
   } finally {

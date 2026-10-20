@@ -2,12 +2,14 @@
   Las descargas de Excel por usuario: el mismo pedido en curso se comparte, no
   más de dos activas hasta terminar de transferirse, no más de tres libros
   armándose en el proceso y un tope por minuto de libros nuevos y de peticiones.
+  El libro compartido vence a su plazo aunque su trabajo no se detenga.
 */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Admision } from "./generaciones";
 
 vi.mock("server-only", () => ({}));
-const { claveDeGeneracion, crearGeneraciones, ESPERA_S, GENERACIONES_POR_VENTANA, MAXIMO_ACTIVAS, MAXIMO_GENERANDO, PETICIONES_POR_VENTANA, VENTANA_MS, VIDA_MAXIMA_MS } = await import("./generaciones");
+const { claveDeGeneracion, crearGeneraciones, DescargaVencida, ESPERA_S, GeneracionVencida, GENERACIONES_POR_VENTANA, GRACIA_MS, MAXIMO_ACTIVAS, MAXIMO_GENERANDO, PETICIONES_POR_VENTANA, PLAZO_GENERACION_MS, VENTANA_MS, VIDA_MAXIMA_MS } =
+  await import("./generaciones");
 
 /** Un trabajo que no termina hasta soltarlo. */
 function pendiente<T>(valor: T) {
@@ -123,21 +125,23 @@ describe("admitir", () => {
     p.soltar();
   });
 
-  it("al vencer el plazo, el cupo vuelve y se avisa a quien entrega la respuesta", () => {
+  it("al vencer el plazo, el cupo vuelve y se avisa a quien entrega la respuesta", async () => {
     vi.useFakeTimers();
     const gen = crearGeneraciones();
-    const p = pendiente(0);
-    const a = admitida(gen.admitir("u1", "a", p.trabajo));
-    const b = admitida(gen.admitir("u1", "b", p.trabajo));
+    const listo = async () => 0;
+    const a = admitida(gen.admitir("u1", "a", listo));
+    const b = admitida(gen.admitir("u1", "b", listo));
     b.liberar();
-    const c = admitida(gen.admitir("u1", "c", p.trabajo));
-    expect(gen.admitir("u1", "a", p.trabajo)).toMatchObject({ motivo: "activas" });
+    const c = admitida(gen.admitir("u1", "c", listo));
+    // Ya armados, pero sus respuestas siguen enviándose.
+    await Promise.all([a.resultado, c.resultado]);
+    expect(gen.admitir("u1", "d", listo)).toMatchObject({ motivo: "activas" });
     vi.advanceTimersByTime(VIDA_MAXIMA_MS - 1);
     expect([a.plazo.aborted, c.plazo.aborted]).toEqual([false, false]);
     vi.advanceTimersByTime(1);
     expect([a.plazo.aborted, b.plazo.aborted, c.plazo.aborted]).toEqual([true, false, true]);
-    expect(gen.admitir("u1", "a", p.trabajo).estado).toBe("compartida");
-    p.soltar();
+    expect(a.plazo.reason).toBeInstanceOf(DescargaVencida);
+    expect(gen.admitir("u1", "d", listo).estado).toBe("nueva");
   });
 
   it("un trabajo que falla lo comparte con quien esperaba y deja de estar en curso", async () => {
@@ -151,6 +155,59 @@ describe("admitir", () => {
     primero.liberar();
     segundo.liberar();
     expect(gen.admitir("u1", "k", async () => "x").estado).toBe("nueva");
+  });
+});
+
+describe("plazo del libro compartido", () => {
+  /** Se detiene al abortarse su señal, como la compresión y la espera a Clerk. */
+  const atento = (señal: AbortSignal) => new Promise<never>((_, rechazar) => señal.addEventListener("abort", () => rechazar(señal.reason), { once: true }));
+
+  it("al vencer, quien lo espera se entera, el trabajo recibe la señal y su lugar en el proceso vuelve al detenerse", async () => {
+    vi.useFakeTimers();
+    const gen = crearGeneraciones();
+    const señales: AbortSignal[] = [];
+    const trabajo = (señal: AbortSignal) => {
+      señales.push(señal);
+      return atento(señal);
+    };
+    const esperas = Array.from({ length: MAXIMO_GENERANDO }, (_, i) => admitida(gen.admitir(`u${i}`, `k${i}`, trabajo)));
+    const repetida = admitida(gen.admitir("u0", "k0", trabajo));
+    expect(repetida.estado).toBe("compartida");
+    expect(gen.admitir("otro", "k", trabajo)).toMatchObject({ motivo: "servidor" });
+    await vi.advanceTimersByTimeAsync(PLAZO_GENERACION_MS - 1);
+    expect(señales.some((s) => s.aborted)).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(señales.map((s) => s.aborted)).toEqual(Array(MAXIMO_GENERANDO).fill(true));
+    for (const a of [...esperas, repetida]) {
+      await expect(a.resultado).rejects.toBeInstanceOf(GeneracionVencida);
+      a.liberar();
+    }
+    // El mismo pedido ya no se comparte, y los trabajos detenidos dejaron lugar.
+    expect(gen.admitir("u0", "k0", trabajo).estado).toBe("nueva");
+    expect(gen.admitir("otro", "k", trabajo).estado).toBe("nueva");
+  });
+
+  it("un trabajo que no atiende la señal sigue ocupando su lugar en el proceso, y se registra", async () => {
+    vi.useFakeTimers();
+    const registro = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const gen = crearGeneraciones();
+      const sordo = () => new Promise<never>(() => {});
+      const esperas = Array.from({ length: MAXIMO_GENERANDO }, (_, i) => admitida(gen.admitir(`u${i}`, `k${i}`, sordo)));
+      await vi.advanceTimersByTimeAsync(PLAZO_GENERACION_MS);
+      for (const a of esperas) {
+        await expect(a.resultado).rejects.toBeInstanceOf(GeneracionVencida);
+        a.liberar();
+      }
+      // Quien esperaba ya se enteró, pero los trabajos siguen: no cabe otro.
+      expect(gen.admitir("u0", "k0", sordo)).toMatchObject({ motivo: "servidor" });
+      expect(registro).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(GRACIA_MS);
+      expect(registro).toHaveBeenCalledTimes(MAXIMO_GENERANDO);
+      expect(registro).toHaveBeenCalledWith(`[exportar] el libro de usuario u0 sigue armándose ${GRACIA_MS / 1000} s después de su plazo y ocupa el cupo del proceso.`);
+    } finally {
+      registro.mockRestore();
+    }
   });
 });
 

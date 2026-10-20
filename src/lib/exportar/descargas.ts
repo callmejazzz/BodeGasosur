@@ -29,8 +29,8 @@ export type Descarga = {
   /** Nombre base del archivo; la ruta le agrega la fecha. */
   archivo: string;
   titulo: string;
-  /** null: lo pedido no existe. */
-  libro: (leer: Lector, params: Params) => Promise<Libro | null>;
+  /** null: lo pedido no existe. La señal se aborta al vencer el plazo del libro. */
+  libro: (leer: Lector, params: Params, señal: AbortSignal) => Promise<Libro | null>;
 };
 
 const reporte = (archivo: string, titulo: string, hojas: (db: Db, params: Params) => Promise<Hoja<unknown>[] | null>): Descarga => ({
@@ -92,10 +92,10 @@ const DESCARGAS: Record<string, Descarga> = {
     permiso: "usuarios:administrar",
     archivo: "usuarios",
     titulo: "Usuarios",
-    libro: async (leer) => {
+    libro: async (leer, _params, señal) => {
       const usuarios = await leer((db) => listarUsuarios(db));
       // Clerk ya fuera de la transacción: es una petición HTTP.
-      return { hojas: [hojaConAcceso(usuarios), hojaSinAcceso(await identidadesSinAcceso(usuarios))] };
+      return { hojas: [hojaConAcceso(usuarios), hojaSinAcceso(await identidadesSinAcceso(usuarios, señal))] };
     },
   },
 };

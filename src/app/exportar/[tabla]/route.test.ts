@@ -22,6 +22,8 @@ import type { EntornoSalidas } from "../../../../pruebas/semilla-salidas";
 const sesion = vi.hoisted(() => ({ userId: null as string | null }));
 const clerk = vi.hoisted(() => ({ identidades: [] as { id: string; correo: string; nombre: string }[] }));
 const lecturasDeUsuario = vi.hoisted(() => ({ n: 0 }));
+/** Clerk que no responde: cuenta las llamadas y nunca contesta. */
+const clerkColgado = vi.hoisted(() => ({ activo: false, llamadas: 0 }));
 
 vi.mock("server-only", () => ({}));
 // La base se consulta por usuario solo si el intento pasa el límite de peticiones.
@@ -39,16 +41,22 @@ vi.mock("@clerk/nextjs/server", async () => ({
   auth: (await import("../../../../pruebas/clerk-simulado")).authSimulado(sesion),
   clerkClient: async () => ({
     users: {
-      getUserList: async ({ limit, offset }: { limit: number; offset: number }) => ({
-        totalCount: clerk.identidades.length,
-        data: clerk.identidades.slice(offset, offset + limit).map((i) => ({
-          id: i.id,
-          primaryEmailAddressId: "principal",
-          emailAddresses: [{ id: "principal", emailAddress: i.correo }],
-          firstName: i.nombre,
-          lastName: null,
-        })),
-      }),
+      getUserList: async ({ limit, offset }: { limit: number; offset: number }) => {
+        if (clerkColgado.activo) {
+          clerkColgado.llamadas++;
+          return new Promise<never>(() => {});
+        }
+        return {
+          totalCount: clerk.identidades.length,
+          data: clerk.identidades.slice(offset, offset + limit).map((i) => ({
+            id: i.id,
+            primaryEmailAddressId: "principal",
+            emailAddresses: [{ id: "principal", emailAddress: i.correo }],
+            firstName: i.nombre,
+            lastName: null,
+          })),
+        };
+      },
     },
   }),
 }));
@@ -58,8 +66,9 @@ const { GET } = await import("./route");
 const { listarEntradas } = await import("@/lib/entradas/repo");
 const { leerFiltros } = await import("@/lib/entradas/filtros");
 const { CLAVES_DE_DESCARGA, descargaDe } = await import("@/lib/exportar/descargas");
-const { generaciones, GENERACIONES_POR_VENTANA, MAXIMO_ACTIVAS, PETICIONES_POR_VENTANA, VIDA_MAXIMA_MS } = await import("@/lib/exportar/generaciones");
+const { DescargaVencida, generaciones, GENERACIONES_POR_VENTANA, MAXIMO_ACTIVAS, MAXIMO_GENERANDO, PETICIONES_POR_VENTANA, PLAZO_GENERACION_MS, VIDA_MAXIMA_MS } = await import("@/lib/exportar/generaciones");
 const { hoja } = await import("@/lib/exportar/hoja");
+const { ESPERA_DE_CLERK_MS } = await import("@/lib/exportar/listados");
 const { abrirHoja } = await import("@/lib/inventario/conteos");
 const { confirmarDevolucion, crearDevolucion } = await import("@/lib/inventario/devoluciones");
 const { confirmarTraspaso, crearTraspaso } = await import("@/lib/inventario/traspasos");
@@ -253,9 +262,9 @@ describe("solicitudes repetidas y abuso", () => {
     const original = d.libro;
     let abrir!: () => void;
     const puerta = new Promise<void>((resolve) => (abrir = resolve));
-    const espia = vi.spyOn(d, "libro").mockImplementation(async (leer, params) => {
+    const espia = vi.spyOn(d, "libro").mockImplementation(async (leer, params, señal) => {
       await puerta;
-      return original.call(d, leer, params);
+      return original.call(d, leer, params, señal);
     });
     return { espia, soltar: () => abrir() };
   }
@@ -401,7 +410,7 @@ describe("solicitudes repetidas y abuso", () => {
     como("JEFE");
     const real = generaciones.admitir.bind(generaciones);
     const plazos: AbortController[] = [];
-    const admitir = vi.spyOn(generaciones, "admitir").mockImplementation(((usuarioId: string, clave: string, generar: () => Promise<unknown>) => {
+    const admitir = vi.spyOn(generaciones, "admitir").mockImplementation(((usuarioId: string, clave: string, generar: (señal: AbortSignal) => Promise<unknown>) => {
       const a = real(usuarioId, clave, generar);
       if (a.estado === "limitada") return a;
       const plazo = new AbortController();
@@ -415,24 +424,96 @@ describe("solicitudes repetidas y abuso", () => {
       const otra = await pedir("/exportar/existencias?q=otra");
       expect([abierta.status, otra.status]).toEqual([200, 200]);
       expect((await pedir("/exportar/existencias?q=tercera")).status).toBe(429);
-      plazos[0].abort();
-      await expect(abierta.arrayBuffer()).rejects.toThrow();
+      plazos[0].abort(new DescargaVencida());
+      await expect(abierta.arrayBuffer()).rejects.toThrow("La descarga llegó a su plazo máximo.");
       expect(aviso).toHaveBeenCalledWith(expect.stringMatching(new RegExp(`^\\[exportar\\] existencias: existencias-[\\d-]+\\.xlsx cortado por plazo tras \\d+ de \\d+ bytes, usuario ${e.usuarios.JEFE.id} \\(JEFE\\)$`)));
       // El cupo que dejó el corte se puede volver a usar.
       r = retener("existencias");
       const tarde = pedir("/exportar/existencias?q=tarde");
       await vi.waitFor(() => expect(plazos).toHaveLength(3));
-      plazos[2].abort();
-      r.soltar();
+      // Responde al vencer sin esperar al libro, que sigue retenido.
+      plazos[2].abort(new DescargaVencida());
       const vencida = await tarde;
       expect(vencida.status).toBe(503);
-      expect(aviso).toHaveBeenCalledWith(expect.stringMatching(/existencias-[\d-]+\.xlsx vencido antes de enviarse, usuario /));
+      expect(await vencida.json()).toEqual({ mensaje: expect.stringMatching(/tardó demasiado/) });
+      expect(aviso).toHaveBeenCalledWith(`[exportar] existencias: vencida antes de enviarse, usuario ${e.usuarios.JEFE.id} (JEFE)`);
       await otra.arrayBuffer();
     } finally {
       r?.soltar();
       r?.espia.mockRestore();
       admitir.mockRestore();
       aviso.mockRestore();
+    }
+  });
+
+  /** Deja correr la cola de eventos hasta que se cumpla la condición; sirve con setTimeout falso. */
+  const cuando = async (condicion: () => boolean) => {
+    while (!condicion()) await new Promise<void>((listo) => setImmediate(listo));
+  };
+
+  it("el libro que no termina vence a su plazo: quienes esperan reciben 503, el trabajo recibe la señal y el cupo del proceso vuelve", async () => {
+    const d = descargaDe("existencias")!;
+    const original = d.libro;
+    const señales: AbortSignal[] = [];
+    const libro = vi.spyOn(d, "libro").mockImplementation(async (leer, params, señal) => {
+      if (!String(params.q).startsWith("atascado")) return original.call(d, leer, params, señal);
+      señales.push(señal);
+      // Atiende la señal, como la compresión y la espera a Clerk.
+      return new Promise<never>((_, rechazar) => señal.addEventListener("abort", () => rechazar(señal.reason), { once: true }));
+    });
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      // Tres usuarios, tres libros atascados: el cupo del proceso se llena.
+      const esperas: Promise<Response>[] = [];
+      for (const [i, rol] of (["JEFE", "COMPRAS", "SUPERADMIN"] as const).entries()) {
+        como(rol);
+        esperas.push(pedir(`/exportar/existencias?q=atascado${i}`));
+        await cuando(() => señales.length === i + 1);
+      }
+      expect(señales).toHaveLength(MAXIMO_GENERANDO);
+      como("JEFE");
+      const llena = await pedir("/exportar/existencias?q=libre");
+      expect(llena.status).toBe(429);
+      expect(await llena.json()).toEqual({ mensaje: expect.stringMatching(/armando otros archivos/) });
+
+      vi.advanceTimersByTime(PLAZO_GENERACION_MS);
+      expect(señales.every((s) => s.aborted)).toBe(true);
+      expect((await Promise.all(esperas)).map((r) => r.status)).toEqual([503, 503, 503]);
+      expect(aviso).toHaveBeenCalledWith(`[exportar] existencias: el libro no se terminó de armar en su plazo, usuario ${e.usuarios.JEFE.id} (JEFE)`);
+      // Los trabajos se detuvieron: un libro nuevo ya cabe.
+      const libre = await pedir("/exportar/existencias?q=libre");
+      expect(libre.status).toBe(200);
+      await libre.arrayBuffer();
+    } finally {
+      vi.useRealTimers();
+      libro.mockRestore();
+      aviso.mockRestore();
+    }
+  });
+
+  it(`si Clerk no responde, el libro de usuarios deja de esperarlo a los ${ESPERA_DE_CLERK_MS / 1000} s: 500 y el motivo en el registro`, async () => {
+    como("SUPERADMIN");
+    clerk.identidades = [];
+    clerkColgado.activo = true;
+    clerkColgado.llamadas = 0;
+    const registro = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      let respondio = false;
+      const respuesta = pedir("/exportar/usuarios").finally(() => (respondio = true));
+      await cuando(() => clerkColgado.llamadas > 0);
+      vi.advanceTimersByTime(ESPERA_DE_CLERK_MS - 1);
+      await new Promise<void>((listo) => setImmediate(listo));
+      expect(respondio).toBe(false);
+      vi.advanceTimersByTime(1);
+      expect((await respuesta).status).toBe(500);
+      expect(clerkColgado.llamadas).toBe(1);
+      expect(inspect(registro.mock.calls)).toContain(`Clerk no respondió en ${ESPERA_DE_CLERK_MS / 1000} s.`);
+    } finally {
+      vi.useRealTimers();
+      clerkColgado.activo = false;
+      registro.mockRestore();
     }
   });
 
