@@ -41,13 +41,13 @@ function parametrosDe(busqueda: URLSearchParams): Params {
 type Archivo = { contenido: Buffer; nombre: string; filas: number; ms: number };
 
 /** La lectura se acota sola (60 s); Clerk y la compresión atienden la señal del plazo. */
-async function generar(descarga: Descarga, params: Params, señal: AbortSignal): Promise<Archivo | null> {
+async function generar(descarga: Descarga, params: Params, senial: AbortSignal): Promise<Archivo | null> {
   const inicio = Date.now();
-  const libro = await descarga.libro((fn) => consultarParaDescarga(descarga.permiso, fn), params, señal);
+  const libro = await descarga.libro((fn) => consultarParaDescarga(descarga.permiso, fn), params, senial);
   if (!libro) return null;
   const ahora = new Date();
   return {
-    contenido: await libroXlsx(libro.hojas, ahora, descarga.titulo, señal),
+    contenido: await libroXlsx(libro.hojas, ahora, descarga.titulo, senial),
     nombre: `${libro.archivo ?? descarga.archivo}-${relojDeMexico(ahora).fecha}.xlsx`.replace(/[^A-Za-z0-9._-]+/g, "-"),
     filas: libro.hojas.reduce((n, h) => n + h.filas.length, 0),
     ms: Date.now() - inicio,
@@ -125,7 +125,7 @@ export async function GET(request: NextRequest, ctx: RouteContext<"/exportar/[ta
     if (exceso) return rechazo(tabla, exceso, `sesión ${identidad}`);
 
     usuario = await usuarioParaDescarga(descarga.permiso);
-    const admision = generaciones.admitir(usuario.id, claveDeGeneracion(usuario.id, tabla, params), (señal) => generar(descarga, params, señal));
+    const admision = generaciones.admitir(usuario.id, claveDeGeneracion(usuario.id, tabla, params), (senial) => generar(descarga, params, senial));
     if (admision.estado === "limitada") return rechazo(tabla, admision, quien(usuario));
     liberar = admision.liberar;
     // No espera al libro más allá del plazo de esta descarga.

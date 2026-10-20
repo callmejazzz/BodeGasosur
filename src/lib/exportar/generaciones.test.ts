@@ -160,24 +160,24 @@ describe("admitir", () => {
 
 describe("plazo del libro compartido", () => {
   /** Se detiene al abortarse su señal, como la compresión y la espera a Clerk. */
-  const atento = (señal: AbortSignal) => new Promise<never>((_, rechazar) => señal.addEventListener("abort", () => rechazar(señal.reason), { once: true }));
+  const atento = (senial: AbortSignal) => new Promise<never>((_, rechazar) => senial.addEventListener("abort", () => rechazar(senial.reason), { once: true }));
 
   it("al vencer, quien lo espera se entera, el trabajo recibe la señal y su lugar en el proceso vuelve al detenerse", async () => {
     vi.useFakeTimers();
     const gen = crearGeneraciones();
-    const señales: AbortSignal[] = [];
-    const trabajo = (señal: AbortSignal) => {
-      señales.push(señal);
-      return atento(señal);
+    const seniales: AbortSignal[] = [];
+    const trabajo = (senial: AbortSignal) => {
+      seniales.push(senial);
+      return atento(senial);
     };
     const esperas = Array.from({ length: MAXIMO_GENERANDO }, (_, i) => admitida(gen.admitir(`u${i}`, `k${i}`, trabajo)));
     const repetida = admitida(gen.admitir("u0", "k0", trabajo));
     expect(repetida.estado).toBe("compartida");
     expect(gen.admitir("otro", "k", trabajo)).toMatchObject({ motivo: "servidor" });
     await vi.advanceTimersByTimeAsync(PLAZO_GENERACION_MS - 1);
-    expect(señales.some((s) => s.aborted)).toBe(false);
+    expect(seniales.some((s) => s.aborted)).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
-    expect(señales.map((s) => s.aborted)).toEqual(Array(MAXIMO_GENERANDO).fill(true));
+    expect(seniales.map((s) => s.aborted)).toEqual(Array(MAXIMO_GENERANDO).fill(true));
     for (const a of [...esperas, repetida]) {
       await expect(a.resultado).rejects.toBeInstanceOf(GeneracionVencida);
       a.liberar();

@@ -86,7 +86,7 @@ export function crearGeneraciones(ahora: () => number = Date.now) {
    * Arma el libro con su propio plazo. Quien lo espera se entera al vencer; el
    * lugar en el cupo del proceso vuelve cuando el trabajo termina de verdad.
    */
-  const generacion = <T>(usuarioId: string, generar: (señal: AbortSignal) => Promise<T>): Promise<T> => {
+  const generacion = <T>(usuarioId: string, generar: (senial: AbortSignal) => Promise<T>): Promise<T> => {
     const ficha = Symbol();
     vivos.add(ficha);
     const control = new AbortController();
@@ -130,7 +130,7 @@ export function crearGeneraciones(ahora: () => number = Date.now) {
      * Revisa los límites y comparte el libro si el mismo pedido ya se arma.
      * Sin await entre revisar y anotar: dos peticiones no se cuelan.
      */
-    admitir<T>(usuarioId: string, clave: string, generar: (señal: AbortSignal) => Promise<T>): Admision<T> {
+    admitir<T>(usuarioId: string, clave: string, generar: (senial: AbortSignal) => Promise<T>): Admision<T> {
       const t = ahora();
       const suyas = activas.get(usuarioId) ?? new Set<symbol>();
       if (suyas.size >= MAXIMO_ACTIVAS) return limitada(usuarioId, "activas", ESPERA_S, t);

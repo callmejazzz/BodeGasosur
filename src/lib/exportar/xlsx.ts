@@ -168,8 +168,8 @@ function nombresDePestana(hojas: Hoja<unknown>[]): string[] {
 }
 
 /** El libro completo: se arma por partes y se entrega solo si sale entero. Al abortarse la señal, se detiene. */
-export async function libroXlsx(hojas: Hoja<unknown>[], generadoEn: Date, titulo: string, señal: AbortSignal = AbortSignal.any([])): Promise<Buffer> {
-  señal.throwIfAborted();
+export async function libroXlsx(hojas: Hoja<unknown>[], generadoEn: Date, titulo: string, senial: AbortSignal = AbortSignal.any([])): Promise<Buffer> {
+  senial.throwIfAborted();
   if (hojas.length === 0) throw new Error("Un libro necesita al menos una hoja.");
   const nombres = nombresDePestana(hojas);
   const definidos = hojas.flatMap((h, i) => {
@@ -231,7 +231,7 @@ ${nombres.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.ope
   ];
 
   const libro = zipEnMemoria();
-  for (const [nombre, contenido] of archivos) await libro.agregar(nombre, contenido, señal);
+  for (const [nombre, contenido] of archivos) await libro.agregar(nombre, contenido, senial);
   return libro.cerrar();
 }
 
@@ -251,7 +251,7 @@ function zipEnMemoria() {
   const [hora, fecha] = [0, 0x21];
 
   return {
-    async agregar(nombre: string, contenido: Iterable<string>, señal: AbortSignal) {
+    async agregar(nombre: string, contenido: Iterable<string>, senial: AbortSignal) {
       let crc = 0;
       let largo = 0;
       const comprimido: Buffer[] = [];
@@ -263,7 +263,7 @@ function zipEnMemoria() {
           yield datos;
           await cederTurno();
           // Antes de armar la parte siguiente.
-          señal.throwIfAborted();
+          senial.throwIfAborted();
         }
       }
       await pipeline(
@@ -272,7 +272,7 @@ function zipEnMemoria() {
         async (salida: AsyncIterable<Buffer>) => {
           for await (const trozo of salida) comprimido.push(trozo);
         },
-        { signal: señal },
+        { signal: senial },
       );
       const tamano = comprimido.reduce((n, b) => n + b.length, 0);
       const n = Buffer.from(nombre, "utf8");

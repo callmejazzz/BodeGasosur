@@ -42,14 +42,14 @@ function aIdentidad(u: UsuarioDeClerk): IdentidadClerk {
  * Su SDK no acepta señal: al abortarse se deja de esperar y la petición se
  * cierra sola después.
  */
-export async function listarIdentidades(pagina: number, tamano = POR_PAGINA, señal?: AbortSignal) {
+export async function listarIdentidades(pagina: number, tamano = POR_PAGINA, senial?: AbortSignal) {
   const clerk = await clerkClient();
   const lista = clerk.users.getUserList({
     limit: tamano,
     offset: (pagina - 1) * tamano,
     orderBy: "-created_at",
   });
-  const { data, totalCount } = await (señal ? hastaElPlazo(lista, señal) : lista);
+  const { data, totalCount } = await (senial ? hastaElPlazo(lista, senial) : lista);
 
   return { identidades: data.map(aIdentidad), total: totalCount };
 }

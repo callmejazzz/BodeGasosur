@@ -126,7 +126,7 @@ describe("libro xlsx", () => {
   it("al abortarse la señal deja de armar y comprimir el libro entre partes", async () => {
     let llamadas = 0;
     const columnas: Columna<number>[] = [{ titulo: "n", formato: "entero", valor: (n) => (llamadas++, n) }];
-    const libroDe = (señal: AbortSignal) => libroXlsx([hoja({ nombre: "x", titulo: "x", filtros: [], columnas, filas: Array.from({ length: 20_000 }, (_, i) => i) })], generado, "x", señal);
+    const libroDe = (senial: AbortSignal) => libroXlsx([hoja({ nombre: "x", titulo: "x", filtros: [], columnas, filas: Array.from({ length: 20_000 }, (_, i) => i) })], generado, "x", senial);
     const control = new AbortController();
     const promesa = libroDe(control.signal);
     while (llamadas === 0) await new Promise<void>((listo) => setImmediate(listo));

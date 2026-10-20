@@ -292,14 +292,14 @@ export const hojaSinAcceso = (identidades: IdentidadClerk[]) =>
 export const ESPERA_DE_CLERK_MS = 15_000;
 
 /** Clerk, fuera de la transacción: todas sus páginas, sin quienes ya tienen acceso. */
-export async function identidadesSinAcceso(usuarios: UsuarioAdministrable[], señal: AbortSignal): Promise<IdentidadClerk[]> {
+export async function identidadesSinAcceso(usuarios: UsuarioAdministrable[], senial: AbortSignal): Promise<IdentidadClerk[]> {
   const conAcceso = new Set(usuarios.map((u) => u.clerkUserId));
   const tamano = 500;
   const pagina = async (n: number) => {
     const tiempo = new AbortController();
     const reloj = setTimeout(() => tiempo.abort(new Error(`Clerk no respondió en ${ESPERA_DE_CLERK_MS / 1000} s.`)), ESPERA_DE_CLERK_MS);
     try {
-      return await listarIdentidades(n, tamano, AbortSignal.any([señal, tiempo.signal]));
+      return await listarIdentidades(n, tamano, AbortSignal.any([senial, tiempo.signal]));
     } finally {
       clearTimeout(reloj);
     }

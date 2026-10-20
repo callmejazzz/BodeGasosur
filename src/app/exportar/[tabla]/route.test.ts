@@ -262,9 +262,9 @@ describe("solicitudes repetidas y abuso", () => {
     const original = d.libro;
     let abrir!: () => void;
     const puerta = new Promise<void>((resolve) => (abrir = resolve));
-    const espia = vi.spyOn(d, "libro").mockImplementation(async (leer, params, señal) => {
+    const espia = vi.spyOn(d, "libro").mockImplementation(async (leer, params, senial) => {
       await puerta;
-      return original.call(d, leer, params, señal);
+      return original.call(d, leer, params, senial);
     });
     return { espia, soltar: () => abrir() };
   }
@@ -410,7 +410,7 @@ describe("solicitudes repetidas y abuso", () => {
     como("JEFE");
     const real = generaciones.admitir.bind(generaciones);
     const plazos: AbortController[] = [];
-    const admitir = vi.spyOn(generaciones, "admitir").mockImplementation(((usuarioId: string, clave: string, generar: (señal: AbortSignal) => Promise<unknown>) => {
+    const admitir = vi.spyOn(generaciones, "admitir").mockImplementation(((usuarioId: string, clave: string, generar: (senial: AbortSignal) => Promise<unknown>) => {
       const a = real(usuarioId, clave, generar);
       if (a.estado === "limitada") return a;
       const plazo = new AbortController();
@@ -454,12 +454,12 @@ describe("solicitudes repetidas y abuso", () => {
   it("el libro que no termina vence a su plazo: quienes esperan reciben 503, el trabajo recibe la señal y el cupo del proceso vuelve", async () => {
     const d = descargaDe("existencias")!;
     const original = d.libro;
-    const señales: AbortSignal[] = [];
-    const libro = vi.spyOn(d, "libro").mockImplementation(async (leer, params, señal) => {
-      if (!String(params.q).startsWith("atascado")) return original.call(d, leer, params, señal);
-      señales.push(señal);
+    const seniales: AbortSignal[] = [];
+    const libro = vi.spyOn(d, "libro").mockImplementation(async (leer, params, senial) => {
+      if (!String(params.q).startsWith("atascado")) return original.call(d, leer, params, senial);
+      seniales.push(senial);
       // Atiende la señal, como la compresión y la espera a Clerk.
-      return new Promise<never>((_, rechazar) => señal.addEventListener("abort", () => rechazar(señal.reason), { once: true }));
+      return new Promise<never>((_, rechazar) => senial.addEventListener("abort", () => rechazar(senial.reason), { once: true }));
     });
     const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
@@ -469,16 +469,16 @@ describe("solicitudes repetidas y abuso", () => {
       for (const [i, rol] of (["JEFE", "COMPRAS", "SUPERADMIN"] as const).entries()) {
         como(rol);
         esperas.push(pedir(`/exportar/existencias?q=atascado${i}`));
-        await cuando(() => señales.length === i + 1);
+        await cuando(() => seniales.length === i + 1);
       }
-      expect(señales).toHaveLength(MAXIMO_GENERANDO);
+      expect(seniales).toHaveLength(MAXIMO_GENERANDO);
       como("JEFE");
       const llena = await pedir("/exportar/existencias?q=libre");
       expect(llena.status).toBe(429);
       expect(await llena.json()).toEqual({ mensaje: expect.stringMatching(/armando otros archivos/) });
 
       vi.advanceTimersByTime(PLAZO_GENERACION_MS);
-      expect(señales.every((s) => s.aborted)).toBe(true);
+      expect(seniales.every((s) => s.aborted)).toBe(true);
       expect((await Promise.all(esperas)).map((r) => r.status)).toEqual([503, 503, 503]);
       expect(aviso).toHaveBeenCalledWith(`[exportar] existencias: el libro no se terminó de armar en su plazo, usuario ${e.usuarios.JEFE.id} (JEFE)`);
       // Los trabajos se detuvieron: un libro nuevo ya cabe.

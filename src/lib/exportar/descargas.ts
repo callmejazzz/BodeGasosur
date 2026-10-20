@@ -30,7 +30,7 @@ export type Descarga = {
   archivo: string;
   titulo: string;
   /** null: lo pedido no existe. La señal se aborta al vencer el plazo del libro. */
-  libro: (leer: Lector, params: Params, señal: AbortSignal) => Promise<Libro | null>;
+  libro: (leer: Lector, params: Params, senial: AbortSignal) => Promise<Libro | null>;
 };
 
 const reporte = (archivo: string, titulo: string, hojas: (db: Db, params: Params) => Promise<Hoja<unknown>[] | null>): Descarga => ({
@@ -92,10 +92,10 @@ const DESCARGAS: Record<string, Descarga> = {
     permiso: "usuarios:administrar",
     archivo: "usuarios",
     titulo: "Usuarios",
-    libro: async (leer, _params, señal) => {
+    libro: async (leer, _params, senial) => {
       const usuarios = await leer((db) => listarUsuarios(db));
       // Clerk ya fuera de la transacción: es una petición HTTP.
-      return { hojas: [hojaConAcceso(usuarios), hojaSinAcceso(await identidadesSinAcceso(usuarios, señal))] };
+      return { hojas: [hojaConAcceso(usuarios), hojaSinAcceso(await identidadesSinAcceso(usuarios, senial))] };
     },
   },
 };
