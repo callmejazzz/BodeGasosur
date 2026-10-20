@@ -9,6 +9,7 @@
 
 import { NextRequest } from "next/server";
 import { randomUUID } from "node:crypto";
+import { setTimeout as esperar } from "node:timers/promises";
 import { inspect } from "node:util";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it, vi } from "vitest";
 import { crearCliente } from "../../../../prisma/comun";
@@ -57,7 +58,7 @@ const { GET } = await import("./route");
 const { listarEntradas } = await import("@/lib/entradas/repo");
 const { leerFiltros } = await import("@/lib/entradas/filtros");
 const { CLAVES_DE_DESCARGA, descargaDe } = await import("@/lib/exportar/descargas");
-const { generaciones, GENERACIONES_POR_VENTANA, PETICIONES_POR_VENTANA } = await import("@/lib/exportar/generaciones");
+const { generaciones, GENERACIONES_POR_VENTANA, MAXIMO_ACTIVAS, PETICIONES_POR_VENTANA, VIDA_MAXIMA_MS } = await import("@/lib/exportar/generaciones");
 const { hoja } = await import("@/lib/exportar/hoja");
 const { abrirHoja } = await import("@/lib/inventario/conteos");
 const { confirmarDevolucion, crearDevolucion } = await import("@/lib/inventario/devoluciones");
@@ -434,6 +435,72 @@ describe("solicitudes repetidas y abuso", () => {
       aviso.mockRestore();
     }
   });
+
+  // Optativa: tarda dos minutos reales. Con --reporter=verbose se ven sus mensajes:
+  // PROBAR_PLAZO_REAL=1 npm test -- route.test.ts -t 'plazo real' --reporter=verbose
+  it.runIf(process.env.PROBAR_PLAZO_REAL === "1")("plazo real: corta una descarga aún abierta a los dos minutos", async () => {
+    como("JEFE");
+    const d = descargaDe("existencias")!;
+    const filas = Array.from({ length: 16_000 }, (_, i) => ({ valor: `${i}-${randomUUID()}` }));
+    const libro = vi.spyOn(d, "libro").mockResolvedValue({
+      hojas: [hoja({ nombre: "Prueba", titulo: "Prueba de plazo", filtros: [], columnas: [{ titulo: "Dato", formato: "texto", valor: (f: { valor: string }) => f.valor }], filas })],
+    });
+    const admitirOriginal = generaciones.admitir.bind(generaciones);
+    let admitidoEn = 0;
+    const admitir = vi.spyOn(generaciones, "admitir").mockImplementation(((...args: Parameters<typeof generaciones.admitir>) => {
+      const resultado = admitirOriginal(...args);
+      if (resultado.estado !== "limitada" && admitidoEn === 0) admitidoEn = performance.now();
+      return resultado;
+    }) as typeof generaciones.admitir);
+    const aviso = vi.spyOn(console, "warn");
+    let lector: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    try {
+      const respuesta = await pedir("/exportar/existencias?q=plazo-real");
+      expect(respuesta.status).toBe(200);
+      const bytes = Number(respuesta.headers.get("Content-Length"));
+      expect(bytes).toBeGreaterThan(4 * 64 * 1024);
+      lector = respuesta.body!.getReader();
+      const transcurrido = () => performance.now() - admitidoEn;
+      const cierre = lector.closed.then(
+        () => ({ fin: "completo", ms: transcurrido() }),
+        () => ({ fin: "vencido", ms: transcurrido() }),
+      );
+      const hasta = async (ms: number) => esperar(Math.max(0, ms - transcurrido()));
+
+      expect((await lector.read()).value?.length).toBeGreaterThan(0);
+      await hasta(50_000);
+      expect((await lector.read()).value?.length).toBeGreaterThan(0);
+      await hasta(100_000);
+      expect((await lector.read()).value?.length).toBeGreaterThan(0);
+      await hasta(115_000);
+      expect(await Promise.race([cierre, esperar(100).then(() => "abierto")])).toBe("abierto");
+      console.info("[plazo real] 115 s: el libro sigue abierto después de recibir tres trozos.");
+
+      await hasta(122_000);
+      const corte = await cierre;
+      expect(corte.fin).toBe("vencido");
+      // El plazo corre desde la admisión; el margen cubre la demora del temporizador.
+      expect(corte.ms).toBeGreaterThanOrEqual(VIDA_MAXIMA_MS - 50);
+      expect(corte.ms).toBeLessThan(VIDA_MAXIMA_MS + 1_000);
+      await expect(lector.read()).rejects.toThrow("La descarga llegó a su plazo máximo.");
+      // Tomó tres trozos de 64 KiB; el cuarto quedó en cola sin leerse.
+      const nombre = /filename="([^"]+)"/.exec(respuesta.headers.get("Content-Disposition") ?? "")?.[1];
+      expect(aviso).toHaveBeenCalledWith(`[exportar] existencias: ${nombre} cortado por plazo tras ${3 * 64 * 1024} de ${bytes} bytes, usuario ${e.usuarios.JEFE.id} (JEFE)`);
+      console.info(`[plazo real] ${(corte.ms / 1000).toFixed(1)} s: la transferencia se cortó por plazo.`);
+
+      // El cupo volvió: caben dos descargas nuevas y la siguiente se rechaza.
+      const nuevas: Response[] = [];
+      for (let i = 0; i < MAXIMO_ACTIVAS; i++) nuevas.push(await pedir(`/exportar/existencias?q=plazo-real-${i}`));
+      expect(nuevas.map((r) => r.status)).toEqual(Array(MAXIMO_ACTIVAS).fill(200));
+      expect((await pedir("/exportar/existencias?q=plazo-real-otra")).status).toBe(429);
+      await Promise.all(nuevas.map((r) => r.body!.cancel()));
+    } finally {
+      await lector?.cancel().catch(() => {});
+      libro.mockRestore();
+      admitir.mockRestore();
+      aviso.mockRestore();
+    }
+  }, 130_000);
 
   it("un valor que no se puede escribir se registra con su formato, sin el valor", async () => {
     como("JEFE");
