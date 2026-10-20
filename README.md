@@ -6,7 +6,7 @@ Controla la entrada y salida de material entre bodegas y estaciones, registrando
 
 **Última versión etiquetada: `v0.8.0`** - ver [CHANGELOG.md](CHANGELOG.md).
 
-**Estado:** fases 0 a 8 construidas en desarrollo. La fase 8 (cinco reportes, kardex y exportación a Excel de toda tabla) se publica como `v0.8.0`. Antes, la fase 7 (traspasos, devoluciones, préstamos, conteo físico y reversas) se publicó como `v0.7.0` (commit `2ac6ca3`), y `v0.7.1` (commit `22c1146`) corrige lo que encontró su revisión. `main` incluye además la corrección del teclado del selector de salidas (`afcea45`), sin etiqueta nueva por decisión del proyecto. Ver [entregables por fase](docs/entregables-fases/README.md).
+**Estado:** fases 0 a 8 construidas en desarrollo. La fase 8 (cinco reportes, kardex y exportación a Excel de toda tabla) se publicó como `v0.8.0` (commit `938aea3`). Antes, la fase 7 (traspasos, devoluciones, préstamos, conteo físico y reversas) se publicó como `v0.7.0` (commit `2ac6ca3`), y `v0.7.1` (commit `22c1146`) corrige lo que encontró su revisión. `main` incluye además la corrección del teclado del selector de salidas (`afcea45`), sin etiqueta nueva por decisión del proyecto. Ver [entregables por fase](docs/entregables-fases/README.md).
 
 **Entorno:** local mientras dure el desarrollo. Producción: la aplicación en Sevalla y la
 base en Supabase, con Sevalla a prueba una semana — ver

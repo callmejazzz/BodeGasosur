@@ -106,8 +106,8 @@ El ajuste posterior del teclado del selector está en `afcea45`, sin nueva etiqu
 decisión del proyecto: `main` va por delante de la última versión etiquetada.
 
 **Fase 8:** se construyó en la rama `feat-reportes`, con un PR por entrega (#7 a #13) que
-ya traía `package.json` en `0.8.0` y su entrada del CHANGELOG. Se publica como `v0.8.0` al
-mezclar `feat-reportes` a `main` en un solo commit, que es el que lleva la etiqueta.
+ya traía `package.json` en `0.8.0` y su entrada del CHANGELOG. Se publicó como `v0.8.0` al
+mezclar `feat-reportes` a `main` en un solo commit, `938aea3`, que lleva la etiqueta.
 
 Los mensajes de commit siguen siendo prosa en español que describe decisiones. **No se
 adopta Conventional Commits:** con este desarrollo por fases y un desarrollador, el

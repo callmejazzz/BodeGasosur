@@ -4,7 +4,7 @@
 |---|---|
 | Estado | Construida y publicada |
 | Versión | `v0.8.0` |
-| Commits | PR #7 a #13 en `feat-reportes`, mezclados a `main` en el commit de `v0.8.0` |
+| Commits | `938aea3` (`v0.8.0`), que reúne los PR #7 a #13 de `feat-reportes` |
 | Contrato | [Fase 8: Reportes y exportación](../contratos-otros/06-fase-8-reportes.md) |
 
 ## Construido

@@ -1,6 +1,6 @@
 # BodeGasosur — contrato de la fase 8: Reportes y exportación
 
-**Estado:** fase 8 construida, documentada y publicada en `v0.8.0`. Los cinco reportes, la exportación a Excel de todas las tablas de consulta y sus pruebas contra PostgreSQL real están implementados; §6 registra las decisiones que este contrato dejaba abiertas. Complementa el [expediente de la fase](../entregables-fases/08-reportes.md), el [modelo de datos](../02-modelo-de-datos.md) y los contratos de [Entradas](02-fase-5-entradas.md), [Salidas](04-fase-6-salidas.md) y [movimientos de la fase 7](05-fase-7-traspasos-devoluciones-conteo.md).
+**Estado:** fase 8 construida, documentada y publicada en `v0.8.0` (`938aea3`). Los cinco reportes, la exportación a Excel de todas las tablas de consulta y sus pruebas contra PostgreSQL real están implementados; §6 registra las decisiones que este contrato dejaba abiertas. Complementa el [expediente de la fase](../entregables-fases/08-reportes.md), el [modelo de datos](../02-modelo-de-datos.md) y los contratos de [Entradas](02-fase-5-entradas.md), [Salidas](04-fase-6-salidas.md) y [movimientos de la fase 7](05-fase-7-traspasos-devoluciones-conteo.md).
 
 ## 1. Resultado y límites
 
