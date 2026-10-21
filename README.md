@@ -6,11 +6,10 @@ Controla la entrada y salida de material entre bodegas y estaciones, registrando
 
 **Última versión etiquetada: `v0.8.0`** - ver [CHANGELOG.md](CHANGELOG.md).
 
-**Estado:** fases 0 a 8 construidas en desarrollo. La fase 8 (cinco reportes, kardex y exportación a Excel de toda tabla) se publica como `v0.8.0`. Antes, la fase 7 (traspasos, devoluciones, préstamos, conteo físico y reversas) se publicó como `v0.7.0` (commit `2ac6ca3`), y `v0.7.1` (commit `22c1146`) corrige lo que encontró su revisión. `main` incluye además la corrección del teclado del selector de salidas (`afcea45`), sin etiqueta nueva por decisión del proyecto. Ver [entregables por fase](docs/entregables-fases/README.md).
+**Estado:** fases 0 a 8 construidas en desarrollo. La fase 8 (cinco reportes, kardex y exportación a Excel de toda tabla) se publica como `v0.8.0` (commit `58b3f75`). Antes, la fase 7 (traspasos, devoluciones, préstamos, conteo físico y reversas) se publicó como `v0.7.0` (commit `2ac6ca3`), y `v0.7.1` (commit `22c1146`) corrige lo que encontró su revisión. `main` incluye además la corrección del teclado del selector de salidas (`afcea45`), sin etiqueta nueva por decisión del proyecto. Ver [entregables por fase](docs/entregables-fases/README.md).
 
 **Entorno:** local mientras dure el desarrollo. Producción: la aplicación en Sevalla y la
-base en Supabase, con Sevalla a prueba una semana — ver
-[versionado y despliegue](docs/05-versionado-y-despliegue.md) §8.
+base en Supabase, con Sevalla a prueba una semana — ver [versionado y despliegue](docs/05-versionado-y-despliegue.md) §8.
 
 ## Arranque
 
@@ -24,11 +23,7 @@ npm run db:reset
 npm run dev
 ```
 
-Cada desarrollador tiene que usar su propio `COMPOSE_PROJECT_NAME`, `POSTGRES_PORT` y
-`POSTGRES_DB` en `.env`; las dos URLs de base deben referirse a ese mismo nombre y puerto.
-Así Docker crea un contenedor y volumen independientes y `db:reset` solo borra esa base
-local. La guía completa, incluida la forma de entrar como Superadmin en un entorno de
-desarrollo aislado, está en [colaboración de desarrollo](docs/contratos-otros/03-colaboracion-desarrollo.md).
+Cada desarrollador tiene que usar su propio `COMPOSE_PROJECT_NAME`, `POSTGRES_PORT` y `POSTGRES_DB` en `.env`; las dos URLs de base deben referirse a ese mismo nombre y puerto. Así Docker crea un contenedor y volumen independientes y `db:reset` solo borra esa base local. La guía completa, incluida la forma de entrar como Superadmin en un entorno de desarrollo aislado, está en [colaboración de desarrollo](docs/contratos-otros/03-colaboracion-desarrollo.md).
 
 La aplicación queda en <http://localhost:3000>.
 
