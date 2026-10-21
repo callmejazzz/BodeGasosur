@@ -51,7 +51,7 @@ export type FiltroMovimientos = { estatus: EstatusMovimiento | "todos"; busqueda
  * La reversa de un traspaso no es una fila: vive en el historial del
  * revertido, y buscar su folio encuentra a ese traspaso.
  */
-export async function listarMovimientos(db: Db, tipo: TipoInventario, filtro: FiltroMovimientos, pedida = 1, tamano = POR_PAGINA) {
+export async function listarMovimientos(db: Db, tipo: TipoInventario, filtro: FiltroMovimientos, pedida = 1) {
   const sinReversas = tipo === "TRASPASO";
   const filtros = sinReversas ? [sql`m."cancelaAId" IS NULL`] : [];
   if (filtro.estatus !== "todos") filtros.push(sql`m.estatus = ${filtro.estatus}::"EstatusMovimiento"`);
@@ -68,7 +68,6 @@ export async function listarMovimientos(db: Db, tipo: TipoInventario, filtro: Fi
     claves: sinReversas ? [sql`m.folio`, sql`r.folio`, sql`o.clave`, sql`d.clave`, sql`s.numero`] : [sql`m.folio`, sql`o.clave`, sql`d.clave`, sql`s.numero`],
     textos: [sql`o.nombre`, sql`d.nombre`, sql`s.alias`, sql`m.motivo`, sql`m.observaciones`],
     pagina: pedida,
-    tamano,
   });
   return { filas: enOrden(ids, await db.movimiento.findMany({ where: { id: { in: ids } }, select: RESUMEN })), pagina };
 }
@@ -313,7 +312,7 @@ export type Prestamo = {
  * mientras falte cualquier pieza de cualquier artículo. El más antiguo
  * primero: es el que lleva más tiempo fuera.
  */
-export async function listarPrestamos(db: Db, estado: EstadoPrestamo, pedida = 1, tamano = POR_PAGINA): Promise<{ filas: Prestamo[]; pagina: Pagina }> {
+export async function listarPrestamos(db: Db, estado: EstadoPrestamo, pedida = 1): Promise<{ filas: Prestamo[]; pagina: Pagina }> {
   return paginaDe<Prestamo>(
     db,
     sql`
@@ -332,7 +331,6 @@ export async function listarPrestamos(db: Db, estado: EstadoPrestamo, pedida = 1
       HAVING ${estado} = 'todos' OR (${estado} = 'abiertos') = bool_or(p.cantidad > x.devuelto)`,
     sql`"entregadoEn", id`,
     pedida,
-    tamano,
   );
 }
 
@@ -380,7 +378,7 @@ const RESUMEN_HOJA = {
 export type HojaResumen = Prisma.HojaConteoGetPayload<{ select: typeof RESUMEN_HOJA }>;
 
 /** La más reciente arriba. Las fechas son días de México sobre el instante en que se abrió. */
-export async function listarHojas(db: Db, filtro: { estatus: EstatusConteo | "todos"; desde?: string; hasta?: string }, pedida = 1, tamano = POR_PAGINA) {
+export async function listarHojas(db: Db, filtro: { estatus: EstatusConteo | "todos"; desde?: string; hasta?: string }, pedida = 1) {
   const where: Prisma.HojaConteoWhereInput = {
     estatus: filtro.estatus === "todos" ? undefined : filtro.estatus,
     createdAt:
@@ -391,13 +389,13 @@ export async function listarHojas(db: Db, filtro: { estatus: EstatusConteo | "to
           }
         : undefined,
   };
-  const pagina = acotarPagina(pedida, await db.hojaConteo.count({ where }), tamano);
+  const pagina = acotarPagina(pedida, await db.hojaConteo.count({ where }));
   const filas = await db.hojaConteo.findMany({
     where,
     select: RESUMEN_HOJA,
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    skip: saltoDe(pagina, tamano),
-    take: tamano,
+    skip: saltoDe(pagina),
+    take: POR_PAGINA,
   });
   return { filas, pagina };
 }

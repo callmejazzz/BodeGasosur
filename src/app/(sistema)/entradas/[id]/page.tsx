@@ -6,7 +6,6 @@ import { RevertirMovimiento } from "@/components/inventario/revertir";
 import { AccionesBorrador } from "@/components/entradas/acciones-borrador";
 import { EncabezadoEntrada, EntradasRelacionadas, PartidasEntrada } from "@/components/entradas/detalle-entrada";
 import { FormularioEntrada } from "@/components/entradas/formulario-entrada";
-import { DescargarExcel } from "@/components/ui/descargar-excel";
 import { Paginacion } from "@/components/ui/paginacion";
 import { Card, CardHeader, EncabezadoPagina } from "@/components/ui/superficies";
 import { consultar } from "@/lib/db";
@@ -80,8 +79,6 @@ export default async function PaginaEntrada({ params, searchParams }: PageProps<
     <>
       <EncabezadoPagina
         titulo={titulo}
-        // La partida en edición es una captura, no una tabla de consulta.
-        acciones={!opciones && <DescargarExcel href={`/exportar/entrada?id=${entrada.id}`} />}
         descripcion={
           entrada.estatus === "BORRADOR"
             ? "Sin folio y sin efecto en existencias hasta confirmar la recepción."

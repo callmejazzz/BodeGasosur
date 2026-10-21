@@ -105,10 +105,6 @@ publicado. Las correcciones de la revisión se publicaron como `v0.7.1` en `22c1
 El ajuste posterior del teclado del selector está en `afcea45`, sin nueva etiqueta por
 decisión del proyecto: `main` va por delante de la última versión etiquetada.
 
-**Fase 8:** se construyó en la rama `feat-reportes`, con un PR por entrega (#7 a #13) que
-ya traía `package.json` en `0.8.0` y su entrada del CHANGELOG. Se publica como `v0.8.0` al
-mezclar `feat-reportes` a `main` en un solo commit, que es el que lleva la etiqueta.
-
 Los mensajes de commit siguen siendo prosa en español que describe decisiones. **No se
 adopta Conventional Commits:** con este desarrollo por fases y un desarrollador, el
 changelog a mano sale mejor escrito que uno generado, y los mensajes actuales documentan
@@ -193,12 +189,6 @@ en su rol —la base enseña la hora de México—, así que los scripts que esc
 - **Network Restrictions**: la IP de salida de Sevalla y, mientras dure la operación, la de
   quien migra. Las IPs de salida de Sevalla son compartidas por centro de datos: la lista
   reduce quién puede intentar conectarse, pero la defensa es la credencial.
-- **Una contraseña distinta para cada usuario**, larga, aleatoria y ASCII imprimible. La del
-  dueño se cambia en *Project Settings → Database*. La de la aplicación se cambia en
-  `DATABASE_URL` y se aplica con `DOTENV_CONFIG_PATH=.env.supabase npm run db:usuario-app`,
-  desde una terminal sin las variables del `.env` local; después va la misma URL en
-  Sevalla. Supabase escribe cada DDL en su bitácora (`log_statement = ddl`), así que el
-  script manda el verificador SCRAM, nunca la contraseña.
 - **La versión de PostgreSQL.** Supabase está en 17 y `docker-compose.yml` en 16. La suite
   pasa en 17, también con un dueño sin superusuario como el de Supabase, salvo las doce
   pruebas que fabrican inventario dañado con `session_replication_role`, que exige
@@ -231,8 +221,7 @@ en su rol —la base enseña la hora de México—, así que los scripts que esc
   producción. Si la heredan, cualquier rama escribiría en el libro real, y eso no se
   limpia después ([01](01-arquitectura.md) §3.1).
 - **Una instancia.** Si se escala, `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` tiene que ser la
-  misma en todas, como variable de build, y los límites de descargas en Excel —que viven
-  en memoria— se contarían por instancia.
+  misma en todas, como variable de build.
 - **El webhook de Clerk** apunta a `https://<dominio>/api/webhooks/clerk`, con la instancia
   de producción de Clerk.
 

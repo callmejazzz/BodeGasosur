@@ -1,8 +1,7 @@
 import "server-only";
 import type { Prisma } from "@prisma/client";
 import { normalizarRfc } from "@/lib/rfc";
-import { textoBuscable } from "@/lib/utils";
-import type { CatalogoDef, FuenteOpciones, ValoresCatalogo } from "./definiciones";
+import type { FuenteOpciones, ValoresCatalogo } from "./definiciones";
 
 /**
  * Acceso a datos de los catálogos.
@@ -75,13 +74,6 @@ export function leerRuta(registro: unknown, ruta: string): unknown {
     }
     return undefined;
   }, registro);
-}
-
-/** Lo que la búsqueda de la lista encuentra, sin acentos ni mayúsculas, en el orden de `listar`. */
-export function filtrarCatalogo<R extends RegistroCatalogo>(registros: R[], def: CatalogoDef, busqueda: string): R[] {
-  const buscado = textoBuscable(busqueda.trim());
-  if (!buscado) return registros;
-  return registros.filter((r) => def.camposBusqueda.some((campo) => textoBuscable(String(leerRuta(r, campo) ?? "")).includes(buscado)));
 }
 
 export const REPOS: Record<string, RepoCatalogo> = {

@@ -9,9 +9,9 @@ import packageJson from "../../package.json";
 const { version } = packageJson;
 
 /** Lo que el layout decidió en el servidor: la matriz no viaja al cliente. */
-export type Accesos = { salidas: boolean; traspasos: boolean; devoluciones: boolean; prestamos: boolean; ajustes: boolean; reportes: boolean; usuarios: boolean };
+export type Accesos = { salidas: boolean; traspasos: boolean; devoluciones: boolean; prestamos: boolean; ajustes: boolean; usuarios: boolean };
 
-type Enlace = { href: string; etiqueta: string; acceso?: keyof Accesos };
+type Enlace = { href: string; etiqueta: string; proximamente?: boolean; acceso?: keyof Accesos };
 
 const ADMINISTRACION: Enlace[] = [{ href: "/usuarios", etiqueta: "Usuarios", acceso: "usuarios" }];
 
@@ -24,14 +24,9 @@ const OPERACION: Enlace[] = [
   { href: "/prestamos", etiqueta: "Préstamos", acceso: "prestamos" },
   { href: "/conteos", etiqueta: "Conteo físico", acceso: "ajustes" },
   { href: "/ajustes", etiqueta: "Ajustes", acceso: "ajustes" },
-];
-
-const REPORTES: Enlace[] = [
-  { href: "/reportes/semanal", etiqueta: "Semanal", acceso: "reportes" },
-  { href: "/reportes/existencias", etiqueta: "Existencias", acceso: "reportes" },
-  { href: "/reportes/kardex", etiqueta: "Kardex", acceso: "reportes" },
-  { href: "/reportes/gasto", etiqueta: "Gasto por estación", acceso: "reportes" },
-  { href: "/reportes/frecuencia", etiqueta: "Frecuencia de consumo", acceso: "reportes" },
+  { href: "/movimientos", etiqueta: "Movimientos", proximamente: true },
+  { href: "/existencias", etiqueta: "Existencias", proximamente: true },
+  { href: "/kardex", etiqueta: "Kardex", proximamente: true },
 ];
 
 function Seccion({ titulo, children }: { titulo: string; children: React.ReactNode }) {
@@ -46,6 +41,18 @@ function Seccion({ titulo, children }: { titulo: string; children: React.ReactNo
 }
 
 function Item({ enlace, activo }: { enlace: Enlace; activo: boolean }) {
+  if (enlace.proximamente) {
+    return (
+      <span
+        className="flex cursor-not-allowed items-center justify-between rounded-md px-3 py-1.5 text-sm text-white/35"
+        title="Se construye en las siguientes fases"
+      >
+        {enlace.etiqueta}
+        <span className="text-[10px] tracking-wide text-white/25 uppercase">pendiente</span>
+      </span>
+    );
+  }
+
   return (
     <Link
       href={enlace.href}
@@ -69,7 +76,6 @@ export function Navegacion({ sesion, accesos }: { sesion?: React.ReactNode; acce
   const ruta = usePathname();
   const visibles = (enlaces: Enlace[]) => enlaces.filter((e) => !e.acceso || accesos[e.acceso]);
   const administracion = visibles(ADMINISTRACION);
-  const reportes = visibles(REPORTES);
 
   return (
     <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col self-start overflow-y-auto bg-primary px-3 py-5 text-white">
@@ -83,14 +89,6 @@ export function Navegacion({ sesion, accesos }: { sesion?: React.ReactNode; acce
           <Item key={e.href} enlace={e} activo={e.href === "/" ? ruta === "/" : ruta.startsWith(e.href)} />
         ))}
       </Seccion>
-
-      {reportes.length > 0 && (
-        <Seccion titulo="Reportes">
-          {reportes.map((e) => (
-            <Item key={e.href} enlace={e} activo={ruta.startsWith(e.href)} />
-          ))}
-        </Seccion>
-      )}
 
       <Seccion titulo="Catálogos">
         {CATALOGOS.map((c) => (
@@ -112,7 +110,7 @@ export function Navegacion({ sesion, accesos }: { sesion?: React.ReactNode; acce
 
       <div className="mt-auto">
         <p className="px-3 text-xs leading-relaxed text-white/35">
-          BodeGasosur v{version} · fases 0 a 8 construidas. Sigue el acabado en la fase 9.
+          BodeGasosur v{version} · fases 0 a 7 construidas. Siguen los reportes en la fase 8.
         </p>
         {sesion}
       </div>

@@ -1,6 +1,5 @@
 import { FiltrosEntradas } from "@/components/entradas/filtros-entradas";
 import { TablaEntradas, type FilaEntrada } from "@/components/entradas/tabla-entradas";
-import { DescargarExcel } from "@/components/ui/descargar-excel";
 import { ButtonLink } from "@/components/ui/button";
 import { Paginacion } from "@/components/ui/paginacion";
 import { Card, EncabezadoPagina, EstadoVacio } from "@/components/ui/superficies";
@@ -44,14 +43,11 @@ export default async function PaginaEntradas({ searchParams }: PageProps<"/entra
         titulo="Entradas"
         descripcion="Material que llega de un proveedor a una bodega. Un borrador no afecta existencias; confirmar la recepción asigna folio y crea las capas de costo."
         acciones={
-          <>
-            <DescargarExcel href={`/exportar/entradas?${aParametros(filtros)}`} />
-            {puedeCapturar && (
-              <ButtonLink href="/entradas/nueva" prefetch={false}>
-                Nueva entrada
-              </ButtonLink>
-            )}
-          </>
+          puedeCapturar ? (
+            <ButtonLink href="/entradas/nueva" prefetch={false}>
+              Nueva entrada
+            </ButtonLink>
+          ) : undefined
         }
       />
 

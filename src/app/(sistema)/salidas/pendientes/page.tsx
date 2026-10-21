@@ -1,5 +1,4 @@
 import { SeccionPendientes } from "@/components/salidas/pendientes";
-import { DescargarExcel } from "@/components/ui/descargar-excel";
 import { ButtonLink } from "@/components/ui/button";
 import { Card, EncabezadoPagina, EstadoVacio } from "@/components/ui/superficies";
 import { consultar } from "@/lib/db";
@@ -21,12 +20,7 @@ export default async function PaginaPendientes({ searchParams }: PageProps<"/sal
       <EncabezadoPagina
         titulo="Salidas pendientes"
         descripcion="Lo que espera tu autorización, el retiro o la confirmación de recepción, lo más antiguo primero."
-        acciones={
-          <>
-            {secciones.length > 0 && <DescargarExcel href="/exportar/pendientes" />}
-            <ButtonLink href="/salidas" variante="secundario">Todas las salidas</ButtonLink>
-          </>
-        }
+        acciones={<ButtonLink href="/salidas" variante="secundario">Todas las salidas</ButtonLink>}
       />
 
       {secciones.length === 0 ? (

@@ -2,7 +2,7 @@ import "server-only";
 import type { EstatusMovimiento, Prisma } from "@prisma/client";
 import type { FiltroEntradas, FiltroEstatus } from "@/lib/entradas/filtros";
 import { enOrden, idsDeLista, sql } from "@/lib/movimientos/lista";
-import { POR_PAGINA, type Pagina } from "@/lib/paginacion";
+import type { Pagina } from "@/lib/paginacion";
 
 // Lecturas de entradas. Recibe el cliente: solo consultar() lo entrega.
 
@@ -39,7 +39,7 @@ export type EntradaResumen = Prisma.MovimientoGetPayload<{ select: typeof RESUME
  * la más nueva arriba. Folio y clave de bodega se buscan como clave; la
  * referencia, el proveedor y el nombre de la bodega, sin acentos.
  */
-export async function listarEntradas(db: Db, filtro: FiltroEntradas, pedida = 1, tamano = POR_PAGINA): Promise<{ filas: EntradaResumen[]; pagina: Pagina }> {
+export async function listarEntradas(db: Db, filtro: FiltroEntradas, pedida = 1): Promise<{ filas: EntradaResumen[]; pagina: Pagina }> {
   const filtros = [sql`m.estatus::text = ANY(${ESTATUS_POR_FILTRO[filtro.estatus]}::text[])`];
   if (filtro.referencia === "con") filtros.push(sql`m.referencia IS NOT NULL`);
   if (filtro.referencia === "sin") filtros.push(sql`m.referencia IS NULL`);
@@ -55,7 +55,6 @@ export async function listarEntradas(db: Db, filtro: FiltroEntradas, pedida = 1,
     claves: [sql`m.folio`, sql`b.clave`],
     textos: [sql`m.referencia`, sql`p."nombreComercial"`, sql`b.nombre`],
     pagina: pedida,
-    tamano,
   });
   const filas = await db.movimiento.findMany({ where: { id: { in: ids } }, select: RESUMEN });
   return { filas: enOrden(ids, filas), pagina };
