@@ -466,17 +466,17 @@ Si ya estaba, no se vuelve a procesar; si la transacción falla, el reintento la
 | Pregunta de Compras | Cómo se resuelve |
 |---|---|
 | ¿Cuánto material mandamos a la estación 4 este mes? | Salidas por `estacionId` y rango de fecha; sumar el importe redondeado por renglón |
-| ¿Qué tengo en la bodega central? | `Existencia` por `bodegaId`, con el valor de sus capas restantes (reporte de existencias, fase 8) |
-| ¿Qué está por debajo del mínimo? | `Existencia.cantidad < Articulo.stockMinimo`, comparado en cada bodega activa con el artículo activo |
+| ¿Qué tengo en la bodega central? | `Existencia` por `bodegaId` |
+| ¿Qué está por debajo del mínimo? | `Existencia.cantidad < Articulo.stockMinimo` |
 | ¿Quién autorizó esta salida, cuándo, y quién se la llevó? | `autorizadoPor`, `autorizadoEn` y `entregadoA` |
-| ¿Cuál es el historial de este filtro? | Kardex: capas, consumos y restituciones del artículo por fecha, una fila por partida y bodega, con el saldo corrido de cada bodega |
+| ¿Cuál es el historial de este filtro? | Kardex: partidas del artículo por fecha, con saldo corrido |
 | ¿Cuánto vale el inventario? | Sobre las capas: `SUM(cantidadRestante × costoUnitario)` sin IVA y con IVA — **más el conteo de piezas sin valuar**, que son las capas de costo nulo |
-| ¿Qué se gastó por estación este año? | Consumos de salidas que no son préstamo, menos las capas de sus devoluciones ligadas; las reversas compensan en su fecha |
-| ¿Con qué frecuencia se pide esta pieza? | Partidas del artículo en salidas retiradas o recibidas sin reversa, por fecha de retiro |
+| ¿Qué se gastó por estación este año? | Salidas agrupadas por `estacionId` |
+| ¿Con qué frecuencia se pide esta pieza? | Conteo de partidas del artículo por periodo |
 | ¿Qué salidas autorizadas faltan por retirar? | Salidas en estatus `AUTORIZADA` |
 | ¿Qué salidas siguen sin confirmar recepción? | Salidas en estatus `RETIRADA` |
 | ¿Qué material prestado no ha vuelto? | Salidas con `esPrestamo`, sin reversa, con saldo: consumido menos las capas de sus devoluciones vigentes |
 | ¿De dónde salió esta pieza y a qué costo llegó a esta bodega? | `CapaCosto.origenId` hasta la capa de la entrada, con su `fechaOriginal` y su par de costos |
 | ¿Qué corrigió esta reversa y por qué? | `cancelaAId`, `motivo`, y sus consumos y restituciones |
 | ¿Quién le quitó el permiso de autorizar a la C.P. Cosumel? | `Bitacora`, tabla `Usuario`, comparando `antes` y `despues` |
-| El reporte de los viernes | Del sábado al viernes: saldo inicial, cada alta y baja por tipo, saldo final y valor de lo que quedaba de cada capa al corte ([contrato de la fase 8](contratos-otros/06-fase-8-reportes.md)) |
+| El reporte de los viernes | Entradas, salidas y stock final del periodo |

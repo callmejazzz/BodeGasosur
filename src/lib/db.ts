@@ -224,32 +224,6 @@ export async function consultarDesdeAccion<T>(
   permiso: Permiso,
   fn: (db: Prisma.TransactionClient, usuario: UsuarioSesion) => Promise<T>,
 ): Promise<T> {
-  return leer(permiso, fn);
-}
-
-/** La sesión según Clerk, sin leer la base: para contar intentos antes de consultar. */
-export async function identidadDeSesion(): Promise<string | null> {
-  return (await auth()).userId;
-}
-
-/** Quién descarga, antes de leer, para limitar por usuario. Lanza SinAcceso o SinPermiso. */
-export function usuarioParaDescarga(permiso: Permiso): Promise<UsuarioSesion> {
-  return exigir(permiso);
-}
-
-/**
- * `consultar()` para una descarga de Excel: la misma instantánea de solo
- * lectura, con más tiempo para leer la tabla completa por lotes. Sin sesión
- * lanza SinAcceso; la ruta responde con un error, no con una redirección.
- */
-export async function consultarParaDescarga<T>(
-  permiso: Permiso,
-  fn: (db: Prisma.TransactionClient, usuario: UsuarioSesion) => Promise<T>,
-): Promise<T> {
-  return leer(permiso, fn, 60_000);
-}
-
-async function leer<T>(permiso: Permiso, fn: (db: Prisma.TransactionClient, usuario: UsuarioSesion) => Promise<T>, timeout?: number): Promise<T> {
   const usuario = await exigir(permiso);
 
   return prisma.$transaction(
@@ -258,7 +232,7 @@ async function leer<T>(permiso: Permiso, fn: (db: Prisma.TransactionClient, usua
       await tx.$executeRawUnsafe("SET TRANSACTION READ ONLY");
       return fn(tx, usuario);
     },
-    { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead, timeout },
+    { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
   );
 }
 

@@ -3,13 +3,14 @@ import { Badge } from "@/components/ui/superficies";
 import { Tabla, Td, Th, Tr } from "@/components/ui/tabla";
 import { formatearFecha, formatearInstante } from "@/lib/fechas";
 import type { EntradaDetalle, EntradaResumen } from "@/lib/entradas/repo";
-import { TEXTO_ESTATUS_ENTRADA } from "@/lib/estatus";
 import { cantidad, decimalEnTexto } from "@/lib/utils";
 
 const TONO_ESTATUS = { BORRADOR: "aviso", CONFIRMADO: "exito", CANCELADO: "neutro" } as const;
+const TEXTO_ESTATUS = { BORRADOR: "Borrador", CONFIRMADO: "Confirmada", CANCELADO: "Descartada" } as const;
 
 export function BadgeEstatus({ estatus }: { estatus: string }) {
-  return <Badge tono={TONO_ESTATUS[estatus as keyof typeof TONO_ESTATUS] ?? "neutro"}>{TEXTO_ESTATUS_ENTRADA[estatus] ?? estatus}</Badge>;
+  const clave = estatus as keyof typeof TONO_ESTATUS;
+  return <Badge tono={TONO_ESTATUS[clave] ?? "neutro"}>{TEXTO_ESTATUS[clave] ?? estatus}</Badge>;
 }
 
 /** Importe con dos decimales, y hasta `decimales` solo cuando no son cero. Los Decimal de Prisma llegan como objeto. */

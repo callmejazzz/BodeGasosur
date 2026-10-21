@@ -1,7 +1,6 @@
 import { filaDeSalida } from "@/components/salidas/filas";
 import { FiltrosSalidas } from "@/components/salidas/filtros-salidas";
 import { TablaSalidas } from "@/components/salidas/tabla-salidas";
-import { DescargarExcel } from "@/components/ui/descargar-excel";
 import { ButtonLink } from "@/components/ui/button";
 import { Paginacion } from "@/components/ui/paginacion";
 import { Card, EncabezadoPagina, EstadoVacio } from "@/components/ui/superficies";
@@ -26,7 +25,6 @@ export default async function PaginaSalidas({ searchParams }: PageProps<"/salida
         descripcion="El folio se asigna al registrar el retiro; en ese momento se descuenta inventario por capas PEPS."
         acciones={
           <>
-            <DescargarExcel href={`/exportar/salidas?${aParametros(filtros)}`} />
             {pendientes !== null && (
               <ButtonLink href="/salidas/pendientes" variante="secundario">
                 Pendientes ({pendientes})

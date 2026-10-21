@@ -22,8 +22,7 @@ export type Permiso =
   | "ajustes:leer"
   | "ajustes:capturar"
   | "ajustes:confirmar"
-  | "movimientos:revertir"
-  | "reportes:leer";
+  | "movimientos:revertir";
 
 export type SujetoDePermisos = { rol: Rol; puedeAutorizar: boolean };
 
@@ -57,7 +56,6 @@ export const PERMISOS: Record<Rol, readonly Permiso[]> = {
     ...INVENTARIO,
     // La reversa corrige un asiento cerrado: solo el Superadmin.
     "movimientos:revertir",
-    "reportes:leer",
   ],
   COMPRAS: [
     "catalogos:leer",
@@ -71,9 +69,8 @@ export const PERMISOS: Record<Rol, readonly Permiso[]> = {
     "salidas:retirar",
     "salidas:recibir",
     ...INVENTARIO,
-    "reportes:leer",
   ],
-  JEFE: ["catalogos:leer", "entradas:leer", "salidas:leer", "salidas:autorizar", "traspasos:leer", "devoluciones:leer", "ajustes:leer", "reportes:leer"],
+  JEFE: ["catalogos:leer", "entradas:leer", "salidas:leer", "salidas:autorizar", "traspasos:leer", "devoluciones:leer", "ajustes:leer"],
 };
 
 export function rolTienePermiso(rol: Rol, permiso: Permiso): boolean {

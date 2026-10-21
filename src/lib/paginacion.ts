@@ -13,13 +13,13 @@ export function leerPagina(valor: unknown): number {
 }
 
 /** Pasada la última, la última: un enlace viejo o un filtro más estrecho no deja la lista en blanco. */
-export function acotarPagina(pedida: number, total: number, tamano = POR_PAGINA): Pagina {
-  const ultima = Math.max(1, Math.ceil(total / tamano));
+export function acotarPagina(pedida: number, total: number): Pagina {
+  const ultima = Math.max(1, Math.ceil(total / POR_PAGINA));
   return { actual: Math.min(Math.max(1, pedida), ultima), ultima, total };
 }
 
-/** Cuántos registros se saltan para llegar a la página. Las descargas leen en lotes más grandes que una página. */
-export const saltoDe = (p: Pagina, tamano = POR_PAGINA) => (p.actual - 1) * tamano;
+/** Cuántos registros se saltan para llegar a la página. */
+export const saltoDe = (p: Pagina) => (p.actual - 1) * POR_PAGINA;
 
 /** La página de un arreglo que ya se leyó completo. */
 export function paginar<T>(filas: readonly T[], pedida: number): { filas: T[]; pagina: Pagina } {
