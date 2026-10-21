@@ -139,6 +139,43 @@ describe("usuario de ejecución", () => {
     }
   });
 
+  it("en public nadie ejecuta por PUBLIC: la aplicación, solo las funciones que llama o que llaman sus triggers", async () => {
+    const funcionesDe = async (cliente: Client, filtro: string) =>
+      (
+        await cliente.query<{ nombre: string }>(`
+          SELECT p.proname AS nombre FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+           WHERE n.nspname = 'public' AND ${filtro} ORDER BY 1`)
+      ).rows.map((r) => r.nombre);
+
+    const publicas = await funcionesDe(dueno, `EXISTS (SELECT 1 FROM aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a WHERE a.grantee = 0 AND a.privilege_type = 'EXECUTE')`);
+    expect(publicas).toEqual([]);
+    expect(await funcionesDe(app, `has_function_privilege(p.oid, 'EXECUTE')`)).toEqual([
+      "cabe_en_costo", "cabe_en_importe", "clave_normalizada", "conciliar_capa", "conciliar_consumos", "conciliar_conteo", "conciliar_existencia",
+      "conciliar_movimiento", "costo_base_mxn", "devolucion_vigente", "importe_renglon", "inventario_sin_conciliar", "nombre_normalizado",
+      "texto_buscable", "uuid_generate_v7",
+    ]);
+    expect(await funcionesDe(app, `p.prorettype = 'trigger'::regtype AND has_function_privilege(p.oid, 'EXECUTE')`)).toEqual([]);
+    expect((await app.query(`SELECT importe_renglon(3, 1.25) AS i`)).rows[0].i).toBe("3.75");
+
+    // Un rol sin concesiones, como anon en Supabase, no ejecuta ninguna.
+    const rol = `prueba_sin_permisos_${randomBytes(4).toString("hex")}`;
+    await dueno.query(`CREATE ROLE ${rol} NOLOGIN`);
+    try {
+      expect(await funcionesDe(dueno, `has_function_privilege('${rol}', p.oid, 'EXECUTE')`)).toEqual([]);
+    } finally {
+      await dueno.query(`DROP ROLE ${rol}`);
+    }
+  });
+
+  it("toda función de public y seguridad fija su search_path", async () => {
+    const { rows } = await dueno.query<{ funcion: string }>(`
+      SELECT p.oid::regprocedure::text AS funcion FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+       WHERE n.nspname IN ('public', 'seguridad')
+         AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = p.oid AND d.deptype = 'e')
+         AND NOT EXISTS (SELECT 1 FROM unnest(p.proconfig) c WHERE c LIKE 'search_path=%')`);
+    expect(rows.map((r) => r.funcion)).toEqual([]);
+  });
+
   it("la confianza es por login, no por pertenencia: un miembro del rol dueño fuera de la lista necesita liga", async () => {
     const { rows } = await dueno.query<{ dueno: string }>("SELECT current_user AS dueno");
     const miembro = `bodegasosur_prueba_miembro_${randomBytes(4).toString("hex")}`;

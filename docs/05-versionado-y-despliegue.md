@@ -213,6 +213,17 @@ en su rol —la base enseña la hora de México—, así que los scripts que esc
    GROUP BY 1, 2;   -- vacío
   ```
 
+  Tampoco deben ejecutar funciones de `public`, y cada función fija su `search_path`
+  (migración `20261021120000_funciones_endurecidas`; el asesor de seguridad de Supabase
+  deja de marcar `function_search_path_mutable`). Una función nueva se declara con
+  `SET search_path = pg_catalog, public, pg_temp` y, si la aplicación la llama, con su
+  `GRANT EXECUTE` a `bodegasosur_ejecucion`:
+
+  ```sql
+  SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+   WHERE n.nspname = 'public' AND has_function_privilege('anon', p.oid, 'EXECUTE');   -- 0
+  ```
+
 ### Sevalla
 
 - **Build con el `Dockerfile`, no con Nixpacks**, que toma Node 18 por omisión. La imagen
