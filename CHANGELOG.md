@@ -8,6 +8,17 @@ puede hacer ahora que antes no se podía.
 
 ---
 
+## Por publicar
+
+Última migración incluida: `20261021120000_funciones_endurecidas`.
+
+**Por dentro**
+
+- Las funciones de la base fijan su `search_path` y ya no las puede ejecutar cualquier
+  rol: la aplicación conserva solo las que llama o que llaman sus triggers. En Supabase,
+  `anon` y `authenticated` dejan de poder llamarlas aunque se encendiera la Data API.
+- 553 pruebas contra PostgreSQL real.
+
 ## v0.8.0 — 2026-10-20
 
 Commit `58b3f75`, con su etiqueta.
