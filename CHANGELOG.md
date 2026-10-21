@@ -10,6 +10,8 @@ puede hacer ahora que antes no se podía.
 
 ## v0.8.0 — 2026-10-20
 
+Commit `58b3f75`, con su etiqueta.
+
 Última migración incluida: `20261008100000_entrada_con_sus_capas`. La fase no agrega
 migraciones: los reportes leen lo que ya registra el sistema.
 
