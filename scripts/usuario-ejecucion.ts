@@ -4,7 +4,8 @@
 // fila y nada más (90-privilegios.sql). Este comando crea —o actualiza— el
 // usuario con contraseña que hereda ese rol, con los datos de DATABASE_URL, y
 // se conecta como quien migra (DATABASE_URL_MIGRACIONES) para hacerlo. La
-// contraseña nunca queda en el repositorio.
+// contraseña nunca queda en el repositorio ni viaja a la base: se manda su
+// verificador SCRAM, porque Supabase escribe cada DDL en su bitácora.
 //
 // Se niega si las dos URL no apuntan a la misma base o si usan el mismo
 // usuario: la separación es justamente que no sean el mismo.
@@ -12,6 +13,7 @@
 // Uso:  npm run db:usuario-app
 
 import "dotenv/config";
+import { createHash, createHmac, pbkdf2Sync, randomBytes } from "node:crypto";
 import { Client } from "pg";
 import { esEjecucionDirecta, esPoolerDeSupabase } from "../prisma/comun";
 
@@ -40,6 +42,16 @@ export function leer(nombre: string, url: string | undefined): Destino {
   };
 }
 
+/** El verificador SCRAM-SHA-256 que guarda PostgreSQL, calculado aquí como lo hace `\password` de psql. */
+export function verificadorScram(contrasena: string, sal = randomBytes(16), iteraciones = 4096): string {
+  // PostgreSQL normaliza con SASLprep lo que no es ASCII; fuera de ASCII el verificador no coincidiría.
+  if (!/^[\x20-\x7e]+$/.test(contrasena)) throw new Error("La contraseña de DATABASE_URL tiene que ser ASCII imprimible.");
+  const salada = pbkdf2Sync(contrasena, sal, iteraciones, 32, "sha256");
+  const hmac = (texto: string) => createHmac("sha256", salada).update(texto).digest();
+  const almacenada = createHash("sha256").update(hmac("Client Key")).digest("base64");
+  return `SCRAM-SHA-256$${iteraciones}:${sal.toString("base64")}$${almacenada}:${hmac("Server Key").toString("base64")}`;
+}
+
 /** Crea o actualiza el usuario de ejecución y le concede el rol de grupo. */
 export async function asegurarUsuarioDeEjecucion(urlMigraciones: string | undefined, urlEjecucion: string | undefined) {
   const dueno = leer("DATABASE_URL_MIGRACIONES", urlMigraciones);
@@ -51,6 +63,7 @@ export async function asegurarUsuarioDeEjecucion(urlMigraciones: string | undefi
   if (app.usuario === dueno.usuario) {
     throw new Error("DATABASE_URL usa el mismo usuario que las migraciones; la aplicación necesita uno propio.");
   }
+  const verificador = verificadorScram(app.contrasena);
 
   const cliente = new Client({ connectionString: urlMigraciones });
   await cliente.connect();
@@ -81,12 +94,12 @@ export async function asegurarUsuarioDeEjecucion(urlMigraciones: string | undefi
       if (reservados[0].alguno) throw new Error(`${app.usuario} es superusuario, de replicación o salta RLS; usa otro usuario para la aplicación.`);
     }
 
-    // DDL no admite parámetros: format() cita en el servidor el nombre y la contraseña.
+    // DDL no admite parámetros: format() cita en el servidor el nombre y el verificador.
     const atributos = existe
       ? "LOGIN NOCREATEDB NOCREATEROLE INHERIT"
       : "LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS INHERIT";
     const plantilla = existe ? `ALTER ROLE %I WITH ${atributos} PASSWORD %L` : `CREATE ROLE %I WITH ${atributos} PASSWORD %L`;
-    const { rows } = await cliente.query<{ sql: string }>("SELECT format($1, $2::text, $3::text) AS sql", [plantilla, app.usuario, app.contrasena]);
+    const { rows } = await cliente.query<{ sql: string }>("SELECT format($1, $2::text, $3::text) AS sql", [plantilla, app.usuario, verificador]);
     await cliente.query(rows[0].sql);
     const concesion = await cliente.query<{ sql: string }>("SELECT format('GRANT %I TO %I', $1::text, $2::text) AS sql", [ROL_DE_EJECUCION, app.usuario]);
     await cliente.query(concesion.rows[0].sql);

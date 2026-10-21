@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { DescargarExcel } from "@/components/ui/descargar-excel";
 import { ButtonLink } from "@/components/ui/button";
 import { Input } from "@/components/ui/campos";
 import { Paginacion } from "@/components/ui/paginacion";
@@ -9,11 +10,11 @@ import {
   type CampoDef,
   type CatalogoDef,
 } from "@/lib/catalogos/definiciones";
-import { leerRuta, REPOS } from "@/lib/catalogos/repos";
+import { filtrarCatalogo, leerRuta, REPOS } from "@/lib/catalogos/repos";
 import { consultar } from "@/lib/db";
 import { leerPagina, paginar } from "@/lib/paginacion";
 import { rolTienePermiso } from "@/lib/permisos";
-import { cantidad, cn, textoBuscable } from "@/lib/utils";
+import { cantidad, cn } from "@/lib/utils";
 
 function celda(registro: { id: string }, campo: CampoDef, def: CatalogoDef) {
   const valor = leerRuta(registro, campo.rutaTabla ?? campo.nombre);
@@ -58,7 +59,6 @@ export default async function PaginaCatalogo({
   if (!def || !repo) notFound();
 
   const busqueda = typeof q === "string" ? q.trim() : "";
-  const buscado = textoBuscable(busqueda);
   // El permiso de escritura sale del mismo `usuario` que `consultar` ya entrega:
   // ni segunda lectura de sesión ni consulta extra.
   const { todos, puedeEscribir } = await consultar("catalogos:leer", async (db, usuario) => ({
@@ -66,13 +66,7 @@ export default async function PaginaCatalogo({
     puedeEscribir: rolTienePermiso(usuario.rol, def.permisoEscritura),
   }));
 
-  const registros = busqueda
-    ? todos.filter((r) =>
-        def.camposBusqueda.some((campo) =>
-          textoBuscable(String(leerRuta(r, campo) ?? "")).includes(buscado),
-        ),
-      )
-    : todos;
+  const registros = filtrarCatalogo(todos, def, busqueda);
   const { filas: visibles, pagina } = paginar(registros, leerPagina(paginaPedida));
 
   const columnas = def.campos.filter((c) => !c.ocultarEnTabla);
@@ -83,11 +77,14 @@ export default async function PaginaCatalogo({
         titulo={def.titulo}
         descripcion={def.descripcion}
         acciones={
-          puedeEscribir ? (
-            <ButtonLink href={`/catalogos/${slug}/nuevo`} prefetch={false}>
-              Nuev{def.genero === "f" ? "a" : "o"} {def.singular}
-            </ButtonLink>
-          ) : undefined
+          <>
+            <DescargarExcel href={`/exportar/catalogo?${new URLSearchParams({ catalogo: slug, ...(busqueda ? { q: busqueda } : {}) })}`} />
+            {puedeEscribir && (
+              <ButtonLink href={`/catalogos/${slug}/nuevo`} prefetch={false}>
+                Nuev{def.genero === "f" ? "a" : "o"} {def.singular}
+              </ButtonLink>
+            )}
+          </>
         }
       />
 

@@ -1,6 +1,7 @@
 import { filaDeMovimiento } from "@/components/inventario/filas";
 import { FiltrosMovimientos } from "@/components/inventario/filtros-movimientos";
 import { TablaMovimientos } from "@/components/inventario/tabla-movimientos";
+import { DescargarExcel } from "@/components/ui/descargar-excel";
 import { ButtonLink } from "@/components/ui/button";
 import { Paginacion } from "@/components/ui/paginacion";
 import { Card, EncabezadoPagina, EstadoVacio } from "@/components/ui/superficies";
@@ -20,7 +21,12 @@ export default async function PaginaAjustes({ searchParams }: PageProps<"/ajuste
       <EncabezadoPagina
         titulo="Ajustes"
         descripcion="Nacen al confirmar una hoja de conteo o al revertir un movimiento: no se capturan sueltos. Uno que suma crea capa sin costo; uno que resta consume PEPS."
-        acciones={<ButtonLink href="/conteos" variante="secundario">Hojas de conteo</ButtonLink>}
+        acciones={
+          <>
+            <DescargarExcel href={`/exportar/ajustes?${aParametros(filtros)}`} />
+            <ButtonLink href="/conteos" variante="secundario">Hojas de conteo</ButtonLink>
+          </>
+        }
       />
       <Card>
         <FiltrosMovimientos filtros={filtros} total={pagina.total} sustantivo={["ajuste", "ajustes"]} />

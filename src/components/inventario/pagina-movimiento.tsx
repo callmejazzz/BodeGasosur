@@ -2,6 +2,7 @@ import { AccionesBorrador } from "@/components/inventario/acciones-borrador";
 import { EncabezadoMovimiento, Historial, PartidasMovimiento, pasosDeMovimiento, ValuacionDeMovimiento } from "@/components/inventario/detalle-movimiento";
 import { RevertirMovimiento } from "@/components/inventario/revertir";
 import { ButtonLink } from "@/components/ui/button";
+import { DescargarExcel } from "@/components/ui/descargar-excel";
 import { Paginacion } from "@/components/ui/paginacion";
 import { Card, CardHeader, EncabezadoPagina } from "@/components/ui/superficies";
 import type { ResultadoAccion } from "@/lib/inventario/acciones";
@@ -9,6 +10,8 @@ import type { datosDeDetalle } from "@/lib/inventario/pantallas";
 import { paginar, parametrosDePaginas } from "@/lib/paginacion";
 
 type Datos = NonNullable<Awaited<ReturnType<typeof datosDeDetalle>>>;
+
+const DESCARGA = { TRASPASO: "traspaso", DEVOLUCION: "devolucion", AJUSTE: "ajuste" } as const;
 
 /**
  * El detalle común de traspasos, devoluciones y ajustes. Cada botón aparece
@@ -44,7 +47,13 @@ export function PaginaMovimiento({
       <EncabezadoPagina
         titulo={m.folio ? `${nombre} ${m.folio}` : `${nombre} en borrador`}
         descripcion={descripcion}
-        acciones={<ButtonLink href={lista.href} variante="secundario">{lista.texto}</ButtonLink>}
+        acciones={
+          <>
+            {/* En edición, las partidas son una captura, no una tabla de consulta. */}
+            {!edicion && <DescargarExcel href={`/exportar/${DESCARGA[m.tipo as keyof typeof DESCARGA]}?id=${m.id}`} />}
+            <ButtonLink href={lista.href} variante="secundario">{lista.texto}</ButtonLink>
+          </>
+        }
       />
       <div className="flex flex-col gap-6">
         <Card>
