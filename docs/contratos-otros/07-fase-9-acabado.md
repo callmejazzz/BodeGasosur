@@ -195,7 +195,7 @@ Es la misma regla del reporte de existencias (§3.2 del [contrato de reportes](0
 
   Un rebote duro prevalece sobre «entregado» aunque llegue después: el servidor aceptó el mensaje y luego lo rechazó.
 - **Exclusión por dirección.** Un rebote duro, una supresión o una queja hacen que Resend suprima esa **dirección** en adelante, sin importar qué cuenta la use. Por eso, la exclusión sigue a la dirección y no al usuario:
-  - **Dirección normalizada:** `lower(trim(correo))`, el mismo criterio del índice único de correo de `Usuario`. Ese índice solo aplica a usuarios activos, así que una cuenta dada de baja puede conservar una dirección que otra cuenta reutiliza.
+  - **Dirección normalizada:** `lower(trim(correo))`. Hoy el índice único de correo de `Usuario` usa solo `lower(correo)`; la migración de la fase lo reemplaza por `lower(trim(correo))` para que ambos usen el mismo criterio. Ese índice solo aplica a usuarios activos, así que una cuenta dada de baja puede conservar una dirección que otra cuenta reutiliza.
   - **Dirección excluida:** la que tiene, en el historial completo de `RegistroCorreos`, al menos un registro con esa dirección normalizada y un evento **asociado** de rebote duro, supresión o queja. No importa a qué usuario pertenecía ese registro.
   - **Reserva:** la evaluación del día consulta ese historial con la dirección **actual** de cada candidato. Queda fuera quien tenga una dirección excluida, aunque nunca le haya rebotado a él. Eso cubre tres casos:
     - Una cuenta nueva con una dirección que ya rebotó en otra cuenta.

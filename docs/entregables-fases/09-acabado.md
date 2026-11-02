@@ -1,4 +1,4 @@
-	# Fase 9 - Acabado
+# Fase 9 - Acabado
 
 | Campo | Referencia |
 |---|---|
@@ -15,6 +15,7 @@ La fase se divide en cuatro entregas. Cada una se integra a `feat/fase-9` con su
 1. **Migración y preferencia privada.**
    - Agregar la columna `Usuario.alertasCorreo`, desactivada por omisión.
    - Crear las tablas `EvaluacionCorreos`, `LoteCorreos`, `RegistroCorreos` y `EventoCorreo`, con una evaluación por día y un envío por usuario y día. Sus filas no se borran, y solo cambian de estado en las transiciones permitidas.
+   - Reemplazar el índice único de correo de `Usuario`, de `lower(correo)` a `lower(trim(correo))`, para que use el mismo criterio que la exclusión por dirección.
    - Agregar los orígenes de sistema `resumen-diario` y `resend-webhook`.
    - Reemplazar la guarda de `Usuario` para que cada usuario, con cualquier rol, cambie solo su propia `alertasCorreo`, y nadie más la toque (`BG712`).
    - Agregar el permiso `cuenta:editar` y la pantalla «Mi cuenta». Ahí cada usuario ve y cambia solo su propia preferencia.
