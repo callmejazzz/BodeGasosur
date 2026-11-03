@@ -1,6 +1,8 @@
 # Convenciones de código
 
-- Nunca utilices el carácter `ñ` ni acentos para la lógica del código (variables, parámetros, propiedades), solo puede quedarse en textos, documentación y comentarios
+- Nunca utilices el carácter `ñ` ni acentos para la lógica del código (variables, parámetros, propiedades), cámbiala por `ni`. Solo puede quedarse en textos, documentación y comentarios
+  - Bien: `anioActual`; (docs) `Se declaró la variable "anioActual" que representa el año actual`
+  - Mal: `añoActual`; (docs) `Se declaró la variable "añoActual" que representa el anio actual`
 - Textos visibles en la UI siempre en español
 - Puedes agregar dependencias nuevas, quitar o actualizar, pero siempre explícame cuáles, por qué y para qué
 
