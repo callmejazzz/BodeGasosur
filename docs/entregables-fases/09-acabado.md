@@ -54,6 +54,7 @@ La fase se divide en cuatro entregas. Cada una se integra a `feat/fase-9` con su
 - `escrituraDeSistema()` en [`db.ts`](../../src/lib/db.ts) ya sirve de puerta para un proceso sin usuario. La fase solo le agrega dos orígenes.
 - La bitácora ya registra la fila completa de `Usuario` antes y después de cada cambio, y se queda así. La preferencia aparece ahí y solo ahí fuera de «Mi cuenta» (§2 del contrato).
 - Ya existen los componentes de la interfaz: tablas, tarjetas, `EstadoVacio` y botones. Esta fase los ajusta para celular, en lugar de rehacerlos.
+- `gasosurnet.com` ya está verificado en Resend, y la alerta sale de su subdominio `avisos.gasosurnet.com` (§3.8 del contrato).
 
 ## Fuera de alcance
 
@@ -61,7 +62,6 @@ La fase se divide en cuatro entregas. Cada una se integra a `feat/fase-9` con su
 - Los datos de demostración con historia de varios meses.
 - Las alertas por WhatsApp.
 - Los mínimos por bodega y el alcance de usuarios por bodega.
-- El dominio propio del remitente, que se verifica antes de `v1.0.0`. Mientras tanto, Resend solo entrega al correo de su propia cuenta.
 
 ## Criterio de cierre
 
