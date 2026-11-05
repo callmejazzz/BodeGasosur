@@ -14,7 +14,7 @@ Quedan fuera:
 - El alcance de usuarios por bodega.
 - Cualquier correo que no sea la alerta diaria.
 
-El dominio propio del remitente es una tarea previa a `v1.0.0`, no de esta fase (§3.8).
+El dominio del remitente, `gasosurnet.com`, ya está verificado en Resend (§3.8).
 
 ## 2. Preferencia de alertas por correo
 
@@ -209,9 +209,11 @@ Es la misma regla del reporte de existencias (§3.2 del [contrato de reportes](0
 - **Respuesta.** La ruta responde 200 solo después de confirmar la escritura. Si la base falla, responde 500 y Resend reintenta.
 - **Qué se afirma.** «Entregado» significa que el servidor de correo del destinatario aceptó el mensaje (`email.delivered`), no que la persona lo haya leído. La interfaz nunca dice «leído».
 
-### 3.8 Remitente durante el desarrollo
+### 3.8 Remitente
 
-Mientras no haya dominio verificado, el remitente es el que Resend ofrece por defecto (`onboarding@resend.dev`). Con él, Resend solo entrega al correo de la propia cuenta de Resend y responde `403 validation_error` a cualquier otro destinatario. Si ese rechazo llega por la petición completa, todo el lote queda `RECHAZADO` y sus integrantes `FALLIDO`, incluido el dueño de la cuenta. Por eso, durante el desarrollo, solo el usuario con el correo de la cuenta de Resend debe tener la alerta encendida. Es el comportamiento esperado hasta verificar el dominio antes de `v1.0.0`. El remitente se configura con una variable de entorno, así que cambiarlo no requiere tocar código.
+`gasosurnet.com` es el dominio de Gasosur y ya está verificado en Resend. Los correos salen de su subdominio `avisos.gasosurnet.com`, que es el que se dio de alta y separa la reputación de envío del dominio principal. Con ese remitente, Resend acepta cualquier destinatario, así que ya no hace falta limitar la alerta al correo de la cuenta de Resend. El remitente se configura con la variable de entorno `CORREO_REMITENTE`, así que cambiarlo no requiere tocar código.
+
+Si `CORREO_REMITENTE` usa un dominio sin verificar, Resend responde `403 validation_error`. Lo mismo pasa con `onboarding@resend.dev` para cualquier destinatario que no sea el correo de la cuenta de Resend. Si ese rechazo llega por la petición completa, todo el lote queda `RECHAZADO` y sus integrantes `FALLIDO`, incluido el dueño de la cuenta.
 
 ### 3.9 Disparo programado
 
