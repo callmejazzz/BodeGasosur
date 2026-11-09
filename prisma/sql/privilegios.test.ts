@@ -150,7 +150,7 @@ describe("usuario de ejecución", () => {
     const publicas = await funcionesDe(dueno, `EXISTS (SELECT 1 FROM aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a WHERE a.grantee = 0 AND a.privilege_type = 'EXECUTE')`);
     expect(publicas).toEqual([]);
     expect(await funcionesDe(app, `has_function_privilege(p.oid, 'EXECUTE')`)).toEqual([
-      "cabe_en_costo", "cabe_en_importe", "clave_normalizada", "conciliar_capa", "conciliar_consumos", "conciliar_conteo", "conciliar_existencia",
+      "cabe_en_costo", "cabe_en_importe", "candado_correos_del_dia", "clave_normalizada", "conciliar_capa", "conciliar_consumos", "conciliar_conteo", "conciliar_existencia",
       "conciliar_movimiento", "costo_base_mxn", "devolucion_vigente", "importe_renglon", "inventario_sin_conciliar", "nombre_normalizado",
       "texto_buscable", "uuid_generate_v7",
     ]);
