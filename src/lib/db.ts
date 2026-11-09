@@ -319,7 +319,7 @@ export function accionProtegida<Args extends unknown[], T>(
  * nuevo se declara aquí, no se inventa en la línea que lo usa, y así la
  * bitácora nunca guarda una etiqueta que no signifique nada.
  */
-type OrigenSistema = "clerk-webhook";
+type OrigenSistema = "clerk-webhook" | "resumen-diario" | "resend-webhook";
 
 /**
  * Un cliente recortado, no el completo.
@@ -340,6 +340,50 @@ export type ClienteWebhook = Pick<Prisma.TransactionClient, "eventoWebhook" | "u
 };
 
 /**
+ * La alerta diaria (contrato fase 9, §3.10). La base solo le deja escribir en
+ * la evaluación, los lotes y los registros; los usuarios y eventos, los lee.
+ */
+export type ClienteResumenDiario = Pick<Prisma.TransactionClient, "evaluacionCorreos" | "loteCorreos" | "registroCorreos" | "eventoCorreo" | "usuario"> & {
+  /** Primera sentencia de la reserva (§3.4, paso 1). */
+  candadoDelDia(fecha: Date): Promise<void>;
+};
+
+/** El webhook de Resend: inserta eventos y concilia lotes y registros. */
+export type ClienteResendWebhook = Pick<Prisma.TransactionClient, "eventoCorreo" | "loteCorreos" | "registroCorreos">;
+
+type ClientesDeSistema = {
+  "clerk-webhook": ClienteWebhook;
+  "resumen-diario": ClienteResumenDiario;
+  "resend-webhook": ClienteResendWebhook;
+};
+
+function clienteDeSistema(origen: OrigenSistema, tx: Prisma.TransactionClient): ClientesDeSistema[OrigenSistema] {
+  switch (origen) {
+    case "clerk-webhook":
+      return {
+        eventoWebhook: tx.eventoWebhook,
+        usuario: tx.usuario,
+        async registrarEventoDeSesion({ clerkUserId, tipo, ip, agente }) {
+          await tx.$queryRaw`SELECT seguridad.registrar_evento_de_sesion(${clerkUserId}, ${tipo}, ${ip}, ${agente})`;
+        },
+      } satisfies ClienteWebhook;
+    case "resumen-diario":
+      return {
+        evaluacionCorreos: tx.evaluacionCorreos,
+        loteCorreos: tx.loteCorreos,
+        registroCorreos: tx.registroCorreos,
+        eventoCorreo: tx.eventoCorreo,
+        usuario: tx.usuario,
+        async candadoDelDia(fecha) {
+          await tx.$executeRaw`SELECT candado_correos_del_dia(${fecha}::date)`;
+        },
+      } satisfies ClienteResumenDiario;
+    case "resend-webhook":
+      return { eventoCorreo: tx.eventoCorreo, loteCorreos: tx.loteCorreos, registroCorreos: tx.registroCorreos } satisfies ClienteResendWebhook;
+  }
+}
+
+/**
  * La segunda puerta de 01 §4.1: llega de fuera, sin sesión, y escribe.
  *
  * No puede pasar por `accionProtegida` porque no hay usuario a quien pedirle
@@ -351,19 +395,13 @@ export type ClienteWebhook = Pick<Prisma.TransactionClient, "eventoWebhook" | "u
  * exige el diseño de `EventoWebhook`: la entrega se registra, el cambio se
  * aplica y se marca como procesada, o no ocurre nada de eso. A medias no.
  */
-export async function escrituraDeSistema<T>(
-  origen: OrigenSistema,
-  fn: (db: ClienteWebhook) => Promise<T>,
+export async function escrituraDeSistema<O extends OrigenSistema, T>(
+  origen: O,
+  fn: (db: ClientesDeSistema[O]) => Promise<T>,
 ): Promise<T> {
   return prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT set_config('app.origen', ${origen}, true)`;
-    return fn({
-      eventoWebhook: tx.eventoWebhook,
-      usuario: tx.usuario,
-      async registrarEventoDeSesion({ clerkUserId, tipo, ip, agente }) {
-        await tx.$queryRaw`SELECT seguridad.registrar_evento_de_sesion(${clerkUserId}, ${tipo}, ${ip}, ${agente})`;
-      },
-    });
+    return fn(clienteDeSistema(origen, tx) as ClientesDeSistema[O]);
   });
 }
 
