@@ -18,7 +18,7 @@ La fase se divide en cuatro entregas. Cada una se integra a `feat/fase-9` con su
    - Reemplazar el índice único de correo de `Usuario`, de `lower(correo)` a `lower(trim(correo))`, para que use el mismo criterio que la exclusión por dirección.
    - Agregar los orígenes de sistema `resumen-diario` y `resend-webhook`.
    - Reemplazar la guarda de `Usuario` para que cada usuario, con cualquier rol, cambie solo su propia `alertasCorreo`, y nadie más la toque (`BG712`).
-   - Agregar el permiso `cuenta:editar` y la pantalla «Mi cuenta». Ahí cada usuario ve y cambia solo su propia preferencia.
+   - Agregar el permiso `cuenta:editar` y el apartado «Preferencias» en el perfil de Clerk. Ahí cada usuario ve y cambia solo su propia preferencia.
 2. **Alerta diaria por correo.**
    - Cada día a las 8:00 a. m., hora de la Ciudad de México, enviar «Stock bajo mínimo: N artículo(s)» con los artículos bajo mínimo; N cuenta artículos distintos.
    - Se envía con Resend gratuito y plantilla de `react-email`.
@@ -52,7 +52,7 @@ La fase se divide en cuatro entregas. Cada una se integra a `feat/fase-9` con su
   - La bandeja de salidas pendientes.
   - El listado de entradas.
 - `escrituraDeSistema()` en [`db.ts`](../../src/lib/db.ts) ya sirve de puerta para un proceso sin usuario. La fase solo le agrega dos orígenes.
-- La bitácora ya registra la fila completa de `Usuario` antes y después de cada cambio, y se queda así. La preferencia aparece ahí y solo ahí fuera de «Mi cuenta» (§2 del contrato).
+- La bitácora ya registra la fila completa de `Usuario` antes y después de cada cambio, y se queda así. La preferencia aparece ahí y solo ahí fuera del apartado «Preferencias» (§2 del contrato).
 - Ya existen los componentes de la interfaz: tablas, tarjetas, `EstadoVacio` y botones. Esta fase los ajusta para celular, en lugar de rehacerlos.
 - `gasosurnet.com` ya está verificado en Resend, y la alerta sale de su subdominio `avisos.gasosurnet.com` (§3.8 del contrato).
 
@@ -66,7 +66,7 @@ La fase se divide en cuatro entregas. Cada una se integra a `feat/fase-9` con su
 ## Criterio de cierre
 
 - La alerta llega solo a los usuarios activos que la pidieron, una vez al día y nunca duplicada, aunque dos corridas coincidan o el proceso caiga entre Resend y la base.
-- `ENVIADO` solo afirma que Resend aceptó el correo; «entregado» lo afirma el webhook. «Mi cuenta» muestra un solo estado sin contradicciones.
+- `ENVIADO` solo afirma que Resend aceptó el correo; «entregado» lo afirma el webhook. El apartado «Preferencias» muestra un solo estado sin contradicciones.
 - Ningún lote queda `PENDIENTE` después de su día, y cada día se evalúa una sola vez.
 - Ningún rebote ni entrega se atribuye a un envío con el que no concuerda.
 - La preferencia de cada usuario solo la ven y la cambian ellos mismos.

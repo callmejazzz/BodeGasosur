@@ -368,7 +368,7 @@ validaciones y ejemplos, está en
 copia del correo sincronizada por webhook, el rol, la bandera `puedeAutorizar` y el enlace
 opcional con una `Persona`.
 
-**Tres roles**, no cinco:
+Tres roles:
 
 | Rol          | Empresas y Estaciones | Resto de tablas      | Movimientos |
 | ------------ | --------------------- | -------------------- | ----------- |
@@ -381,7 +381,13 @@ y los cinco permisos de Salidas. Para `salidas:autorizar`, la puerta común exig
 `puedeAutorizar` vigente. El [contrato de la fase 6](contratos-otros/04-fase-6-salidas.md)
 documenta el avance de esa fase. La fase 7 agregó `traspasos:*`, `devoluciones:*` y
 `ajustes:*` —leer, capturar y confirmar; los de ajustes cubren la hoja de conteo— y
-`movimientos:revertir`, solo del Superadmin.
+`movimientos:revertir`, solo del Superadmin. La fase 9 agregó `cuenta:editar`, de los tres
+roles, para el apartado «Preferencias» del perfil de Clerk.
+
+`alertasCorreo` es la preferencia de la alerta diaria de stock mínimo. Nace apagada y solo
+la cambia el propio usuario, desde el apartado «Preferencias» de su perfil: la guarda de `Usuario` rechaza con `BG712`
+cualquier cambio de otro actor, también del Superadmin
+([contrato de la fase 9 §2](contratos-otros/07-fase-9-acabado.md)).
 
 `puedeAutorizar` es una **bandera del usuario, no un rol**: un Jefe puede tenerla y un
 usuario de Compras puede no tenerla. La lista de facultados cambia —el Lic. Hugo, la Lic.
@@ -434,6 +440,13 @@ inservible justo cuando alguien lo necesitara.
 `EventoWebhook` completa el juego: las entregas de Clerk llegan al menos una vez, así que
 se guarda el identificador de la entrega **antes** de procesarla y en la misma transacción.
 Si ya estaba, no se vuelve a procesar; si la transacción falla, el reintento la recupera.
+
+La alerta diaria de la fase 9 lleva su propio registro, fuera de la bitácora:
+`EvaluacionCorreos` (un día evaluado), `LoteCorreos` (una petición a Resend),
+`RegistroCorreos` (un destinatario) y `EventoCorreo` (lo que avisa el webhook de Resend).
+Solo las escriben los orígenes `resumen-diario` y `resend-webhook`; con la sesión de una
+persona se rechaza la escritura (`BG706`). Nadie borra sus filas, y sus estados solo avanzan
+por las transiciones del [contrato de la fase 9 §3](contratos-otros/07-fase-9-acabado.md).
 
 ## 9. Qué cambió respecto a la demo
 

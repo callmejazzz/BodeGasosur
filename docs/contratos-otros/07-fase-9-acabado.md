@@ -18,9 +18,9 @@ El dominio del remitente, `gasosurnet.com`, ya está verificado en Resend (§3.8
 
 ## 2. Preferencia de alertas por correo
 
-- **Dato.** `Usuario.alertasCorreo`, booleano, `false` por omisión. Un usuario nuevo, sincronizado por el webhook de Clerk, empieza sin alertas. La migración no enciende la preferencia de ningún usuario existente.
-- **Quién la ve y la cambia.** Solo el propio usuario, desde la pantalla «Mi cuenta» (`/cuenta`). Nadie más puede verla ni cambiarla, tampoco el Superadmin:
-  - La ruta no lleva identificador de usuario. Lectura y escritura toman siempre el usuario de la sesión, y cualquier identificador que llegue en el formulario o en la URL se ignora.
+- **Dato.** `Usuario.alertasCorreo`, booleano, `false` por omisión. Un usuario nuevo, dado de alta por el Superadmin o por el arranque, empieza sin alertas. La migración no enciende la preferencia de ningún usuario existente.
+- **Quién la ve y la cambia.** Solo el propio usuario, desde el apartado «Preferencias» de su perfil: el modal de Clerk que se abre con su foto en la barra lateral. Nadie más puede verla ni cambiarla, tampoco el Superadmin:
+  - El apartado no tiene ruta propia ni lleva identificador de usuario. Lectura y escritura toman siempre el usuario de la sesión, y cualquier identificador que llegue en el formulario se ignora.
   - La preferencia no aparece en la administración de usuarios, en su exportación a Excel ni en ninguna otra pantalla o descarga.
   - Las consultas de usuarios seleccionan campos explícitos, nunca la fila completa.
 - **Permiso.** `cuenta:editar`, para los tres roles. Lo exige la Server Action en el servidor, igual que los demás permisos (`accionProtegida`), y la escritura toca solo esa columna de esa fila.
@@ -34,7 +34,7 @@ El dominio del remitente, `gasosurnet.com`, ya está verificado en Resend (§3.8
   - Cada cambio de la preferencia deja un renglón con el propio usuario como actor y `alertasCorreo` en `antes` y `despues`.
   - Cualquier otro cambio a la fila (un cambio de rol, una baja, la sincronización de correo de Clerk) también lleva `alertasCorreo` en `antes` y `despues`, aunque no la toque.
   - La bitácora no tiene pantalla ni descarga en la aplicación; solo la consulta quien tiene acceso directo a la base. Es la **única excepción** a la privacidad de la preferencia.
-- **Qué muestra «Mi cuenta».**
+- **Qué muestra el apartado «Preferencias».**
   - La preferencia.
   - El correo al que llegará la alerta, que es la copia sincronizada desde Clerk.
   - La hora de envío.
@@ -66,7 +66,8 @@ Es la misma regla del reporte de existencias (§3.2 del [contrato de reportes](0
   - Una tabla agrupada por bodega. Cada grupo lleva solo el **nombre** de la bodega, sin su clave (`BDG-…`). Cada renglón lleva clave del artículo, descripción, unidad, existencia, mínimo y faltante (mínimo − existencia).
   - Orden: nombre de bodega, luego clave de artículo. El nombre de bodega es único, así que identifica cada grupo sin la clave.
 - **Tope:** 50 renglones. Si hay más, el correo dice cuántos renglones faltan («y M renglones más») y remite al reporte.
-- **Enlaces:** uno al reporte de existencias con el filtro de bajo mínimo y otro a «Mi cuenta» para desactivar la alerta. Las direcciones se arman con la URL pública de la aplicación.
+- **Enlace:** uno al reporte de existencias con el filtro de bajo mínimo. La dirección se arma con la URL pública de la aplicación.
+- **Cómo desactivarla:** el correo dice que la alerta se desactiva desde el perfil en BodeGasosur, apartado «Preferencias». No lleva enlace para desactivarla, porque el apartado vive en el modal de Clerk y no tiene dirección propia.
 - **Formatos:** cada correo lleva versión HTML y versión de texto. Todo texto que venga de la base se escapa.
 - **Plantilla:** se escribe con `react-email` y puede previsualizarse en local con datos de ejemplo.
 - **Datos:** el correo no incluye importes ni costos.
@@ -203,7 +204,7 @@ Es la misma regla del reporte de existencias (§3.2 del [contrato de reportes](0
     - El regreso a una dirección propia que se había excluido.
   - **Fin de la exclusión:** solo termina cuando el usuario pasa a una dirección no excluida.
   - La preferencia no se toca: solo el propio usuario la cambia (§2).
-  - «Mi cuenta» le explica que su dirección actual está excluida y por qué tipo de evento, sin decir qué cuenta lo recibió.
+  - El apartado «Preferencias» le explica que su dirección actual está excluida y por qué tipo de evento, sin decir qué cuenta lo recibió.
   - Los eventos anómalos no excluyen.
   - Limitación conocida: si alguien quita la dirección de la lista de supresión en el panel de Resend, la exclusión sigue mientras la dirección sea la misma.
 - **Respuesta.** La ruta responde 200 solo después de confirmar la escritura. Si la base falla, responde 500 y Resend reintenta.
@@ -232,7 +233,7 @@ En la base, `seguridad.actor_de_la_escritura` acepta cada origen únicamente par
 
 ### 3.11 Catálogo de estados
 
-Los estados viven en cuatro niveles: el día, la petición a Resend, cada destinatario y cada evento de Resend. Lo que ve el usuario en «Mi cuenta» se calcula a partir de ellos.
+Los estados viven en cuatro niveles: el día, la petición a Resend, cada destinatario y cada evento de Resend. Lo que ve el usuario en el apartado «Preferencias» se calcula a partir de ellos.
 
 **`EvaluacionCorreos.resultado`: el día.** Una fila por fecha; nunca cambia.
 
@@ -303,7 +304,7 @@ El lote también lleva `intentos`, el último intento y `arrendadoHasta`, pero n
 | 4 | Entrega demorada | Rebote `TRANSITORIO` o `INDETERMINADO`, o `email.delivery_delayed` | Por una entrega posterior |
 | 5 | Aceptado por Resend | Ningún evento asociado todavía | Por cualquier evento asociado |
 
-**Lo que ve el usuario en «Mi cuenta».** Un solo estado de su último aviso. La evidencia de Resend tiene prioridad sobre el estado del registro, así que nunca aparece «pendiente» junto a «entregado».
+**Lo que ve el usuario en el apartado «Preferencias».** Un solo estado de su último aviso. La evidencia de Resend tiene prioridad sobre el estado del registro, así que nunca aparece «pendiente» junto a «entregado».
 
 | Se muestra | Cuándo |
 |---|---|
@@ -316,7 +317,7 @@ El lote también lleva `intentos`, el último intento y `arrendadoHasta`, pero n
 | «No se envió» | Registro `FALLIDO` y sin eventos asociados |
 | «Sin confirmar» | Registro `SIN_CONFIRMAR` y sin eventos asociados |
 
-Además del estado, «Mi cuenta» puede mostrar avisos que no son estados de un envío:
+Además del estado, el apartado «Preferencias» puede mostrar avisos que no son estados de un envío:
 
 | Aviso | Cuándo |
 |---|---|
@@ -422,7 +423,7 @@ Las pruebas simulan Resend con un doble que respeta su idempotencia: misma llave
    - En el orden inverso el estado final es el mismo.
    - Repetir cualquiera de las dos conciliaciones no cambia nada.
    - Si la respuesta del lote trae un identificador distinto al que ya dejó el webhook, no se sobrescribe y deja una línea de error.
-8. **`email.delivered` sin `email.sent`.** Un registro `PENDIENTE` queda `ENVIADO` con el identificador del evento, y «Mi cuenta» muestra «Entregado», nunca un envío pendiente.
+8. **`email.delivered` sin `email.sent`.** Un registro `PENDIENTE` queda `ENVIADO` con el identificador del evento, y el apartado «Preferencias» muestra «Entregado», nunca un envío pendiente.
 9. **Fechas anteriores.** Al cerrarlas, sin llamar a Resend:
    - Un lote `PENDIENTE` sin intentos queda `VENCIDO`, con sus integrantes `FALLIDO`.
    - Un lote `PENDIENTE` con intentos queda `SIN_CONFIRMAR`.
@@ -431,12 +432,12 @@ Las pruebas simulan Resend con un doble que respeta su idempotencia: misma llave
 10. **Día evaluado sin bajo mínimo.** A las 8:00 no hay artículos bajo mínimo:
     - Queda la evaluación `SIN_BAJO_MINIMO`, sin lotes ni registros, y no se llama a Resend.
     - A las 8:15 ya hay un artículo bajo mínimo, y la corrida no evalúa otra vez, no reserva y no llama a Resend.
-    - «Mi cuenta» muestra «Hoy no hubo artículos bajo mínimo».
+    - El apartado «Preferencias» muestra «Hoy no hubo artículos bajo mínimo».
     - Al día siguiente, la corrida de las 8:00 sí evalúa y envía.
 11. **Día evaluado sin destinatarios.** A las 8:00 hay artículos bajo mínimo pero nadie con la preferencia encendida:
     - Queda la evaluación `SIN_DESTINATARIOS`, sin lotes, y no se llama a Resend.
     - Un usuario enciende su preferencia a las 8:05, y la corrida de las 8:15 no evalúa otra vez ni le reserva.
-    - «Mi cuenta» le muestra «Empieza mañana».
+    - El apartado «Preferencias» le muestra «Empieza mañana».
     - Al día siguiente queda incluido.
 12. Un rechazo definitivo de un lote deja a sus integrantes `FALLIDO` con el motivo, no pisa un `ENVIADO` y no impide enviar los demás lotes.
 13. La ruta programada responde 401 sin secreto o con uno incorrecto, y en ese caso no lee la base.
@@ -468,7 +469,7 @@ Las pruebas simulan Resend con un doble que respeta su idempotencia: misma llave
     - La supresión y la queja excluyen igual que el rebote duro.
     - Un rebote anómalo no excluye ninguna dirección.
 18. **Privacidad de la preferencia en la aplicación:**
-    - «Mi cuenta» devuelve solo los datos de la sesión.
+    - El apartado «Preferencias» devuelve solo los datos de la sesión.
     - La acción ignora cualquier identificador ajeno que reciba.
     - La administración de usuarios y su Excel no contienen la preferencia.
 19. **Guarda de `Usuario` en la base**, con actor verificado:
@@ -485,10 +486,35 @@ Las pruebas simulan Resend con un doble que respeta su idempotencia: misma llave
     - No puede sacar de `ENVIADO` o de `ACEPTADO`, ni reemplazar un identificador de Resend.
 21. Las cifras de cada tarjeta del tablero coinciden con su pantalla de origen. Superadmin, Compras, un Jefe con `puedeAutorizar` y uno sin ella ven las mismas cifras, también en salidas por autorizar y por retirar. El gasto devuelve como máximo 5 estaciones en el orden de §4, y una tarjeta sin permiso no se consulta.
 22. La plantilla produce HTML y texto con el asunto «Stock bajo mínimo: 1 artículo» cuando N es 1 y «… N artículos» en otro caso. Agrupa por nombre de bodega sin mostrar su clave, muestra la clave del artículo, respeta el tope de 50 renglones y escapa el texto de los artículos.
-23. Las pantallas de operación, reportes y «Mi cuenta» se usan sin desplazamiento horizontal de página a 375 px, y toda acción de §6.3 pide confirmación.
+23. Las pantallas de operación y reportes, y el apartado «Preferencias» del perfil, se usan sin desplazamiento horizontal de página a 375 px, y toda acción de §6.3 pide confirmación.
 
 El cierre funcional exige las pruebas 1 a 22 contra PostgreSQL real, siguiendo el patrón de [`reportes.test.ts`](../../src/lib/reportes/reportes.test.ts), y la revisión 23 en el navegador. En Sevalla, el proceso cron se ejecuta a mano una vez antes de dejarlo programado, y el webhook de Resend se prueba con un evento de ejemplo desde su panel.
 
 ## 9. Decisiones tomadas al construir
 
-Se registrarán al construir la fase.
+### Entrega 1: migración y preferencia privada
+
+- **Migración.** `20261107120000_correo_y_preferencia`, con el SQL a mano en [`997-correo-y-preferencia.sql`](../../prisma/sql/despues/997-correo-y-preferencia.sql). El índice de correo de `Usuario` se reemplaza creando primero el nuevo (`lower(btrim(correo))`) y después borrando el anterior, así que la unicidad nunca falta.
+- **La preferencia se oculta por decisión, no por ser un dato sensible.** Mostrarla mañana en una pantalla o una exportación es un cambio aceptable. Lo que no cambia es que nadie modifique la de otro, por ninguna puerta: eso lo cierra `BG712` en la base.
+- **Personas con sesión y tablas de correo.** Ninguna persona con sesión escribe en `EvaluacionCorreos`, `LoteCorreos`, `RegistroCorreos` ni `EventoCorreo`, tampoco el Superadmin: la escritura falla con `BG706`, aunque además declare un origen. Solo escriben sus dos orígenes de sistema y el dueño de la base.
+- **Qué hace cada origen:**
+
+  | Origen | Inserta en | Actualiza |
+  |---|---|---|
+  | `resumen-diario` | `EvaluacionCorreos`, `LoteCorreos`, `RegistroCorreos` | `LoteCorreos`, `RegistroCorreos` |
+  | `resend-webhook` | `EventoCorreo` | `LoteCorreos`, `RegistroCorreos` |
+
+- **Candado del día.** `candado_correos_del_dia(fecha)` es el `pg_advisory_xact_lock` del paso 1 de §3.4. Lo llama la reserva como primera sentencia, y las altas de lotes, registros y evaluaciones lo vuelven a tomar.
+- **Integrantes cerrados.** Un lote o un registro no se inserta si su fecha ya tiene evaluación. La evaluación debe cuadrar con lo reservado: tantos lotes y destinatarios como filas existan para su fecha, y `lotes = ⌈destinatarios / 100⌉` en `CON_ENVIO`.
+- **Restricciones en la base:**
+  - `ENVIADO` si y solo si hay identificador de Resend.
+  - La llave de un lote es `resumen-<fecha>-<numero>`.
+  - `RegistroCorreos (loteId, fecha)` apunta a `LoteCorreos (id, fecha)`, así que la fecha del registro es la de su lote.
+  - Lotes y registros nacen `PENDIENTE`. Los intentos suben de uno en uno, y solo un lote `PENDIENTE` o `ACEPTADO` se vuelve a intentar.
+  - Un evento está asociado a un registro o lleva una anomalía, nunca las dos cosas ni ninguna.
+- **Las transiciones obligan también al dueño.** El dueño puede escribir en las tablas, pero no saltarse las transiciones ni la inmutabilidad.
+- **Tipo de evento como texto.** Un tipo nuevo de Resend se guarda en lugar de fallar, para que no provoque reintentos.
+- **«Preferencias» en el perfil, sin pantalla propia.** La preferencia vive en un apartado del modal de perfil de Clerk (`UserButton.UserProfilePage`), junto a «Perfil» y «Seguridad», en lugar de una pantalla `/cuenta` con su enlace en la barra lateral. Sin dirección propia, el correo ya no enlaza a la preferencia (§3.3). El layout manda la lectura como promesa y el apartado la resuelve al abrirse; al guardar, la acción refresca el layout para que el modal muestre el valor nuevo.
+- **El apartado en esta entrega:** muestra la preferencia, el correo y el horario. El último aviso, su estado y los avisos de §3.11 llegan en la entrega 2, junto con la reserva y el webhook que los producen.
+- **La acción recibe una decisión explícita** (`activar` o `desactivar`), no una casilla, para que un campo ausente no apague la alerta. Solo lee ese campo, y el usuario sale siempre de la sesión.
+- **Correo de los usuarios nuevos.** El §2 decía que el webhook de Clerk sincroniza usuarios nuevos, pero el webhook solo actualiza correo y bajas. Las altas las hacen el Superadmin y el arranque. No cambia nada, porque la preferencia nace apagada.
