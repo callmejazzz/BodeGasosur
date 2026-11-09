@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Navegacion } from "@/components/navegacion";
 import { RefrescarAlEnfocar } from "@/components/refrescar-al-enfocar";
 import { ControlesSesion } from "@/components/sesion";
+import { consultarMiCuenta } from "@/lib/cuenta/consultas";
 import { registrarAccesoDenegado, sesionActual } from "@/lib/db";
 import { usuarioTienePermiso } from "@/lib/permisos";
 
@@ -30,6 +31,13 @@ export default async function LayoutSistema({ children }: { children: ReactNode 
     await registrarAccesoDenegado();
     redirect("/acceso-denegado");
   }
+  
+  const miCuenta = usuarioTienePermiso(sesion.usuario, "cuenta:editar")
+    ? consultarMiCuenta().catch((error: unknown) => {
+        console.error("Fallo al leer las preferencias:", error);
+        return null;
+      })
+    : null;
 
   return (
     <>
@@ -48,7 +56,7 @@ export default async function LayoutSistema({ children }: { children: ReactNode 
           reportes: usuarioTienePermiso(sesion.usuario, "reportes:leer"),
           usuarios: usuarioTienePermiso(sesion.usuario, "usuarios:administrar"),
         }}
-        sesion={<ControlesSesion rol={sesion.usuario.rol} />}
+        sesion={<ControlesSesion rol={sesion.usuario.rol} miCuenta={miCuenta} />}
       />
       <main className="min-w-0 flex-1 px-8 py-7">{children}</main>
     </>
