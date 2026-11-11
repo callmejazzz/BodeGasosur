@@ -50,7 +50,8 @@ function base(f: FiltrosExistencias) {
       FROM "CapaCosto" WHERE "cantidadRestante" > 0 GROUP BY "bodegaId", "articuloId"
     ),
     cruce AS (
-      SELECT b.id::text || ':' || a.id::text AS id, b.id AS "bodegaId", b.clave AS "claveBodega", b.clave || ' · ' || b.nombre AS bodega, b.activa AS "bodegaActiva",
+      SELECT b.id::text || ':' || a.id::text AS id, b.id AS "bodegaId", b.clave AS "claveBodega", b.clave || ' · ' || b.nombre AS bodega,
+             b.nombre AS "nombreBodega", b.activa AS "bodegaActiva",
              a.id AS "articuloId", a.clave AS "claveArticulo", a.descripcion, u.clave AS unidad, a.activo AS "articuloActivo",
              coalesce(e.cantidad, 0) AS existencia, a."stockMinimo" AS minimo, coalesce(e.cantidad, 0) - a."stockMinimo" AS diferencia,
              (a.activo AND b.activa AND coalesce(e.cantidad, 0) < a."stockMinimo") AS "bajoMinimo",
@@ -76,6 +77,47 @@ const ORDEN = sql`"bajoMinimo" DESC, "claveBodega", "claveArticulo", id`;
 
 export function filasExistencias(db: Db, f: FiltrosExistencias, pedida = 1, tamano = POR_PAGINA) {
   return paginaDe<FilaExistencia>(db, consultaFilas(f), ORDEN, pedida, tamano);
+}
+
+export type RenglonBajoMinimo = {
+  bodega: string;
+  claveArticulo: string;
+  descripcion: string;
+  unidad: string;
+  existencia: number;
+  minimo: number;
+  faltante: number;
+};
+
+/** N: artículos distintos bajo mínimo; un artículo que falta en dos bodegas cuenta una vez. */
+export type ExistenciasBajoMinimo = { renglones: RenglonBajoMinimo[]; totalRenglones: number; articulos: number };
+
+type FilaBajoMinimo = { totalRenglones: number; articulos: number } & (RenglonBajoMinimo | { claveArticulo: null });
+
+/**
+ * La lista de la alerta diaria (contrato fase 9, §3.1): la regla del reporte,
+ * en una sola sentencia para que renglones, total y N salgan de la misma
+ * instantánea. El tope acota los renglones, no el total ni N; con cero
+ * devuelve solo los conteos.
+ */
+export async function existenciasBajoMinimo(db: Db, tope: number): Promise<ExistenciasBajoMinimo> {
+  if (!Number.isSafeInteger(tope) || tope < 0) throw new RangeError("El tope de renglones debe ser un entero no negativo.");
+  // Los conteos no dependen de que haya renglones: siempre vuelve al menos su fila.
+  const filas = await db.$queryRaw<FilaBajoMinimo[]>`${base({ bodegaId: "", busqueda: "", bajoMinimo: true })},
+    conteo AS (SELECT count(*)::int AS "totalRenglones", count(DISTINCT "articuloId")::int AS articulos FROM filas)
+    SELECT c."totalRenglones", c.articulos, r.* FROM conteo c
+    LEFT JOIN LATERAL (
+      SELECT "nombreBodega" AS bodega, "claveArticulo", descripcion, unidad, existencia, minimo, minimo - existencia AS faltante
+      FROM filas ORDER BY "nombreBodega", "claveArticulo" LIMIT ${tope}
+    ) r ON true
+    ORDER BY r.bodega, r."claveArticulo"`;
+  const [{ totalRenglones, articulos }] = filas;
+  const renglones = filas.flatMap((f) =>
+    f.claveArticulo === null
+      ? []
+      : [{ bodega: f.bodega, claveArticulo: f.claveArticulo, descripcion: f.descripcion, unidad: f.unidad, existencia: f.existencia, minimo: f.minimo, faltante: f.faltante }],
+  );
+  return { renglones, totalRenglones, articulos };
 }
 
 export async function totalExistencias(db: Db, f: FiltrosExistencias): Promise<TotalExistencias> {
