@@ -5,8 +5,10 @@ import { Prisma, PrismaClient, type Rol } from "@prisma/client";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
+import { leerDestinatarios, leerExistenciasBajoMinimo, type Destinatario } from "@/lib/correo/consultas";
 import { detalleDePostgres, esErrorDePrisma } from "@/lib/movimientos/errores";
 import { usuarioTienePermiso, type Permiso, type SujetoDePermisos } from "@/lib/permisos";
+import type { ExistenciasBajoMinimo } from "@/lib/reportes/existencias";
 
 // Prisma 7 exige un driver adapter explícito. La sesión va en UTC aunque la
 // base muestre la hora de México: el adapter lee y escribe timestamptz
@@ -341,11 +343,14 @@ export type ClienteWebhook = Pick<Prisma.TransactionClient, "eventoWebhook" | "u
 
 /**
  * La alerta diaria (contrato fase 9, §3.10). La base solo le deja escribir en
- * la evaluación, los lotes y los registros; los usuarios y eventos, los lee.
+ * la evaluación, los lotes y los registros. Existencias y usuarios los lee
+ * con funciones acotadas, cuyo SQL vive en lib/correo/consultas.ts.
  */
-export type ClienteResumenDiario = Pick<Prisma.TransactionClient, "evaluacionCorreos" | "loteCorreos" | "registroCorreos" | "eventoCorreo" | "usuario"> & {
+export type ClienteResumenDiario = Pick<Prisma.TransactionClient, "evaluacionCorreos" | "loteCorreos" | "registroCorreos"> & {
   /** Primera sentencia de la reserva (§3.4, paso 1). */
   candadoDelDia(fecha: Date): Promise<void>;
+  leerExistenciasBajoMinimo(tope: number): Promise<ExistenciasBajoMinimo>;
+  leerDestinatarios(): Promise<Destinatario[]>;
 };
 
 /** El webhook de Resend: inserta eventos y concilia lotes y registros. */
@@ -372,11 +377,11 @@ function clienteDeSistema(origen: OrigenSistema, tx: Prisma.TransactionClient): 
         evaluacionCorreos: tx.evaluacionCorreos,
         loteCorreos: tx.loteCorreos,
         registroCorreos: tx.registroCorreos,
-        eventoCorreo: tx.eventoCorreo,
-        usuario: tx.usuario,
         async candadoDelDia(fecha) {
           await tx.$executeRaw`SELECT candado_correos_del_dia(${fecha}::date)`;
         },
+        leerExistenciasBajoMinimo: (tope) => leerExistenciasBajoMinimo(tx, tope),
+        leerDestinatarios: () => leerDestinatarios(tx),
       } satisfies ClienteResumenDiario;
     case "resend-webhook":
       return { eventoCorreo: tx.eventoCorreo, loteCorreos: tx.loteCorreos, registroCorreos: tx.registroCorreos } satisfies ClienteResendWebhook;
@@ -394,15 +399,19 @@ function clienteDeSistema(origen: OrigenSistema, tx: Prisma.TransactionClient): 
  * Todo el callback corre dentro de una sola transacción. Es deliberado y lo
  * exige el diseño de `EventoWebhook`: la entrega se registra, el cambio se
  * aplica y se marca como procesada, o no ocurre nada de eso. A medias no.
+ *
+ * `opciones` fija el aislamiento y los tiempos cuando el origen los necesita:
+ * la reserva del resumen diario exige READ COMMITTED (contrato fase 9, §3.4).
  */
 export async function escrituraDeSistema<O extends OrigenSistema, T>(
   origen: O,
   fn: (db: ClientesDeSistema[O]) => Promise<T>,
+  opciones?: { isolationLevel?: Prisma.TransactionIsolationLevel; timeout?: number; maxWait?: number },
 ): Promise<T> {
   return prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT set_config('app.origen', ${origen}, true)`;
     return fn(clienteDeSistema(origen, tx) as ClientesDeSistema[O]);
-  });
+  }, opciones);
 }
 
 /**

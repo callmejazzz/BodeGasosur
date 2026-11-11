@@ -325,9 +325,10 @@ describe("las escrituras sin sesión de usuario", () => {
     });
     await expect(prisma.registroCorreos.findUniqueOrThrow({ where: { id: registro.id } })).resolves.toMatchObject({ estado: "ENVIADO" });
 
-    await expect(
-      escrituraDeSistema("resumen-diario", (db) => db.usuario.update({ where: { id: u.id }, data: { alertasCorreo: true } })),
-    ).rejects.toThrow(/BG706|sin actor verificado/);
+    // El resumen ya no recibe el modelo de usuarios: los lee con leerDestinatarios().
+    // Que la base rechace escribirlos con su origen lo prueba correo-y-preferencia.test.ts.
+    await expect(escrituraDeSistema("resumen-diario", async (db) => "usuario" in db)).resolves.toBe(false);
+    await expect(escrituraDeSistema("resumen-diario", (db) => db.leerDestinatarios())).resolves.toEqual(expect.any(Array));
   });
 
   it("el acceso denegado se registra con la identidad del token, y el de un usuario activo no", async () => {
