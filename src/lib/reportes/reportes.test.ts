@@ -23,7 +23,7 @@ import { leerFiltrosSemanal, semanaDe, viernesDeCorte } from "./filtros";
 
 vi.mock("server-only", () => ({}));
 const { filasSemanal, totalesPorArticulo, totalSemanal } = await import("./semanal");
-const { filasExistencias, totalExistencias } = await import("./existencias");
+const { existenciasBajoMinimo, filasExistencias, totalExistencias } = await import("./existencias");
 const { filasKardex, resumenKardex } = await import("./kardex");
 const { gastoPorArticulo, gastoPorEstacion, totalGasto } = await import("./gasto");
 const { filasFrecuencia } = await import("./frecuencia");
@@ -355,6 +355,43 @@ describe("existencias por bodega y mínimo", () => {
     expect(filas).toEqual([expect.objectContaining({ articuloId: bajo, bodegaActiva: false, existencia: 1, bajoMinimo: false })]);
     const solo = await existencias(baja, sufijo, true);
     expect(solo.filas).toEqual([]);
+  });
+
+  it("la lista de la alerta diaria es la del reporte filtrado, y N cuenta artículos distintos (fase 9, prueba 1)", async () => {
+    const reporte = await leer((db) => filasExistencias(db, { bodegaId: "", busqueda: "", bajoMinimo: true }, 1, 1_000_000));
+    const alerta = await leer((db) => existenciasBajoMinimo(db, 1_000_000));
+    const llave = (r: { claveArticulo: string; existencia: number; minimo: number }) => `${r.claveArticulo}|${r.existencia}|${r.minimo}`;
+    expect(alerta.renglones.map(llave).sort()).toEqual(reporte.filas.map(llave).sort());
+    expect(alerta.totalRenglones).toBe(reporte.filas.length);
+    expect(alerta.articulos).toBe(new Set(reporte.filas.map((f) => f.articuloId)).size);
+
+    // Falta en las dos bodegas de la prueba: dos renglones con solo el nombre de la bodega y un artículo en N.
+    // Las demás bodegas activas de la base también lo tienen en cero.
+    const claves = Object.fromEntries(
+      (await prisma.articulo.findMany({ where: { id: { in: [bajo, cero, inactivo] } }, select: { id: true, clave: true } })).map((a) => [a.id, a.clave]),
+    );
+    const bodegas = await prisma.bodega.findMany({ where: { id: { in: [e.bodegaId, e.otraBodegaId, baja] } }, select: { id: true, nombre: true } });
+    const nombre = (id: string) => bodegas.find((b) => b.id === id)!.nombre;
+    const activas = [nombre(e.bodegaId), nombre(e.otraBodegaId)];
+    expect(alerta.renglones.filter((r) => r.claveArticulo === claves[bajo] && activas.includes(r.bodega))).toEqual([
+      { bodega: nombre(e.bodegaId), claveArticulo: claves[bajo], descripcion: `Mínimo cinco ${sufijo}`, unidad: expect.any(String), existencia: 2, minimo: 5, faltante: 3 },
+      { bodega: nombre(e.otraBodegaId), claveArticulo: claves[bajo], descripcion: `Mínimo cinco ${sufijo}`, unidad: expect.any(String), existencia: 0, minimo: 5, faltante: 5 },
+    ].sort((a, b) => (a.bodega < b.bodega ? -1 : 1)));
+    // Mínimo cero, artículo inactivo y bodega inactiva no aparecen.
+    expect(alerta.renglones.some((r) => r.claveArticulo === claves[cero] || r.claveArticulo === claves[inactivo] || r.bodega === nombre(baja))).toBe(false);
+
+    // El tope acota los renglones, no el total ni N; con cero quedan solo los conteos.
+    expect(alerta.totalRenglones).toBeGreaterThan(1);
+    const uno = await leer((db) => existenciasBajoMinimo(db, 1));
+    expect(uno).toEqual({ renglones: [alerta.renglones[0]], totalRenglones: alerta.totalRenglones, articulos: alerta.articulos });
+    const soloConteos = await leer((db) => existenciasBajoMinimo(db, 0));
+    expect(soloConteos).toEqual({ renglones: [], totalRenglones: alerta.totalRenglones, articulos: alerta.articulos });
+  });
+
+  it("el tope de la alerta es un entero no negativo", async () => {
+    for (const tope of [-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      await expect(leer((db) => existenciasBajoMinimo(db, tope)), String(tope)).rejects.toThrow(RangeError);
+    }
   });
 
   it("el total suma el valor conocido y cuenta lo bajo mínimo", async () => {
