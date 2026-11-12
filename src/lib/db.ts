@@ -5,29 +5,30 @@ import { Prisma, PrismaClient, type Rol } from "@prisma/client";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
-import { leerDestinatarios, leerExistenciasBajoMinimo, type Destinatario } from "@/lib/correo/consultas";
+import {
+  arrendarLote,
+  bloquearLote,
+  leerDestinatarios,
+  leerExistenciasBajoMinimo,
+  type Destinatario,
+  type LoteArrendado,
+  type LoteBloqueado,
+} from "@/lib/correo/consultas";
+
+export type { LoteArrendado, LoteBloqueado } from "@/lib/correo/consultas";
 import { detalleDePostgres, esErrorDePrisma } from "@/lib/movimientos/errores";
 import { usuarioTienePermiso, type Permiso, type SujetoDePermisos } from "@/lib/permisos";
 import type { ExistenciasBajoMinimo } from "@/lib/reportes/existencias";
 
-// Prisma 7 exige un driver adapter explícito. La sesión va en UTC aunque la
-// base muestre la hora de México: el adapter lee y escribe timestamptz
-// suponiendo UTC, y en otra zona movería cada instante (prisma/comun.ts igual).
-// El rol de la app también lleva UTC, porque Supavisor descarta estas options.
 const createPrismaClient = () =>
   new PrismaClient({
     adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL, options: "-c TimeZone=UTC" }),
   });
 
-// En desarrollo Next.js recarga los módulos en caliente; sin este singleton se
-// abriría una conexión nueva en cada recarga hasta agotar el pool de PostgreSQL.
 const globalForPrisma = globalThis as unknown as {
   prisma?: ReturnType<typeof createPrismaClient>;
 };
 
-// Deliberadamente SIN export (01 §4.1). La capa de aplicación no puede tomar
-// el cliente: solo `consultar()` para leer y `accionProtegida()` para escribir.
-// No es una regla que haya que recordar — es que no hay a qué llamarle.
 const prisma = globalForPrisma.prisma ?? createPrismaClient();
 
 if (process.env.NODE_ENV !== "production") {
@@ -42,30 +43,11 @@ export type UsuarioSesion = {
   puedeAutorizar: boolean;
 };
 
-/**
- * Tres estados, no dos. `null` mezclaría a quien no inició sesión con quien sí
- * la tiene en Clerk pero no tiene acceso aquí, y son casos distintos: al
- * primero se le manda a entrar, al segundo se le explica y se le registra.
- *
- * `usuarioId` distingue además las dos formas de no tener acceso: nunca te
- * dieron de alta (nulo) o te desactivaron (el id de tu fila). `EventoAcceso`
- * espera justo esa distinción.
- */
 export type Sesion =
   | { estado: "sin-sesion" }
   | { estado: "sin-acceso"; clerkUserId: string; usuarioId: string | null }
   | { estado: "activa"; usuario: UsuarioSesion };
 
-/**
- * Quién pregunta y qué puede, leído de PostgreSQL en cada petición.
- *
- * El `cache()` de React memoriza por petición: el tablero hace once consultas
- * y todas comparten una sola lectura de `Usuario`, en vez de arrastrar once.
- *
- * No registra nada a propósito. Si escribiera, reventaría al ser llamada desde
- * `consultar()`, cuya transacción es de solo lectura. El registro del acceso
- * denegado vive en el layout, que es quien decide a dónde mandar a la persona.
- */
 export const sesionActual = cache(async (): Promise<Sesion> => {
   const { userId } = await auth();
   if (!userId) return { estado: "sin-sesion" };
@@ -93,11 +75,6 @@ export class SinAcceso extends Error {
   }
 }
 
-/**
- * La base no pudo verificar el token de identidad: firma, emisor, llave sin
- * cargar o token ya usado. No es una negativa de permiso; se registra y la
- * pantalla muestra un error genérico.
- */
 export class IdentidadNoVerificable extends Error {
   constructor(motivo: string, opciones?: ErrorOptions) {
     super(`No se pudo verificar la identidad: ${motivo}`, opciones);
@@ -167,16 +144,6 @@ function rechazoDeIdentidad(error: unknown): Error | null {
   return new IdentidadNoVerificable(detalle.mensaje, { cause: error });
 }
 
-/**
- * La sesión se leyó antes de abrir la transacción. Antes de confirmar se
- * relee el usuario bajo FOR SHARE: una revocación ya confirmada revierte la
- * acción entera, y una posterior espera a este commit.
- *
- * Va al final y no al principio para no sostener el candado mientras la
- * acción toma los suyos: la administración de usuarios bloquea a todos los
- * superadmins, y dos superadmins con su propia fila tomada se esperarían
- * entre sí.
- */
 async function exigirVigente(tx: Prisma.TransactionClient, id: string, permiso: Permiso): Promise<void> {
   const [usuario] = await tx.$queryRaw<Vigencia[]>`
     SELECT rol, "puedeAutorizar", activo FROM "Usuario" WHERE id = ${id}::uuid FOR SHARE`;
@@ -184,39 +151,16 @@ async function exigirVigente(tx: Prisma.TransactionClient, id: string, permiso: 
   if (error) throw error;
 }
 
-/**
- * Solo la sesión y el permiso, sin abrir transacción. Para el trabajo previo
- * que no cabe dentro de la puerta —una petición HTTP a Clerk—: se comprueba
- * antes de procesar nada, y accionProtegida() lo vuelve a exigir al escribir.
- */
 export async function comprobarPermiso(permiso: Permiso): Promise<UsuarioSesion> {
   return exigir(permiso);
 }
 
 // ──────────────────── Las dos puertas de la aplicación ───────────────────────
 
-/**
- * Leer. El callback corre dentro de una transacción `REPEATABLE READ READ ONLY`.
- *
- * Las dos mitades hacen falta y hacen cosas distintas:
- *
- *   · READ ONLY hace que PostgreSQL rechace cualquier escritura. Sin él esto
- *     sería una convención: `Prisma.TransactionClient` tiene `create`, y
- *     TypeScript no lo impediría.
- *   · REPEATABLE READ da la instantánea consistente. En READ COMMITTED —el
- *     modo por omisión— cada sentencia toma su propia instantánea, así que
- *     dos consultas de la misma pantalla pueden ver estados distintos.
- *
- * Una transacción de solo lectura no puede tener conflictos de escritura, así
- * que REPEATABLE READ no introduce aquí el fallo de serialización que suele
- * acompañarlo.
- */
 export async function consultar<T>(
   permiso: Permiso,
   fn: (db: Prisma.TransactionClient, usuario: UsuarioSesion) => Promise<T>,
 ): Promise<T> {
-  // Next renderiza layout y página en paralelo: sin sesión, el layout ya
-  // redirige, y un SinAcceso lanzado aquí solo quedaría como error en los logs.
   if ((await sesionActual()).estado === "sin-sesion") redirect("/sign-in");
   return consultarDesdeAccion(permiso, fn);
 }
@@ -239,11 +183,6 @@ export function usuarioParaDescarga(permiso: Permiso): Promise<UsuarioSesion> {
   return exigir(permiso);
 }
 
-/**
- * `consultar()` para una descarga de Excel: la misma instantánea de solo
- * lectura, con más tiempo para leer la tabla completa por lotes. Sin sesión
- * lanza SinAcceso; la ruta responde con un error, no con una redirección.
- */
 export async function consultarParaDescarga<T>(
   permiso: Permiso,
   fn: (db: Prisma.TransactionClient, usuario: UsuarioSesion) => Promise<T>,
@@ -264,25 +203,7 @@ async function leer<T>(permiso: Permiso, fn: (db: Prisma.TransactionClient, usua
   );
 }
 
-/**
- * Escribir. Único camino de escritura de la capa de aplicación (01 §4.1).
- *
- * Converge lo que de otro modo habría que recordar por separado: lee la
- * sesión, verifica el permiso, pide a Clerk un token para la base, abre la
- * transacción y lo liga con seguridad.fijar_actor(), que verifica la firma y
- * de ahí toma la bitácora al actor. Antes de confirmar vuelve a exigir el
- * permiso dentro de la transacción (exigirVigente). `fn` no debe tener
- * efectos fuera de la transacción: si el permiso ya no está, todo se revierte.
- *
- * El permiso puede ser fijo o derivarse de los argumentos: `guardarCatalogo`
- * necesita lo segundo, porque escribir Empresa no exige lo mismo que escribir
- * Bodega y eso lo dice la definición del catálogo, no la acción.
- */
 export function accionProtegida<Args extends unknown[], T>(
-  // El resolvedor recibe los argumentos como tupla, no como lista, y va
-  // envuelto en `NoInfer`: así los tipos salen solo de `fn`. Sin las dos cosas,
-  // un resolvedor que mira el primer argumento haría creer a TypeScript que la
-  // acción entera recibe uno.
   permiso: Permiso | ((args: NoInfer<Args>) => Permiso),
   fn: (tx: Prisma.TransactionClient, usuario: UsuarioSesion, ...args: Args) => Promise<T>,
 ): (...args: Args) => Promise<T> {
@@ -316,22 +237,8 @@ export function accionProtegida<Args extends unknown[], T>(
 
 // ─────────────────── La tercera puerta: procesos sin sesión ──────────────────
 
-/**
- * Quién escribe cuando no hay nadie. El tipo es cerrado a propósito: un origen
- * nuevo se declara aquí, no se inventa en la línea que lo usa, y así la
- * bitácora nunca guarda una etiqueta que no signifique nada.
- */
 type OrigenSistema = "clerk-webhook" | "resumen-diario" | "resend-webhook";
 
-/**
- * Un cliente recortado, no el completo.
- *
- * 01 §4.1 dice que el webhook «solo puede escribir tres tablas». Escrito como
- * comentario sería una convención; escrito como tipo, tocar `Movimiento` desde
- * el webhook no compila. Es el mismo criterio que el READ ONLY de consultar().
- * Los eventos de sesión se registran por su función en la base: el usuario de
- * ejecución ya no inserta en `EventoAcceso`.
- */
 export type ClienteWebhook = Pick<Prisma.TransactionClient, "eventoWebhook" | "usuario"> & {
   registrarEventoDeSesion(evento: {
     clerkUserId: string;
@@ -341,20 +248,18 @@ export type ClienteWebhook = Pick<Prisma.TransactionClient, "eventoWebhook" | "u
   }): Promise<void>;
 };
 
-/**
- * La alerta diaria (contrato fase 9, §3.10). La base solo le deja escribir en
- * la evaluación, los lotes y los registros. Existencias y usuarios los lee
- * con funciones acotadas, cuyo SQL vive en lib/correo/consultas.ts.
- */
 export type ClienteResumenDiario = Pick<Prisma.TransactionClient, "evaluacionCorreos" | "loteCorreos" | "registroCorreos"> & {
-  /** Primera sentencia de la reserva (§3.4, paso 1). */
   candadoDelDia(fecha: Date): Promise<void>;
   leerExistenciasBajoMinimo(tope: number): Promise<ExistenciasBajoMinimo>;
   leerDestinatarios(): Promise<Destinatario[]>;
+  arrendarLote(loteId: string, fecha: Date): Promise<LoteArrendado | null>;
+  bloquearLote(loteId: string): Promise<LoteBloqueado | null>;
 };
 
 /** El webhook de Resend: inserta eventos y concilia lotes y registros. */
-export type ClienteResendWebhook = Pick<Prisma.TransactionClient, "eventoCorreo" | "loteCorreos" | "registroCorreos">;
+export type ClienteResendWebhook = Pick<Prisma.TransactionClient, "eventoCorreo" | "loteCorreos" | "registroCorreos"> & {
+  bloquearLote(loteId: string): Promise<LoteBloqueado | null>;
+};
 
 type ClientesDeSistema = {
   "clerk-webhook": ClienteWebhook;
@@ -382,27 +287,19 @@ function clienteDeSistema(origen: OrigenSistema, tx: Prisma.TransactionClient): 
         },
         leerExistenciasBajoMinimo: (tope) => leerExistenciasBajoMinimo(tx, tope),
         leerDestinatarios: () => leerDestinatarios(tx),
+        arrendarLote: (loteId, fecha) => arrendarLote(tx, loteId, fecha),
+        bloquearLote: (loteId) => bloquearLote(tx, loteId),
       } satisfies ClienteResumenDiario;
     case "resend-webhook":
-      return { eventoCorreo: tx.eventoCorreo, loteCorreos: tx.loteCorreos, registroCorreos: tx.registroCorreos } satisfies ClienteResendWebhook;
+      return {
+        eventoCorreo: tx.eventoCorreo,
+        loteCorreos: tx.loteCorreos,
+        registroCorreos: tx.registroCorreos,
+        bloquearLote: (loteId) => bloquearLote(tx, loteId),
+      } satisfies ClienteResendWebhook;
   }
 }
 
-/**
- * La segunda puerta de 01 §4.1: llega de fuera, sin sesión, y escribe.
- *
- * No puede pasar por `accionProtegida` porque no hay usuario a quien pedirle
- * permiso. Lo que sí hace es declararse: fija `app.origen` en vez de
- * `app.usuario_id`, así que el trigger de bitácora anota quién escribió y
- * nada acaba como «escritura-directa».
- *
- * Todo el callback corre dentro de una sola transacción. Es deliberado y lo
- * exige el diseño de `EventoWebhook`: la entrega se registra, el cambio se
- * aplica y se marca como procesada, o no ocurre nada de eso. A medias no.
- *
- * `opciones` fija el aislamiento y los tiempos cuando el origen los necesita:
- * la reserva del resumen diario exige READ COMMITTED (contrato fase 9, §3.4).
- */
 export async function escrituraDeSistema<O extends OrigenSistema, T>(
   origen: O,
   fn: (db: ClientesDeSistema[O]) => Promise<T>,
@@ -410,22 +307,15 @@ export async function escrituraDeSistema<O extends OrigenSistema, T>(
 ): Promise<T> {
   return prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT set_config('app.origen', ${origen}, true)`;
+    // Con tope de tiempo, ninguna sentencia ni espera de candado lo rebasa dentro de la base
+    if (opciones?.timeout) {
+      const tope = `${opciones.timeout}ms`;
+      await tx.$executeRaw`SELECT set_config('statement_timeout', ${tope}, true), set_config('lock_timeout', ${tope}, true)`;
+    }
     return fn(clienteDeSistema(origen, tx) as ClientesDeSistema[O]);
   }, opciones);
 }
 
-/**
- * Deja constancia de que alguien con sesión válida en Clerk tocó la puerta sin
- * poder entrar. Vive aquí y no en el layout porque escribe, y el cliente ya no
- * sale de este módulo.
- *
- * Es la única escritura de usuario que no pasa por `accionProtegida`, y no
- * puede pasar: la dispara quien no tiene permiso de nada. La identidad sale
- * del token de Clerk, y la base solo registra si el acceso de verdad está
- * denegado —sin Usuario, o con uno inactivo—, un renglón cada quince minutos
- * por identidad (seguridad.registrar_acceso_denegado). Es un registro: si
- * falla, se anota en el log y la persona igual ve la página de acceso denegado.
- */
 export async function registrarAccesoDenegado() {
   try {
     const token = await tokenDeActor();

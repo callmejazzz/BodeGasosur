@@ -1,11 +1,5 @@
 import "server-only";
 
-/*
-  Variables del correo (contrato fase 9, §7). Se validan al usarse, no al
-  cargar el módulo: durante `next build` no existen. Los mensajes nombran la
-  variable, nunca su valor.
-*/
-
 export class ConfiguracionDeCorreoInvalida extends Error {
   constructor(variable: string, motivo: string) {
     super(`${variable} ${motivo}.`);
@@ -52,3 +46,14 @@ export function configuracionDeCorreo(entorno: Record<string, string | undefined
     urlAplicacion: urlAplicacion(entorno.URL_APLICACION, entorno.NODE_ENV === "production"),
   };
 }
+
+function secreto(entorno: Record<string, string | undefined>, variable: string, prefijo: string): string {
+  const valor = entorno[variable]?.trim() ?? "";
+  if (!valor) throw new ConfiguracionDeCorreoInvalida(variable, "no está definida");
+  if (!valor.startsWith(prefijo) || valor.length <= prefijo.length) throw new ConfiguracionDeCorreoInvalida(variable, `debe empezar con ${prefijo}`);
+  return valor;
+}
+
+export const llaveDeResend = (entorno: Record<string, string | undefined> = process.env) => secreto(entorno, "RESEND_API_KEY", "re_");
+
+export const secretoDelWebhook = (entorno: Record<string, string | undefined> = process.env) => secreto(entorno, "RESEND_WEBHOOK_SECRET", "whsec_");
