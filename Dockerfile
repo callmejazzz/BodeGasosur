@@ -2,7 +2,7 @@
 
 # La aplicación como contenedor: `next build` en modo standalone y
 # `node server.js`. Las migraciones no corren aquí ni al arrancar
-# la imagen nunca lleva la credencial del dueño.
+# (docs/05 §8): la imagen nunca lleva la credencial del dueño.
 
 FROM node:24-bookworm-slim AS base
 WORKDIR /app
@@ -20,7 +20,7 @@ ARG NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
 ARG NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
 ARG NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL=/
 ARG NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL=/
-# Cada build lleva su propio id, va solo en el build
+# Sevalla no expone el commit al construir: sin valor, cada build lleva su propio id
 ARG NEXT_DEPLOYMENT_ID
 RUN npx prisma generate \
  && NEXT_DEPLOYMENT_ID="${NEXT_DEPLOYMENT_ID:-$(date -u +%Y%m%d%H%M%S)}" npm run build
