@@ -108,7 +108,7 @@ Es la misma regla del reporte de existencias (§3.2 del [contrato de reportes](0
 ### 3.5 Envío y conciliación
 
 - **Ninguna transacción queda abierta mientras se espera a Resend.** Cada lote se manda en tres pasos:
-  1. **Arrendar.** Una transacción corta hace un `UPDATE` que sube `intentos`, fija el último intento y pone `arrendadoHasta = now() + 5 minutos`. Solo afecta al lote si es de la fecha de hoy y está libre, es decir, sin arriendo o con uno vencido. Además, el lote debe estar `PENDIENTE` o `ACEPTADO` con integrantes sin identificador. Si no toca ninguna fila, el lote lo tiene otra corrida y se salta. El arriendo se confirma antes de llamar a Resend, así que el intento queda contado aunque el proceso caiga.
+  1. **Arrendar.** Una transacción corta hace un `UPDATE` que sube `intentos`, fija el último intento y pone `arrendadoHasta = now() + 5 minutos`. Solo afecta al lote si es de la fecha de hoy y está libre, es decir, sin arriendo o con uno vencido. Además, el lote debe estar `PENDIENTE` o `ACEPTADO` con integrantes todavía `PENDIENTE`. Si no toca ninguna fila, el lote lo tiene otra corrida y se salta. El arriendo se confirma antes de llamar a Resend, así que el intento queda contado aunque el proceso caiga.
   2. **Llamar.** Se llama sin transacción y sin retener conexión. El cuerpo se arma solo con lo guardado: remitente, asunto, HTML y texto del lote, más el correo de cada integrante en orden de posición, con la etiqueta `registro=<id de RegistroCorreos>`. Va con la llave del lote y un tiempo de espera de 30 segundos. Nunca se vuelven a leer existencias ni usuarios, así que un reintento manda el mismo cuerpo, byte por byte.
   3. **Conciliar.** Una transacción corta aplica el resultado con la regla de abajo.
 - **Duración de las transacciones.** Las tres son de milisegundos, porque ninguna espera a la red. El arriendo de 5 minutos dura más que el tiempo de espera de 30 segundos, así que dos corridas no llaman a Resend por el mismo lote a la vez. Si llegara a pasar, Resend responde `409 concurrent_idempotent_requests` y no duplica.
@@ -117,11 +117,17 @@ Es la misma regla del reporte de existencias (§3.2 del [contrato de reportes](0
   - Si Resend no lo recibió, la siguiente corrida lo envía por primera vez.
   - En los dos casos sale una sola vez. Mientras tanto, el webhook puede conciliar por su lado (§3.7).
   - Si la respuesta tardía llega después de abortar, se descarta.
-- **Qué pasa según la respuesta:**
+- **Qué pasa según la respuesta.** Se clasifica por el código HTTP y el tipo de error (`name`) que devuelve Resend, nunca por su mensaje:
   - **Éxito:** se concilia la aceptación de cada integrante, cuya posición `i` en `data` corresponde a la posición `i` del lote.
-  - **Rechazo definitivo** (`400` de llave, `403`, `422`): el lote queda `RECHAZADO` y sus integrantes `FALLIDO` con el motivo, salvo los que ya estén `ENVIADO`. Los demás lotes siguen.
-  - **Rechazo pasajero** (`409 concurrent_idempotent_requests`, `429`, `5xx`, tiempo agotado, fallo de red): no se escribe nada. El lote espera a que venza su arriendo y lo retoma la siguiente corrida.
+  - **Rechazo de los datos** (`400` o `422` de validación: `validation_error`, `invalid_parameter`, `missing_required_field`, `invalid_idempotency_key` o `invalid_attachment`): la petición no es válida y repetirla no sirve. El lote queda `RECHAZADO` y sus integrantes `FALLIDO` con el motivo, salvo los que ya estén `ENVIADO`. Si el lote ya estaba `ACEPTADO` porque antes llegó un evento asociado, sigue así: sus integrantes `PENDIENTE` pasan a `SIN_CONFIRMAR`, porque pudieron haber salido, y no se vuelven a pedir. Los demás lotes siguen.
+  - **Rechazo pasajero** (`409 concurrent_idempotent_requests`, `429` que no sea de cuota, `5xx`, tiempo agotado o fallo de red): no se escribe nada. El lote espera a que venza su arriendo y lo retoma la siguiente corrida.
+  - **Incidente operativo:** el fallo no depende de los destinatarios y se repara fuera del sistema. Nadie queda `FALLIDO`: el lote sigue `PENDIENTE` con el motivo, la corrida no intenta más lotes y el día queda no sano. Ya reparado, la siguiente corrida lo envía con la misma llave.
+    - **Autenticación:** `401` o una llave inválida (`missing_api_key`, `restricted_api_key` o `invalid_api_key`).
+    - **Remitente:** cualquier otro `403`, como el dominio sin verificar (§3.8), o `invalid_from_address`.
+    - **Cuota:** `daily_quota_exceeded` o `monthly_quota_exceeded`.
+    - **Operativo:** cualquier otro código o tipo de esta lista. Ante lo desconocido, nadie se marca `FALLIDO`.
   - **`409 invalid_idempotent_request`:** indica que el cuerpo cambió, lo cual no debe pasar. El lote queda `SIN_CONFIRMAR`, se deja una línea de error y no se reenvía.
+  - **El motivo** es una descripción propia con el código y el tipo, por ejemplo «Resend rechazó la llave de la API (401 restricted_api_key)». El mensaje de Resend no se guarda ni se registra, porque puede traer direcciones. Cuando el lote pasa a `ACEPTADO` o el registro a `ENVIADO`, su motivo se borra: un estado de éxito no conserva el de un fallo anterior.
 - **Regla de conciliación.** La aplican la respuesta de `batch.send` y el webhook (§3.7), en cualquier orden y las veces que haga falta, con el mismo resultado:
   - **Orden de candados.** Primero el lote (`FOR UPDATE`) y luego sus registros por posición. Los dos escritores siguen ese orden, así que no forman ciclo.
   - **Registro.** El hecho que se concilia es el par (registro, identificador de Resend):
@@ -130,8 +136,8 @@ Es la misma regla del reporte de existencias (§3.2 del [contrato de reportes](0
     - Con otro identificador: no se sobrescribe. Desde el webhook este caso no llega a la conciliación, porque el evento ya se marcó como anómalo (§3.7). Desde la respuesta del lote, deja una línea de error, y los eventos posteriores de ese otro identificador quedan como anomalía.
 
     `ENVIADO` es final y el identificador se fija una sola vez.
-  - **Lote.** Si un solo integrante tiene prueba de aceptación, la petición fue aceptada: el lote pasa a `ACEPTADO` desde cualquier estado, y `ACEPTADO` es final. Un lote `ACEPTADO` con integrantes todavía sin identificador puede volver a pedirse ese día con la misma llave, y Resend devuelve la respuesta original con los identificadores que faltan.
-  - **Rechazo.** Un rechazo solo cambia lo que sigue `PENDIENTE`: nunca pisa un `ENVIADO` ni un `ACEPTADO`.
+  - **Lote.** Si un solo integrante tiene prueba de aceptación, la petición fue aceptada: el lote pasa a `ACEPTADO` desde cualquier estado, y `ACEPTADO` es final. Un lote `ACEPTADO` con integrantes todavía `PENDIENTE` puede volver a pedirse ese día con la misma llave, y Resend devuelve la respuesta original con los identificadores que faltan.
+  - **Rechazo.** Un rechazo solo cambia lo que sigue `PENDIENTE`: nunca pisa un `ENVIADO` ni un `ACEPTADO`. En un lote `ACEPTADO`, sus integrantes `PENDIENTE` pasan a `SIN_CONFIRMAR`, no a `FALLIDO`.
 
 ### 3.6 Recuperación y cierre
 
@@ -214,7 +220,9 @@ Es la misma regla del reporte de existencias (§3.2 del [contrato de reportes](0
 
 `gasosurnet.com` es el dominio de Gasosur y ya está verificado en Resend. Los correos salen de su subdominio `avisos.gasosurnet.com`, que es el que se dio de alta y separa la reputación de envío del dominio principal. Con ese remitente, Resend acepta cualquier destinatario, así que ya no hace falta limitar la alerta al correo de la cuenta de Resend. El remitente se configura con la variable de entorno `CORREO_REMITENTE`, así que cambiarlo no requiere tocar código.
 
-Si `CORREO_REMITENTE` usa un dominio sin verificar, Resend responde `403 validation_error`. Lo mismo pasa con `onboarding@resend.dev` para cualquier destinatario que no sea el correo de la cuenta de Resend. Si ese rechazo llega por la petición completa, todo el lote queda `RECHAZADO` y sus integrantes `FALLIDO`, incluido el dueño de la cuenta.
+Si `CORREO_REMITENTE` usa un dominio sin verificar, Resend responde `403 validation_error`. Lo mismo pasa con `onboarding@resend.dev` para cualquier destinatario que no sea el correo de la cuenta de Resend. Ese rechazo no depende de los destinatarios, así que es un incidente de remitente (§3.5): el lote sigue `PENDIENTE` con el motivo, nadie queda `FALLIDO` y la corrida no intenta más lotes.
+- Si se verifica el dominio dentro de la ventana, la siguiente corrida envía el mismo lote con la misma llave.
+- Si el problema es el valor de `CORREO_REMITENTE`, los lotes del día ya guardaron ese remitente y no cambian. Corregirlo aplica desde la evaluación del día siguiente, y los lotes del día se cierran con las reglas de §3.6.
 
 ### 3.9 Disparo programado
 
@@ -247,9 +255,9 @@ Los estados viven en cuatro niveles: el día, la petición a Resend, cada destin
 
 | Estado | Qué significa | Cuándo aparece | Puede pasar a |
 |---|---|---|---|
-| `PENDIENTE` | Reservado, pero todavía no hay respuesta de Resend | Al reservar el día. Sigue así tras un fallo pasajero (red, `429`, `5xx`, `409` concurrente, más de 30 segundos sin respuesta) o si el proceso cae antes de registrar la respuesta | Cualquiera de los de abajo |
+| `PENDIENTE` | Reservado, pero todavía no hay respuesta de Resend | Al reservar el día. Sigue así tras un fallo pasajero (red, `429` que no sea de cuota, `5xx`, `409` concurrente, más de 30 segundos sin respuesta), tras un incidente operativo (llave, remitente, cuota u otra causa ajena a los destinatarios), que deja su motivo, o si el proceso cae antes de registrar la respuesta | Cualquiera de los de abajo |
 | `ACEPTADO` | Resend aceptó la petición | Cuando llega la respuesta exitosa, o el primer evento asociado de cualquiera de sus correos (lo que ocurra primero) | Ninguno; es final |
-| `RECHAZADO` | Resend rechazó la petición de forma definitiva | Con una respuesta `400` de llave, `403` (por ejemplo, el dominio sin verificar) o `422` | `ACEPTADO`, solo si después llega un evento asociado que lo contradiga |
+| `RECHAZADO` | Resend rechazó los datos de la petición de forma definitiva | Con un `400` o `422` de validación (§3.5). Un `401`, un `403`, una cuota agotada u otra causa ajena a los destinatarios no lo producen: son incidentes y el lote sigue `PENDIENTE` | `ACEPTADO`, solo si después llega un evento asociado que lo contradiga |
 | `VENCIDO` | Se acabó su día y nunca se intentó enviar | La corrida de un día posterior lo cierra si tenía 0 intentos. Es seguro: nunca llegó a Resend | `ACEPTADO`, solo con un evento asociado (no debería pasar) |
 | `SIN_CONFIRMAR` | Pudo haber llegado a Resend, pero no se sabe | Se acabó su día con intentos y sin respuesta, o Resend respondió `409 invalid_idempotent_request`. No se reenvía, porque podría duplicar el correo | `ACEPTADO`, si llega un evento asociado de alguno de sus correos |
 
@@ -261,8 +269,8 @@ El lote también lleva `intentos`, el último intento y `arrendadoHasta`, pero n
 |---|---|---|---|
 | `PENDIENTE` | Está en un lote que todavía no tiene respuesta | Al reservar | Cualquiera de los de abajo |
 | `ENVIADO` | **Resend aceptó su correo** y hay un identificador de Resend. No afirma que haya llegado al buzón | Por la respuesta exitosa del lote o por cualquier evento asociado de su correo, lo que llegue primero | Ninguno; es final, y el identificador no cambia |
-| `FALLIDO` | Su correo no salió | Su lote quedó `RECHAZADO`, con el motivo de Resend, o `VENCIDO`, con «no se envió a tiempo» | `ENVIADO`, solo si llega un evento asociado que lo contradiga |
-| `SIN_CONFIRMAR` | No se sabe si salió | Su lote quedó `SIN_CONFIRMAR`, o su lote es `ACEPTADO` pero el día terminó sin que llegara su identificador | `ENVIADO`, si llega un evento asociado |
+| `FALLIDO` | Su correo no salió | Su lote quedó `RECHAZADO` por los datos de la petición, con el motivo (§3.5), o `VENCIDO`, con «no se envió a tiempo». Un incidente operativo nunca lo produce | `ENVIADO`, solo si llega un evento asociado que lo contradiga |
+| `SIN_CONFIRMAR` | No se sabe si salió | Su lote quedó `SIN_CONFIRMAR`; su lote ya era `ACEPTADO` cuando llegó un rechazo o un `409` de otro cuerpo; o su lote es `ACEPTADO` pero el día terminó sin que llegara su identificador | `ENVIADO`, si llega un evento asociado |
 
 **`EventoCorreo`: lo que avisa Resend después.** Cada evento es una fila de solo inserción, y un evento repetido (mismo `svix-id`) no inserta otra.
 
