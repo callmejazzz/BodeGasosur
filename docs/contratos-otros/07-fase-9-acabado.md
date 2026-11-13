@@ -142,11 +142,13 @@ Es la misma regla del reporte de existencias (§3.2 del [contrato de reportes](0
 ### 3.6 Recuperación y cierre
 
 - **Ejecutor.** El cron de Sevalla corre cada 15 minutos de 8:00 a 11:45 (`*/15 8-11 * * *`), 16 corridas al día. Cada corrida hace, en orden:
-  1. Cierra los lotes de fechas anteriores.
+  1. Cierra los lotes de fechas anteriores, en tandas de 20.
   2. Evalúa y reserva, si el día aún no tiene evaluación.
   3. Envía los lotes del día que lo necesiten (§3.5).
 
-  La primera corrida que funciona evalúa el día, y las demás solo reintentan lo pendiente.
+  La primera corrida que funciona evalúa el día, y las demás solo reintentan lo pendiente. Cada paso empieza solo si cabe en el plazo de la corrida (§3.9).
+- **Cierre parcial.** Los atrasos solo usan el tiempo que sobra después de apartar la evaluación y un lote de hoy: la alerta del día va primero. Cada tanda es una transacción corta que toma los candados por fecha y número. Si no alcanza el tiempo, lo que queda lo cierra la siguiente corrida, y la respuesta lo indica con `cierrePendiente`.
+- **Límite del mediodía.** La corrida vuelve a mirar la hora antes de evaluar y antes de cada lote. A partir de las 12:00 no empieza ninguno, aunque la corrida haya empezado antes, y responde `detenidaPor: "MEDIODIA"`. Lo que quede `PENDIENTE` lo cierra la corrida del día siguiente.
 - **No hay ejecución garantizada.** Si Sevalla no ejecuta ninguna corrida en la ventana, ese día no hay alerta. Se nota porque no hay evaluación del día ni líneas en el registro del servidor. Lo que sí se garantiza:
   - A lo más un correo por persona al día.
   - Reintentos durante toda la ventana.
@@ -228,7 +230,22 @@ Si `CORREO_REMITENTE` usa un dominio sin verificar, Resend responde `403 validat
 
 - Una ruta del servidor, `POST /api/tareas/resumen-diario`, ejecuta una corrida (§3.6).
 - No usa la sesión de Clerk. Su única protección es un secreto compartido que llega en `Authorization: Bearer …` y se compara en tiempo constante.
-- Sin secreto, o con uno incorrecto, responde 401 sin detalles y sin leer la base. Con el secreto correcto, devuelve en JSON el resultado de la evaluación del día y cuántos lotes y destinatarios quedaron en cada estado.
+- Sin secreto, o con uno incorrecto, responde 401 sin detalles y sin leer la base. `CRON_SECRET` debe tener al menos 32 caracteres; si no, toda llamada recibe 401.
+- **Ventana.** Solo corre de 8:00 a 12:00 de la Ciudad de México, sin incluir las 12:00, para no rechazar la corrida de las 11:45 ni su reintento. Fuera de ella responde 409 `FUERA_DE_VENTANA` con la hora de México, sin tocar la base, y deja una línea de error: así un cron que quedó en UTC se nota en vez de dar corridas sin correos.
+- **Plazo.** Cada petición tiene 120 segundos, que empiezan a contar al llegar. Es un **control de admisión de pasos**, no una cancelación:
+  - Una tanda de cierre, la evaluación o un lote solo empieza si su peor duración cabe en lo que queda, apartando lo necesario para leer el estado del día y responder.
+  - La peor duración suma la espera de conexión, el tope de su transacción y, en un lote, los 30 segundos de Resend.
+  - El plazo no interrumpe un paso ya empezado, que se acota con sus propios topes, y la lectura final del estado del día siempre se hace.
+  - Dentro de la base, cada transacción tiene su propio tope (`statement_timeout` y `lock_timeout`), así que ninguna espera de candado lo rebasa.
+  - Si el plazo no alcanza, la respuesta lo indica con `detenidaPor: "PLAZO"`, y lo pendiente queda para la siguiente corrida.
+- **Respuesta.** Con el secreto correcto y dentro de la ventana devuelve en JSON:
+  - el identificador de la corrida;
+  - el resultado de la evaluación del día;
+  - cuántos lotes y destinatarios quedaron en cada estado;
+  - `diaSano` y sus motivos;
+  - si se detuvo por plazo, mediodía o incidente, y cuál incidente.
+
+  Si la corrida falla, responde 500 con el identificador de la corrida. El registro del servidor solo lleva la clase y el código del error y ese identificador, nunca mensajes ni direcciones.
 - La dispara un proceso **Cron job** de Sevalla en la misma aplicación, con zona horaria `America/Mexico_City` y horario `*/15 8-11 * * *`. Una llamada extra, manual o repetida, es segura: no evalúa dos veces y solo retoma lo que lo necesita.
 
 ### 3.10 Acceso a la base sin usuario
