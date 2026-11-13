@@ -18,7 +18,7 @@ async function bloquear(db: ClienteDeConciliacion, loteId: string) {
   return lote;
 }
 
-// Un identificador distinto no se sobrescribe: vuelve como discrepancia
+// Un identificador distinto no se sobrescribe: vuelve como discrepancia. Al aceptarse, el motivo de un fallo anterior se borra
 export async function conciliarAceptaciones(db: ClienteDeConciliacion, loteId: string, aceptaciones: Aceptacion[]): Promise<{ discrepancias: string[] }> {
   const lote = await bloquear(db, loteId);
   const registros = new Map(lote.registros.map((r) => [r.id, r]));
@@ -29,7 +29,7 @@ export async function conciliarAceptaciones(db: ClienteDeConciliacion, loteId: s
     const registro = registros.get(registroId);
     if (!registro) throw new Error("El registro no pertenece al lote que se concilia.");
     if (registro.resendId === null) {
-      await db.registroCorreos.update({ where: { id: registroId }, data: { estado: "ENVIADO", resendId }, select: { id: true } });
+      await db.registroCorreos.update({ where: { id: registroId }, data: { estado: "ENVIADO", resendId, motivo: null }, select: { id: true } });
       aceptado = true;
     } else if (registro.resendId !== resendId) {
       discrepancias.push(registroId);
@@ -37,7 +37,7 @@ export async function conciliarAceptaciones(db: ClienteDeConciliacion, loteId: s
   }
 
   if (aceptado && lote.estado !== "ACEPTADO") {
-    await db.loteCorreos.update({ where: { id: loteId }, data: { estado: "ACEPTADO", resueltoEn: new Date() }, select: { id: true } });
+    await db.loteCorreos.update({ where: { id: loteId }, data: { estado: "ACEPTADO", resueltoEn: new Date(), motivo: null }, select: { id: true } });
   }
   return { discrepancias };
 }

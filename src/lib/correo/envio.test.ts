@@ -324,10 +324,14 @@ describe("envío y conciliación", () => {
     expect(huecos[0]).toMatchObject({ id: primero.id, estado: "ENVIADO" });
     expect(estados(huecos.slice(1))).toEqual(["SIN_CONFIRMAR"]);
 
+    // Un evento posterior concilia, y el motivo del cierre se borra en el registro y en el lote
     const [sinConfirmar] = await registrosDelDia(prisma, conIntentos);
     await webhook(cuerpoDelEvento({ tipo: "email.delivered", para: [sinConfirmar.correo], registro: sinConfirmar.id }));
-    await expect(prisma.registroCorreos.findUniqueOrThrow({ where: { id: sinConfirmar.id } })).resolves.toMatchObject({ estado: "ENVIADO" });
-    expect(estados(await lotesDelDia(conIntentos))).toEqual(["ACEPTADO"]);
+    await expect(prisma.registroCorreos.findUniqueOrThrow({ where: { id: sinConfirmar.id } })).resolves.toMatchObject({ estado: "ENVIADO", motivo: null });
+    expect((await lotesDelDia(conIntentos)).map((l) => [l.estado, l.motivo])).toEqual([["ACEPTADO", null]]);
+    const [fallido] = vencidos;
+    await webhook(cuerpoDelEvento({ tipo: "email.sent", para: [fallido.correo], registro: fallido.id }));
+    await expect(prisma.registroCorreos.findUniqueOrThrow({ where: { id: fallido.id } })).resolves.toMatchObject({ estado: "ENVIADO", motivo: null });
   });
 
   it("un rechazo de los datos deja FALLIDO a sus integrantes con un motivo propio y no impide los demás lotes (prueba 12)", async () => {
@@ -401,6 +405,8 @@ describe("envío y conciliación", () => {
       await vencerArriendos(prisma, fecha);
       await expect(corrida(fecha, "08:15", resendSimulado().enviar)).resolves.toMatchObject({ diaSano: true, incidente: null, detenidaPor: null });
       expect(estados(await registrosDelDia(prisma, fecha))).toEqual(["ENVIADO"]);
+      // Ya aceptado, el motivo del incidente no se queda
+      expect((await lotesDelDia(fecha)).map((l) => [l.estado, l.motivo])).toEqual(lotes.map(() => ["ACEPTADO", null]));
     });
   });
 
