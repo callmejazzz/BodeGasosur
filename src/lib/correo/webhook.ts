@@ -4,6 +4,7 @@ import { Resend } from "resend";
 import { escrituraDeSistema, type ClienteResendWebhook } from "@/lib/db";
 import { conciliarAceptaciones } from "./conciliacion";
 import { ConfiguracionDeCorreoInvalida, llaveDeResend, secretoDelWebhook } from "./configuracion";
+import { claseDeError } from "./diagnostico";
 import { claseDeRebote } from "./entrega";
 import { TX_CORTA } from "./plazos";
 
@@ -22,7 +23,6 @@ type EventoDeResend = { type?: unknown; created_at?: unknown; data?: DatosDelEve
 export type Asociacion = "ajeno" | "asociado" | "anomalo";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-// Solo se guarda lo que tiene forma de identificador o de código: nada con espacios ni arrobas
 const IDENTIFICADOR = /^[A-Za-z0-9_-]{1,100}$/;
 const CODIGO = /^[A-Za-z][A-Za-z0-9_]{0,59}$/;
 const TIPO = /^[a-z]+(\.[a-z_]+){0,3}$/;
@@ -50,7 +50,6 @@ async function leerConTope(peticion: Request, tope: number): Promise<string | nu
   return Buffer.concat(partes).toString("utf8");
 }
 
-/** `presente`: si trajo la etiqueta; `valor`: solo si tiene forma de identificador. */
 function etiquetaRegistro(tags: unknown): { presente: boolean; valor: string | null } {
   const crudo = Array.isArray(tags) ? tags.find((t) => t?.name === "registro")?.value : tags && typeof tags === "object" ? (tags as Record<string, unknown>).registro : undefined;
   const presente = typeof crudo === "string" && crudo !== "";
@@ -81,7 +80,6 @@ async function procesar(db: ClienteResendWebhook, svixId: string, evento: Evento
   else if (!destinatarios(datos.to).includes(normalizar(porEtiqueta.correo))) anomalia = "DESTINATARIO_DISTINTO";
   else if (!emailId || (porEtiqueta.resendId !== null && porEtiqueta.resendId !== emailId)) anomalia = "ID_DISTINTO";
 
-  // Todo evento asociado prueba la aceptación; se concilia antes de guardarlo
   if (!anomalia && porEtiqueta && emailId) {
     const { discrepancias } = await conciliarAceptaciones(db, porEtiqueta.loteId, [{ registroId: porEtiqueta.id, resendId: emailId }]);
     if (discrepancias.length) anomalia = "ID_DISTINTO";
@@ -133,10 +131,7 @@ export async function atenderWebhookDeResend(peticion: Request, entorno: Record<
     await escrituraDeSistema("resend-webhook", (db) => procesar(db, cabeceras.id!, evento), TX_CORTA);
     return new Response(null, { status: 200 });
   } catch (error) {
-    // Solo la clase y el código: el mensaje de la base puede traer datos del evento
-    const codigoDeError = (error as { code?: unknown })?.code;
-    const clase = error instanceof Error ? `${error.name}${typeof codigoDeError === "string" && /^[A-Z0-9_]{1,20}$/.test(codigoDeError) ? ` ${codigoDeError}` : ""}` : "error desconocido";
-    console.error(`[correo] el evento ${cabeceras.id} de Resend no se guardó (${clase})`);
+    console.error(`[correo] el evento ${cabeceras.id} de Resend no se guardó (${claseDeError(error)})`);
     return new Response(null, { status: 500 });
   }
 }

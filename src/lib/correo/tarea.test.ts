@@ -20,6 +20,7 @@ Object.assign(process.env, ENTORNO_DE_CORREO);
 const { atenderTarea } = await import("./tarea");
 const { ConfiguracionDeCorreoInvalida } = await import("./configuracion");
 const { enviadorDeResend } = await import("./resend");
+const { claseDeError } = await import("./diagnostico");
 
 const prisma = crearCliente(URL_PRUEBAS);
 const nuevaFecha = fechasDesde(2036);
@@ -166,5 +167,24 @@ describe("ruta del resumen diario", () => {
       process.env.CORREO_REMITENTE = previo;
     }
     await expect(prisma.evaluacionCorreos.count({ where: { fecha: aFechaDeBase(fecha) } })).resolves.toBe(0);
+  });
+
+  it("de un error solo registra su clase y su código con forma controlada, nunca el mensaje ni un nombre armado", async () => {
+    const conDatos = Object.assign(new Error("persona@ejemplo.test ya existe"), { name: "Fallo de persona@ejemplo.test", code: "P2002" });
+    expect(claseDeError(conDatos)).toBe("Error P2002");
+    expect(claseDeError(Object.assign(new TypeError("x"), { code: "código con espacios" }))).toBe("TypeError");
+    expect(claseDeError("texto suelto con persona@ejemplo.test")).toBe("error desconocido");
+
+    const errores = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const fecha = nuevaFecha();
+    const respuesta = await atenderTarea(peticion(`Bearer ${SECRETO}`), {
+      secreto: SECRETO,
+      ahora: () => aLas(fecha, "08:00"),
+      crearEnviador: () => resendSimulado().enviar,
+      corrida: vi.fn().mockRejectedValue(conDatos),
+    });
+    expect(respuesta.status).toBe(500);
+    expect(errores).toHaveBeenCalledWith(expect.stringMatching(/falló: Error P2002$/));
+    expect(errores.mock.calls.flat().join(" ")).not.toContain("@");
   });
 });

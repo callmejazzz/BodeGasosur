@@ -1,8 +1,8 @@
 import "server-only";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { relojDeMexico } from "@/lib/fechas";
-import { ConfiguracionDeCorreoInvalida } from "./configuracion";
 import { ejecutarCorrida, enVentana, type OpcionesDeCorrida, type ResumenDeCorrida } from "./corrida";
+import { claseDeError } from "./diagnostico";
 import { plazoDesde, type Plazo } from "./plazos";
 import { enviadorDeResend, type EnviadorDeLotes } from "./resend";
 
@@ -33,14 +33,6 @@ const hora = (ahora: Date) => {
   return `${String(Math.floor(minuto / 60)).padStart(2, "0")}:${String(minuto % 60).padStart(2, "0")}`;
 };
 
-// Solo la clase y el código: el mensaje de un error de la base o de una librería puede traer datos
-function clase(error: unknown): string {
-  if (error instanceof ConfiguracionDeCorreoInvalida) return `${error.name}: ${error.message}`;
-  if (!(error instanceof Error)) return "error desconocido";
-  const codigo = (error as { code?: unknown }).code;
-  return typeof codigo === "string" && /^[A-Z0-9_]{1,20}$/.test(codigo) ? `${error.name} ${codigo}` : error.name;
-}
-
 /** POST /api/tareas/resumen-diario: sin secreto válido o fuera de la ventana no toca la base */
 export async function atenderTarea(peticion: Request, d: DependenciasDeTarea = {}): Promise<Response> {
   const plazo = (d.plazo ?? (() => plazoDesde()))();
@@ -64,7 +56,7 @@ export async function atenderTarea(peticion: Request, d: DependenciasDeTarea = {
     );
     return Response.json({ corrida, ...resumen });
   } catch (error) {
-    console.error(`[correo] corrida ${corrida} falló: ${clase(error)}`);
+    console.error(`[correo] corrida ${corrida} falló: ${claseDeError(error)}`);
     return Response.json({ codigo: "ERROR", corrida }, { status: 500 });
   }
 }
