@@ -9,6 +9,7 @@ import { crearCliente } from "../../../prisma/comun";
 import { URL_PRUEBAS } from "../../../pruebas/base-de-pruebas";
 import { cuerpoDelEvento, peticionFirmada, type EventoDePrueba } from "../../../pruebas/firma-resend";
 import { ENTORNO_DE_CORREO, fechasDesde, registrosDelDia, sembrarBajoMinimo, usuarioConAlerta } from "../../../pruebas/semilla-correo";
+import { deFechaDeBase } from "../fechas";
 import { estadoDeEntrega, claseDeRebote } from "./entrega";
 
 vi.mock("server-only", () => ({}));
@@ -19,6 +20,7 @@ process.env.DATABASE_URL = inject("urlEjecucionPruebas");
 Object.assign(process.env, ENTORNO_DE_CORREO);
 const { atenderWebhookDeResend, TOPE_DEL_CUERPO } = await import("./webhook");
 const { evaluarYReservar } = await import("./reserva");
+const { leerMiCuenta } = await import("@/lib/cuenta/repo");
 
 const prisma = crearCliente(URL_PRUEBAS);
 const nuevaFecha = fechasDesde(2037);
@@ -27,7 +29,6 @@ let dos: { id: string; correo: string };
 
 beforeAll(async () => {
   await sembrarBajoMinimo(prisma);
-  [uno, dos] = [await usuarioConAlerta(prisma), await usuarioConAlerta(prisma)];
 });
 afterAll(() => prisma.$disconnect());
 afterEach(() => {
@@ -38,8 +39,9 @@ const enviar = (cuerpo: unknown, opciones?: Parameters<typeof peticionFirmada>[1
 const evento = (e: EventoDePrueba) => cuerpoDelEvento(e);
 const rebote = (tipo: string) => ({ bounce: { type: tipo, subType: "General", message: "550 5.1.1 La dirección no existe" } });
 
-/** Un día reservado: el registro de cada uno de los dos usuarios de la prueba. */
+/** Un día reservado con dos usuarios nuevos: un rebote duro excluye la dirección en los días siguientes. */
 async function reservarDia() {
+  [uno, dos] = [await usuarioConAlerta(prisma), await usuarioConAlerta(prisma)];
   const fecha = nuevaFecha();
   await evaluarYReservar(fecha);
   const registros = await registrosDelDia(prisma, fecha);
@@ -122,10 +124,14 @@ describe("webhook de Resend (prueba 14)", () => {
 
   it("email.delivered sin email.sent deja el registro ENVIADO con su identificador y la entrega como Entregado (prueba 8)", async () => {
     const { r1 } = await reservarDia();
+    const fecha = deFechaDeBase(r1.fecha);
+    // Antes de cualquier evento, «Preferencias» muestra el envío en proceso
+    await expect(leerMiCuenta(prisma, uno.id, fecha)).resolves.toMatchObject({ ultimoAviso: { fecha, estado: "EN_PROCESO" } });
     const emailId = `re_${randomUUID()}`;
     expect((await enviar(evento({ tipo: "email.delivered", emailId, para: [` ${uno.correo.toUpperCase()} `], registro: r1.id }))).status).toBe(200);
     await expect(entregaDe(r1.id)).resolves.toEqual({ estado: "ENVIADO", resendId: emailId, entrega: "ENTREGADO", eventos: 1 });
     await expect(prisma.loteCorreos.findUniqueOrThrow({ where: { id: r1.loteId } })).resolves.toMatchObject({ estado: "ACEPTADO" });
+    await expect(leerMiCuenta(prisma, uno.id, fecha)).resolves.toMatchObject({ ultimoAviso: { fecha, estado: "ENTREGADO" } });
   });
 });
 

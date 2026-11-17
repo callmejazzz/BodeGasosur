@@ -97,11 +97,18 @@ describe("guardarPreferencia", () => {
 });
 
 describe("lectura de la preferencia", () => {
-  it("«Preferencias» devuelve solo el correo y la preferencia de la sesión", async () => {
+  it("«Preferencias» devuelve solo los datos de la sesión", async () => {
     for (const rol of ["SUPERADMIN", "COMPRAS", "JEFE"] as const) {
       await como(rol);
       const propio = await prisma.usuario.findUniqueOrThrow({ where: { id: e.usuarios[rol].id } });
-      await expect(consultarMiCuenta(), rol).resolves.toStrictEqual({ correo: propio.correo, alertasCorreo: propio.alertasCorreo });
+      // Sin avisos propios ni evaluación de hoy en la base de pruebas
+      await expect(consultarMiCuenta(), rol).resolves.toStrictEqual({
+        correo: propio.correo,
+        alertasCorreo: propio.alertasCorreo,
+        ultimoAviso: null,
+        exclusion: null,
+        avisoDelDia: null,
+      });
     }
   });
 

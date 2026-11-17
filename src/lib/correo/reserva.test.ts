@@ -27,6 +27,7 @@ process.env.CORREO_REMITENTE = "BodeGasosur <avisos@avisos.prueba.test>";
 process.env.URL_APLICACION = "https://bodegasosur.prueba.test";
 const { evaluarYReservar, POR_LOTE } = await import("./reserva");
 const { ConfiguracionDeCorreoInvalida, configuracionDeCorreo } = await import("./configuracion");
+const { leerMiCuenta } = await import("@/lib/cuenta/repo");
 
 const prisma = crearCliente(URL_PRUEBAS);
 const sufijo = randomUUID().slice(0, 8);
@@ -175,6 +176,7 @@ describe("evaluación y reserva del día", () => {
       await expect(evaluarYReservar(fecha)).resolves.toEqual({ evaluadaAhora: false });
     });
     await expect(cifras(fecha)).resolves.toEqual({ evaluaciones: 1, lotes: 0, registros: 0 });
+    await expect(leerMiCuenta(prisma, conAlerta.id, fecha)).resolves.toMatchObject({ avisoDelDia: "SIN_BAJO_MINIMO" });
 
     // Al día siguiente sí evalúa y reserva.
     const siguiente = nuevaFecha();
@@ -194,10 +196,12 @@ describe("evaluación y reserva del día", () => {
       await expect(evaluarYReservar(fecha)).resolves.toEqual({ evaluadaAhora: false });
     });
     await expect(cifras(fecha)).resolves.toEqual({ evaluaciones: 1, lotes: 0, registros: 0 });
+    await expect(leerMiCuenta(prisma, tarde.id, fecha)).resolves.toMatchObject({ ultimoAviso: null, avisoDelDia: "EMPIEZA_MANIANA" });
 
     const siguiente = nuevaFecha();
     await evaluarYReservar(siguiente);
     expect((await registrosDe(siguiente)).map((r) => r.usuarioId)).toContain(tarde.id);
+    await expect(leerMiCuenta(prisma, tarde.id, siguiente)).resolves.toMatchObject({ ultimoAviso: { fecha: siguiente, estado: "EN_PROCESO" }, avisoDelDia: null });
   });
 });
 

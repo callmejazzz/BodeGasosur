@@ -1,6 +1,7 @@
 import "server-only";
-import type { EstadoLote, EstadoRegistroCorreo, Prisma } from "@prisma/client";
+import { Prisma, type EstadoLote, type EstadoRegistroCorreo } from "@prisma/client";
 import { existenciasBajoMinimo, type ExistenciasBajoMinimo } from "@/lib/reportes/existencias";
+import { eventosQueExcluyen } from "./exclusion";
 
 type Db = Prisma.TransactionClient;
 
@@ -10,12 +11,14 @@ export function leerExistenciasBajoMinimo(db: Db, tope: number): Promise<Existen
   return existenciasBajoMinimo(db, tope);
 }
 
+// La exclusión se consulta con la dirección actual
 export function leerDestinatarios(db: Db): Promise<Destinatario[]> {
   return db.$queryRaw<Destinatario[]>`
-    SELECT id AS "usuarioId", btrim(correo) AS correo
-    FROM "Usuario"
-    WHERE activo AND "alertasCorreo"
-    ORDER BY id`;
+    SELECT u.id AS "usuarioId", btrim(u.correo) AS correo
+    FROM "Usuario" u
+    WHERE u.activo AND u."alertasCorreo"
+      AND NOT EXISTS (SELECT 1 ${eventosQueExcluyen(Prisma.raw("u.correo"))})
+    ORDER BY u.id`;
 }
 
 export type IntegranteDelLote = { registroId: string; posicion: number; correo: string };
