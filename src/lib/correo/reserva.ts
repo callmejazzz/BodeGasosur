@@ -5,6 +5,7 @@ import { aFechaDeBase } from "@/lib/fechas";
 import { aParametrosExistencias } from "@/lib/reportes/filtros";
 import { configuracionDeCorreo } from "./configuracion";
 import { generarResumen, TOPE_RENGLONES } from "./plantilla";
+import { TX_RESERVA } from "./plazos";
 
 export const POR_LOTE = 100;
 
@@ -69,6 +70,6 @@ export async function evaluarYReservar(fecha: string): Promise<ResultadoReserva>
       }
       return evaluar("CON_ENVIO", destinatarios.length, lotes.length);
     },
-    { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted, timeout: 15_000, maxWait: 5_000 },
+    { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted, ...TX_RESERVA },
   );
 }

@@ -1,9 +1,6 @@
 /*
-  Vista previa local de la alerta diaria con datos de ejemplo (contrato fase 9,
-  §3.3). No lee la base ni envía nada: escribe el HTML y el texto en la carpeta
-  temporal del sistema e imprime sus rutas.
-
-    npm run correo:muestra
+  Vista previa local de la alerta diaria con datos de ejemplo
+  Para ejecutar: npm run correo:muestra
 */
 
 import { writeFile } from "node:fs/promises";

@@ -108,7 +108,7 @@ Es la misma regla del reporte de existencias (§3.2 del [contrato de reportes](0
 ### 3.5 Envío y conciliación
 
 - **Ninguna transacción queda abierta mientras se espera a Resend.** Cada lote se manda en tres pasos:
-  1. **Arrendar.** Una transacción corta hace un `UPDATE` que sube `intentos`, fija el último intento y pone `arrendadoHasta = now() + 5 minutos`. Solo afecta al lote si es de la fecha de hoy y está libre, es decir, sin arriendo o con uno vencido. Además, el lote debe estar `PENDIENTE` o `ACEPTADO` con integrantes sin identificador. Si no toca ninguna fila, el lote lo tiene otra corrida y se salta. El arriendo se confirma antes de llamar a Resend, así que el intento queda contado aunque el proceso caiga.
+  1. **Arrendar.** Una transacción corta hace un `UPDATE` que sube `intentos`, fija el último intento y pone `arrendadoHasta = now() + 5 minutos`. Solo afecta al lote si es de la fecha de hoy y está libre, es decir, sin arriendo o con uno vencido. Además, el lote debe estar `PENDIENTE` o `ACEPTADO` con integrantes todavía `PENDIENTE`. Si no toca ninguna fila, el lote lo tiene otra corrida y se salta. El arriendo se confirma antes de llamar a Resend, así que el intento queda contado aunque el proceso caiga.
   2. **Llamar.** Se llama sin transacción y sin retener conexión. El cuerpo se arma solo con lo guardado: remitente, asunto, HTML y texto del lote, más el correo de cada integrante en orden de posición, con la etiqueta `registro=<id de RegistroCorreos>`. Va con la llave del lote y un tiempo de espera de 30 segundos. Nunca se vuelven a leer existencias ni usuarios, así que un reintento manda el mismo cuerpo, byte por byte.
   3. **Conciliar.** Una transacción corta aplica el resultado con la regla de abajo.
 - **Duración de las transacciones.** Las tres son de milisegundos, porque ninguna espera a la red. El arriendo de 5 minutos dura más que el tiempo de espera de 30 segundos, así que dos corridas no llaman a Resend por el mismo lote a la vez. Si llegara a pasar, Resend responde `409 concurrent_idempotent_requests` y no duplica.
@@ -117,11 +117,17 @@ Es la misma regla del reporte de existencias (§3.2 del [contrato de reportes](0
   - Si Resend no lo recibió, la siguiente corrida lo envía por primera vez.
   - En los dos casos sale una sola vez. Mientras tanto, el webhook puede conciliar por su lado (§3.7).
   - Si la respuesta tardía llega después de abortar, se descarta.
-- **Qué pasa según la respuesta:**
+- **Qué pasa según la respuesta.** Se clasifica por el código HTTP y el tipo de error (`name`) que devuelve Resend, nunca por su mensaje:
   - **Éxito:** se concilia la aceptación de cada integrante, cuya posición `i` en `data` corresponde a la posición `i` del lote.
-  - **Rechazo definitivo** (`400` de llave, `403`, `422`): el lote queda `RECHAZADO` y sus integrantes `FALLIDO` con el motivo, salvo los que ya estén `ENVIADO`. Los demás lotes siguen.
-  - **Rechazo pasajero** (`409 concurrent_idempotent_requests`, `429`, `5xx`, tiempo agotado, fallo de red): no se escribe nada. El lote espera a que venza su arriendo y lo retoma la siguiente corrida.
+  - **Rechazo de los datos** (`400` o `422` de validación: `validation_error`, `invalid_parameter`, `missing_required_field`, `invalid_idempotency_key` o `invalid_attachment`): la petición no es válida y repetirla no sirve. El lote queda `RECHAZADO` y sus integrantes `FALLIDO` con el motivo, salvo los que ya estén `ENVIADO`. Si el lote ya estaba `ACEPTADO` porque antes llegó un evento asociado, sigue así: sus integrantes `PENDIENTE` pasan a `SIN_CONFIRMAR`, porque pudieron haber salido, y no se vuelven a pedir. Los demás lotes siguen.
+  - **Rechazo pasajero** (`409 concurrent_idempotent_requests`, `429` que no sea de cuota, `5xx`, tiempo agotado o fallo de red): no se escribe nada. El lote espera a que venza su arriendo y lo retoma la siguiente corrida.
+  - **Incidente operativo:** el fallo no depende de los destinatarios y se repara fuera del sistema. Nadie queda `FALLIDO`: el lote sigue `PENDIENTE` con el motivo, la corrida no intenta más lotes y el día queda no sano. Ya reparado, la siguiente corrida lo envía con la misma llave.
+    - **Autenticación:** `401` o una llave inválida (`missing_api_key`, `restricted_api_key` o `invalid_api_key`).
+    - **Remitente:** cualquier otro `403`, como el dominio sin verificar (§3.8), o `invalid_from_address`.
+    - **Cuota:** `daily_quota_exceeded` o `monthly_quota_exceeded`.
+    - **Operativo:** cualquier otro código o tipo de esta lista. Ante lo desconocido, nadie se marca `FALLIDO`.
   - **`409 invalid_idempotent_request`:** indica que el cuerpo cambió, lo cual no debe pasar. El lote queda `SIN_CONFIRMAR`, se deja una línea de error y no se reenvía.
+  - **El motivo** es una descripción propia con el código y el tipo, por ejemplo «Resend rechazó la llave de la API (401 restricted_api_key)». El mensaje de Resend no se guarda ni se registra, porque puede traer direcciones. Cuando el lote pasa a `ACEPTADO` o el registro a `ENVIADO`, su motivo se borra: un estado de éxito no conserva el de un fallo anterior.
 - **Regla de conciliación.** La aplican la respuesta de `batch.send` y el webhook (§3.7), en cualquier orden y las veces que haga falta, con el mismo resultado:
   - **Orden de candados.** Primero el lote (`FOR UPDATE`) y luego sus registros por posición. Los dos escritores siguen ese orden, así que no forman ciclo.
   - **Registro.** El hecho que se concilia es el par (registro, identificador de Resend):
@@ -130,17 +136,19 @@ Es la misma regla del reporte de existencias (§3.2 del [contrato de reportes](0
     - Con otro identificador: no se sobrescribe. Desde el webhook este caso no llega a la conciliación, porque el evento ya se marcó como anómalo (§3.7). Desde la respuesta del lote, deja una línea de error, y los eventos posteriores de ese otro identificador quedan como anomalía.
 
     `ENVIADO` es final y el identificador se fija una sola vez.
-  - **Lote.** Si un solo integrante tiene prueba de aceptación, la petición fue aceptada: el lote pasa a `ACEPTADO` desde cualquier estado, y `ACEPTADO` es final. Un lote `ACEPTADO` con integrantes todavía sin identificador puede volver a pedirse ese día con la misma llave, y Resend devuelve la respuesta original con los identificadores que faltan.
-  - **Rechazo.** Un rechazo solo cambia lo que sigue `PENDIENTE`: nunca pisa un `ENVIADO` ni un `ACEPTADO`.
+  - **Lote.** Si un solo integrante tiene prueba de aceptación, la petición fue aceptada: el lote pasa a `ACEPTADO` desde cualquier estado, y `ACEPTADO` es final. Un lote `ACEPTADO` con integrantes todavía `PENDIENTE` puede volver a pedirse ese día con la misma llave, y Resend devuelve la respuesta original con los identificadores que faltan.
+  - **Rechazo.** Un rechazo solo cambia lo que sigue `PENDIENTE`: nunca pisa un `ENVIADO` ni un `ACEPTADO`. En un lote `ACEPTADO`, sus integrantes `PENDIENTE` pasan a `SIN_CONFIRMAR`, no a `FALLIDO`.
 
 ### 3.6 Recuperación y cierre
 
 - **Ejecutor.** El cron de Sevalla corre cada 15 minutos de 8:00 a 11:45 (`*/15 8-11 * * *`), 16 corridas al día. Cada corrida hace, en orden:
-  1. Cierra los lotes de fechas anteriores.
+  1. Cierra los lotes de fechas anteriores, en tandas de 20.
   2. Evalúa y reserva, si el día aún no tiene evaluación.
   3. Envía los lotes del día que lo necesiten (§3.5).
 
-  La primera corrida que funciona evalúa el día, y las demás solo reintentan lo pendiente.
+  La primera corrida que funciona evalúa el día, y las demás solo reintentan lo pendiente. Cada paso empieza solo si cabe en el plazo de la corrida (§3.9).
+- **Cierre parcial.** Los atrasos solo usan el tiempo que sobra después de apartar la evaluación y un lote de hoy: la alerta del día va primero. Cada tanda es una transacción corta que toma los candados por fecha y número. Si no alcanza el tiempo, lo que queda lo cierra la siguiente corrida, y la respuesta lo indica con `cierrePendiente`.
+- **Límite del mediodía.** La corrida vuelve a mirar la hora antes de evaluar y antes de cada lote. A partir de las 12:00 no empieza ninguno, aunque la corrida haya empezado antes, y responde `detenidaPor: "MEDIODIA"`. Lo que quede `PENDIENTE` lo cierra la corrida del día siguiente.
 - **No hay ejecución garantizada.** Si Sevalla no ejecuta ninguna corrida en la ventana, ese día no hay alerta. Se nota porque no hay evaluación del día ni líneas en el registro del servidor. Lo que sí se garantiza:
   - A lo más un correo por persona al día.
   - Reintentos durante toda la ventana.
@@ -214,13 +222,30 @@ Es la misma regla del reporte de existencias (§3.2 del [contrato de reportes](0
 
 `gasosurnet.com` es el dominio de Gasosur y ya está verificado en Resend. Los correos salen de su subdominio `avisos.gasosurnet.com`, que es el que se dio de alta y separa la reputación de envío del dominio principal. Con ese remitente, Resend acepta cualquier destinatario, así que ya no hace falta limitar la alerta al correo de la cuenta de Resend. El remitente se configura con la variable de entorno `CORREO_REMITENTE`, así que cambiarlo no requiere tocar código.
 
-Si `CORREO_REMITENTE` usa un dominio sin verificar, Resend responde `403 validation_error`. Lo mismo pasa con `onboarding@resend.dev` para cualquier destinatario que no sea el correo de la cuenta de Resend. Si ese rechazo llega por la petición completa, todo el lote queda `RECHAZADO` y sus integrantes `FALLIDO`, incluido el dueño de la cuenta.
+Si `CORREO_REMITENTE` usa un dominio sin verificar, Resend responde `403 validation_error`. Lo mismo pasa con `onboarding@resend.dev` para cualquier destinatario que no sea el correo de la cuenta de Resend. Ese rechazo no depende de los destinatarios, así que es un incidente de remitente (§3.5): el lote sigue `PENDIENTE` con el motivo, nadie queda `FALLIDO` y la corrida no intenta más lotes.
+- Si se verifica el dominio dentro de la ventana, la siguiente corrida envía el mismo lote con la misma llave.
+- Si el problema es el valor de `CORREO_REMITENTE`, los lotes del día ya guardaron ese remitente y no cambian. Corregirlo aplica desde la evaluación del día siguiente, y los lotes del día se cierran con las reglas de §3.6.
 
 ### 3.9 Disparo programado
 
 - Una ruta del servidor, `POST /api/tareas/resumen-diario`, ejecuta una corrida (§3.6).
 - No usa la sesión de Clerk. Su única protección es un secreto compartido que llega en `Authorization: Bearer …` y se compara en tiempo constante.
-- Sin secreto, o con uno incorrecto, responde 401 sin detalles y sin leer la base. Con el secreto correcto, devuelve en JSON el resultado de la evaluación del día y cuántos lotes y destinatarios quedaron en cada estado.
+- Sin secreto, o con uno incorrecto, responde 401 sin detalles y sin leer la base. `CRON_SECRET` debe tener al menos 32 caracteres; si no, toda llamada recibe 401.
+- **Ventana.** Solo corre de 8:00 a 12:00 de la Ciudad de México, sin incluir las 12:00, para no rechazar la corrida de las 11:45 ni su reintento. Fuera de ella responde 409 `FUERA_DE_VENTANA` con la hora de México, sin tocar la base, y deja una línea de error: así un cron que quedó en UTC se nota en vez de dar corridas sin correos.
+- **Plazo.** Cada petición tiene 120 segundos, que empiezan a contar al llegar. Es un **control de admisión de pasos**, no una cancelación:
+  - Una tanda de cierre, la evaluación o un lote solo empieza si su peor duración cabe en lo que queda, apartando lo necesario para leer el estado del día y responder.
+  - La peor duración suma la espera de conexión, el tope de su transacción y, en un lote, los 30 segundos de Resend.
+  - El plazo no interrumpe un paso ya empezado, que se acota con sus propios topes, y la lectura final del estado del día siempre se hace.
+  - Dentro de la base, cada transacción tiene su propio tope (`statement_timeout` y `lock_timeout`), así que ninguna espera de candado lo rebasa.
+  - Si el plazo no alcanza, la respuesta lo indica con `detenidaPor: "PLAZO"`, y lo pendiente queda para la siguiente corrida.
+- **Respuesta.** Con el secreto correcto y dentro de la ventana devuelve en JSON:
+  - el identificador de la corrida;
+  - el resultado de la evaluación del día;
+  - cuántos lotes y destinatarios quedaron en cada estado;
+  - `diaSano` y sus motivos;
+  - si se detuvo por plazo, mediodía o incidente, y cuál incidente.
+
+  Si la corrida falla, responde 500 con el identificador de la corrida. El registro del servidor solo lleva la clase y el código del error y ese identificador, nunca mensajes ni direcciones.
 - La dispara un proceso **Cron job** de Sevalla en la misma aplicación, con zona horaria `America/Mexico_City` y horario `*/15 8-11 * * *`. Una llamada extra, manual o repetida, es segura: no evalúa dos veces y solo retoma lo que lo necesita.
 
 ### 3.10 Acceso a la base sin usuario
@@ -247,9 +272,9 @@ Los estados viven en cuatro niveles: el día, la petición a Resend, cada destin
 
 | Estado | Qué significa | Cuándo aparece | Puede pasar a |
 |---|---|---|---|
-| `PENDIENTE` | Reservado, pero todavía no hay respuesta de Resend | Al reservar el día. Sigue así tras un fallo pasajero (red, `429`, `5xx`, `409` concurrente, más de 30 segundos sin respuesta) o si el proceso cae antes de registrar la respuesta | Cualquiera de los de abajo |
+| `PENDIENTE` | Reservado, pero todavía no hay respuesta de Resend | Al reservar el día. Sigue así tras un fallo pasajero (red, `429` que no sea de cuota, `5xx`, `409` concurrente, más de 30 segundos sin respuesta), tras un incidente operativo (llave, remitente, cuota u otra causa ajena a los destinatarios), que deja su motivo, o si el proceso cae antes de registrar la respuesta | Cualquiera de los de abajo |
 | `ACEPTADO` | Resend aceptó la petición | Cuando llega la respuesta exitosa, o el primer evento asociado de cualquiera de sus correos (lo que ocurra primero) | Ninguno; es final |
-| `RECHAZADO` | Resend rechazó la petición de forma definitiva | Con una respuesta `400` de llave, `403` (por ejemplo, el dominio sin verificar) o `422` | `ACEPTADO`, solo si después llega un evento asociado que lo contradiga |
+| `RECHAZADO` | Resend rechazó los datos de la petición de forma definitiva | Con un `400` o `422` de validación (§3.5). Un `401`, un `403`, una cuota agotada u otra causa ajena a los destinatarios no lo producen: son incidentes y el lote sigue `PENDIENTE` | `ACEPTADO`, solo si después llega un evento asociado que lo contradiga |
 | `VENCIDO` | Se acabó su día y nunca se intentó enviar | La corrida de un día posterior lo cierra si tenía 0 intentos. Es seguro: nunca llegó a Resend | `ACEPTADO`, solo con un evento asociado (no debería pasar) |
 | `SIN_CONFIRMAR` | Pudo haber llegado a Resend, pero no se sabe | Se acabó su día con intentos y sin respuesta, o Resend respondió `409 invalid_idempotent_request`. No se reenvía, porque podría duplicar el correo | `ACEPTADO`, si llega un evento asociado de alguno de sus correos |
 
@@ -261,8 +286,8 @@ El lote también lleva `intentos`, el último intento y `arrendadoHasta`, pero n
 |---|---|---|---|
 | `PENDIENTE` | Está en un lote que todavía no tiene respuesta | Al reservar | Cualquiera de los de abajo |
 | `ENVIADO` | **Resend aceptó su correo** y hay un identificador de Resend. No afirma que haya llegado al buzón | Por la respuesta exitosa del lote o por cualquier evento asociado de su correo, lo que llegue primero | Ninguno; es final, y el identificador no cambia |
-| `FALLIDO` | Su correo no salió | Su lote quedó `RECHAZADO`, con el motivo de Resend, o `VENCIDO`, con «no se envió a tiempo» | `ENVIADO`, solo si llega un evento asociado que lo contradiga |
-| `SIN_CONFIRMAR` | No se sabe si salió | Su lote quedó `SIN_CONFIRMAR`, o su lote es `ACEPTADO` pero el día terminó sin que llegara su identificador | `ENVIADO`, si llega un evento asociado |
+| `FALLIDO` | Su correo no salió | Su lote quedó `RECHAZADO` por los datos de la petición, con el motivo (§3.5), o `VENCIDO`, con «no se envió a tiempo». Un incidente operativo nunca lo produce | `ENVIADO`, solo si llega un evento asociado que lo contradiga |
+| `SIN_CONFIRMAR` | No se sabe si salió | Su lote quedó `SIN_CONFIRMAR`; su lote ya era `ACEPTADO` cuando llegó un rechazo o un `409` de otro cuerpo; o su lote es `ACEPTADO` pero el día terminó sin que llegara su identificador | `ENVIADO`, si llega un evento asociado |
 
 **`EventoCorreo`: lo que avisa Resend después.** Cada evento es una fila de solo inserción, y un evento repetido (mismo `svix-id`) no inserta otra.
 
@@ -518,3 +543,57 @@ El cierre funcional exige las pruebas 1 a 22 contra PostgreSQL real, siguiendo e
 - **El apartado en esta entrega:** muestra la preferencia, el correo y el horario. El último aviso, su estado y los avisos de §3.11 llegan en la entrega 2, junto con la reserva y el webhook que los producen.
 - **La acción recibe una decisión explícita** (`activar` o `desactivar`), no una casilla, para que un campo ausente no apague la alerta. Solo lee ese campo, y el usuario sale siempre de la sesión.
 - **Correo de los usuarios nuevos.** El §2 decía que el webhook de Clerk sincroniza usuarios nuevos, pero el webhook solo actualiza correo y bajas. Las altas las hacen el Superadmin y el arranque. No cambia nada, porque la preferencia nace apagada.
+
+### Entrega 2: alerta diaria, webhook y «Preferencias»
+
+**Frontera del código**
+
+- **El SQL de la alerta vive en un solo archivo.** [`consultas.ts`](../../src/lib/correo/consultas.ts) recibe el cliente de la transacción, y solo lo importan `db.ts` y las pruebas. Una regla de ESLint lo impide desde cualquier otro archivo, también con `import()` o `require()`. `db.ts` le da a cada origen (`resumen-diario` y `resend-webhook`) un cliente con solo sus funciones, sin `$queryRaw`.
+- **Aislamiento y topes por transacción.** `escrituraDeSistema()` acepta el nivel de aislamiento y un tope de tiempo, que también fija `statement_timeout` y `lock_timeout` dentro de la base. La reserva corre en `READ COMMITTED` (§3.4).
+- **Sin migración nueva para «Preferencias».** El usuario de la aplicación ya podía leer las tablas de correo desde la entrega 1.
+
+**Resend**
+
+- **Dependencias.** `resend` 6.35.0 envía los lotes y verifica las firmas. `react-email` 6.11.3 y `@react-email/render` 2.1.1 arman la plantilla, que se previsualiza en local con `npm run correo:muestra`.
+- **Secretos con prefijo.** `RESEND_API_KEY` tiene que empezar con `re_`, y `RESEND_WEBHOOK_SECRET`, con `whsec_`. Si falta uno o no lleva su prefijo, el error nombra la variable, nunca su valor.
+- **El webhook también exige `RESEND_API_KEY`.** El SDK la pide para crear el cliente que verifica la firma. Si falta cualquiera de los dos secretos, el webhook responde 500 para que Resend reintente, y deja una línea de error.
+- **Lo que llega al webhook se acota.** El cuerpo se lee hasta 64 KiB; si es mayor, responde 413 sin verificarlo. Los identificadores y códigos de Resend solo se aceptan con forma controlada (letras, números, `_` y `-`): un identificador con otra forma cuenta como ausente, y un código con otra forma se guarda como `OTRO`.
+- **Un evento con etiqueta y sin `email_id` es `ID_DISTINTO`.** Sin un identificador válido no se puede probar que el evento sea de ese correo. También lo es un evento cuyo identificador choca con el del registro al conciliar.
+- **El registro del servidor solo lleva la clase y el código del error**, con forma controlada ([`diagnostico.ts`](../../src/lib/correo/diagnostico.ts)), nunca el mensaje. Los mensajes de Prisma y de Resend pueden traer direcciones.
+
+**Corrida y cron**
+
+- **Cadena de tiempos.** Cada eslabón deja margen al siguiente, así que la ruta siempre alcanza a responder:
+
+  | Eslabón | Tope |
+  |---|---|
+  | Espera de Resend por lote | 30 s |
+  | Plazo de la ruta (§3.9) | 120 s |
+  | Script del cron | 150 s |
+  | Cloudflare de Sevalla | 185 s |
+  | `active_deadline_seconds` del cron | 240 s |
+
+  Las transacciones esperan una conexión hasta 2 s. La reserva dura como máximo 15 s y las demás 5 s ([`plazos.ts`](../../src/lib/correo/plazos.ts)).
+- **El script del cron no tiene dependencias.** [`disparar-resumen.mjs`](../../scripts/disparar-resumen.mjs) es JavaScript plano, porque la imagen no trae `curl` ni `tsx`. Exige `https`, salvo `localhost` fuera de producción, y no sigue redirecciones. Nunca registra el secreto, los encabezados ni la URL. Termina con uno de estos códigos de salida:
+
+  | Código | Cuándo |
+  |---|---|
+  | 0 | La corrida terminó |
+  | 1 | Falta `URL_APLICACION` o `CRON_SECRET`, o la URL no usa `https` |
+  | 2 | La ruta respondió con error o sin un resumen válido |
+  | 3 | Falla de red o sin respuesta en 150 s |
+  | 4 | El día no quedó sano en la última corrida de la ventana (11:45) |
+  | 5 | Incidente operativo (§3.5) |
+
+  Cualquier código distinto de 0 deja la corrida como fallida en Sevalla, que la reintenta una vez.
+- **Configuración del cron en Sevalla:** zona `America/Mexico_City` (por omisión es UTC), `concurrency_policy` Forbid y `active_deadline_seconds` de 240 s. Se da de alta al cerrar la fase (§7).
+- **Sin monitor externo en `v0.9.0`.** Se aprobó un latido externo (Healthchecks.io), pero se aplaza a `v1.0.0`. Mientras tanto, la vigilancia es pasiva: las corridas fallidas en Sevalla y el registro del servidor.
+
+**Exclusión y «Preferencias»**
+
+- **Un solo criterio de exclusión.** [`exclusion.ts`](../../src/lib/correo/exclusion.ts) lo comparte la reserva, que deja fuera la dirección, con «Preferencias», que lo explica. Así las dos nunca discrepan.
+- **Qué causa se explica.** Si una dirección tiene varias, se explica primero la queja, luego el rebote duro y al final la supresión, porque la supresión suele ser consecuencia de las otras dos.
+- **Último aviso.** Es el registro más reciente del usuario con fecha de hoy o anterior, sin importar a qué dirección se envió. Se muestra aunque la preferencia esté apagada.
+- **El aviso de dirección excluida se muestra aunque la preferencia esté apagada.** Así el usuario sabe, antes de encenderla, que no le llegaría.
+- **Avisos del día.** «Hoy no hubo artículos bajo mínimo» aparece aunque la dirección esté excluida, porque describe el día. «Empieza mañana» no aparece si lo está, porque mañana tampoco empezaría.
+- **Scripts de desarrollo.** `npm run correo:estados` recorre en la base local lo que muestra «Preferencias», y `npm run correo:borrar-estados` borra lo que creó. Cómo se usan está en el [README](../../README.md#ver-los-estados-de-preferencias).
