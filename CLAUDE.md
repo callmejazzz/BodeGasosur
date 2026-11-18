@@ -49,8 +49,9 @@ Por qué
 
 1. Al terminar los cambios, notifícame con un resumen: archivos modificados y qué cambió en cada uno
 2. Espera a que te confirme que terminé de revisar
-3. Solo entonces haz el commit, sin pedir más permiso
-4. Nunca hagas push sin preguntarme
+3. No agregues línea de coautoría en los commits, solo en los PRs
+4. Solo entonces haz el commit, sin pedir más permiso
+5. Nunca hagas push sin preguntarme
 
 ## Pull Requests
 

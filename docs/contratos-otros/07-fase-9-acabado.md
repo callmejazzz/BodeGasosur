@@ -543,3 +543,57 @@ El cierre funcional exige las pruebas 1 a 22 contra PostgreSQL real, siguiendo e
 - **El apartado en esta entrega:** muestra la preferencia, el correo y el horario. El último aviso, su estado y los avisos de §3.11 llegan en la entrega 2, junto con la reserva y el webhook que los producen.
 - **La acción recibe una decisión explícita** (`activar` o `desactivar`), no una casilla, para que un campo ausente no apague la alerta. Solo lee ese campo, y el usuario sale siempre de la sesión.
 - **Correo de los usuarios nuevos.** El §2 decía que el webhook de Clerk sincroniza usuarios nuevos, pero el webhook solo actualiza correo y bajas. Las altas las hacen el Superadmin y el arranque. No cambia nada, porque la preferencia nace apagada.
+
+### Entrega 2: alerta diaria, webhook y «Preferencias»
+
+**Frontera del código**
+
+- **El SQL de la alerta vive en un solo archivo.** [`consultas.ts`](../../src/lib/correo/consultas.ts) recibe el cliente de la transacción, y solo lo importan `db.ts` y las pruebas. Una regla de ESLint lo impide desde cualquier otro archivo, también con `import()` o `require()`. `db.ts` le da a cada origen (`resumen-diario` y `resend-webhook`) un cliente con solo sus funciones, sin `$queryRaw`.
+- **Aislamiento y topes por transacción.** `escrituraDeSistema()` acepta el nivel de aislamiento y un tope de tiempo, que también fija `statement_timeout` y `lock_timeout` dentro de la base. La reserva corre en `READ COMMITTED` (§3.4).
+- **Sin migración nueva para «Preferencias».** El usuario de la aplicación ya podía leer las tablas de correo desde la entrega 1.
+
+**Resend**
+
+- **Dependencias.** `resend` 6.35.0 envía los lotes y verifica las firmas. `react-email` 6.11.3 y `@react-email/render` 2.1.1 arman la plantilla, que se previsualiza en local con `npm run correo:muestra`.
+- **Secretos con prefijo.** `RESEND_API_KEY` tiene que empezar con `re_`, y `RESEND_WEBHOOK_SECRET`, con `whsec_`. Si falta uno o no lleva su prefijo, el error nombra la variable, nunca su valor.
+- **El webhook también exige `RESEND_API_KEY`.** El SDK la pide para crear el cliente que verifica la firma. Si falta cualquiera de los dos secretos, el webhook responde 500 para que Resend reintente, y deja una línea de error.
+- **Lo que llega al webhook se acota.** El cuerpo se lee hasta 64 KiB; si es mayor, responde 413 sin verificarlo. Los identificadores y códigos de Resend solo se aceptan con forma controlada (letras, números, `_` y `-`): un identificador con otra forma cuenta como ausente, y un código con otra forma se guarda como `OTRO`.
+- **Un evento con etiqueta y sin `email_id` es `ID_DISTINTO`.** Sin un identificador válido no se puede probar que el evento sea de ese correo. También lo es un evento cuyo identificador choca con el del registro al conciliar.
+- **El registro del servidor solo lleva la clase y el código del error**, con forma controlada ([`diagnostico.ts`](../../src/lib/correo/diagnostico.ts)), nunca el mensaje. Los mensajes de Prisma y de Resend pueden traer direcciones.
+
+**Corrida y cron**
+
+- **Cadena de tiempos.** Cada eslabón deja margen al siguiente, así que la ruta siempre alcanza a responder:
+
+  | Eslabón | Tope |
+  |---|---|
+  | Espera de Resend por lote | 30 s |
+  | Plazo de la ruta (§3.9) | 120 s |
+  | Script del cron | 150 s |
+  | Cloudflare de Sevalla | 185 s |
+  | `active_deadline_seconds` del cron | 240 s |
+
+  Las transacciones esperan una conexión hasta 2 s. La reserva dura como máximo 15 s y las demás 5 s ([`plazos.ts`](../../src/lib/correo/plazos.ts)).
+- **El script del cron no tiene dependencias.** [`disparar-resumen.mjs`](../../scripts/disparar-resumen.mjs) es JavaScript plano, porque la imagen no trae `curl` ni `tsx`. Exige `https`, salvo `localhost` fuera de producción, y no sigue redirecciones. Nunca registra el secreto, los encabezados ni la URL. Termina con uno de estos códigos de salida:
+
+  | Código | Cuándo |
+  |---|---|
+  | 0 | La corrida terminó |
+  | 1 | Falta `URL_APLICACION` o `CRON_SECRET`, o la URL no usa `https` |
+  | 2 | La ruta respondió con error o sin un resumen válido |
+  | 3 | Falla de red o sin respuesta en 150 s |
+  | 4 | El día no quedó sano en la última corrida de la ventana (11:45) |
+  | 5 | Incidente operativo (§3.5) |
+
+  Cualquier código distinto de 0 deja la corrida como fallida en Sevalla, que la reintenta una vez.
+- **Configuración del cron en Sevalla:** zona `America/Mexico_City` (por omisión es UTC), `concurrency_policy` Forbid y `active_deadline_seconds` de 240 s. Se da de alta al cerrar la fase (§7).
+- **Sin monitor externo en `v0.9.0`.** Se aprobó un latido externo (Healthchecks.io), pero se aplaza a `v1.0.0`. Mientras tanto, la vigilancia es pasiva: las corridas fallidas en Sevalla y el registro del servidor.
+
+**Exclusión y «Preferencias»**
+
+- **Un solo criterio de exclusión.** [`exclusion.ts`](../../src/lib/correo/exclusion.ts) lo comparte la reserva, que deja fuera la dirección, con «Preferencias», que lo explica. Así las dos nunca discrepan.
+- **Qué causa se explica.** Si una dirección tiene varias, se explica primero la queja, luego el rebote duro y al final la supresión, porque la supresión suele ser consecuencia de las otras dos.
+- **Último aviso.** Es el registro más reciente del usuario con fecha de hoy o anterior, sin importar a qué dirección se envió. Se muestra aunque la preferencia esté apagada.
+- **El aviso de dirección excluida se muestra aunque la preferencia esté apagada.** Así el usuario sabe, antes de encenderla, que no le llegaría.
+- **Avisos del día.** «Hoy no hubo artículos bajo mínimo» aparece aunque la dirección esté excluida, porque describe el día. «Empieza mañana» no aparece si lo está, porque mañana tampoco empezaría.
+- **Scripts de desarrollo.** `npm run correo:estados` recorre en la base local lo que muestra «Preferencias», y `npm run correo:borrar-estados` borra lo que creó. Cómo se usan está en el [README](../../README.md#ver-los-estados-de-preferencias).

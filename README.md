@@ -43,6 +43,35 @@ La aplicación queda en <http://localhost:3000>.
 | `npm run db:fixtures` | Datos demostrativos para probar movimientos. Exigen `BODEGASOSUR_FIXTURES=permitidos` y una base sin operación |
 | `npm run test` | Pruebas de integración contra PostgreSQL, en una base `*_prueba` que se recrea en cada corrida |
 | `npm run db:studio` | Explorador visual de la base de datos |
+| `npm run correo:estados -- <correo>` / `correo:borrar-estados` | **Desarrollo.** Recorre en la base local lo que muestra «Preferencias» sobre la alerta diaria, y borra lo que creó. Ver abajo |
+
+### Ver los estados de «Preferencias»
+
+La base local no tiene envíos reales, así que «Preferencias» siempre dice «Todavía no has recibido ninguno». `correo:estados` crea, paso por paso, los avisos y eventos que mostrarían cada estado del último aviso, cada causa de exclusión y cada aviso del día (12 pasos).
+
+**Antes de empezar:**
+- La base local está arriba (`npm run db:up`) y `npm run dev` está corriendo.
+- `.env` tiene `BODEGASOSUR_FIXTURES=permitidos`.
+- Hay una **cuenta de prueba**, que no sea la del Superadmin, sin avisos previos y con la alerta encendida en Perfil → Preferencias. Inicia sesión con ella en el navegador.
+
+**Pasos:**
+
+```bash
+npm run correo:estados -- correo-de-la-cuenta@ejemplo.com
+```
+
+1. En cada paso, la terminal dice qué debe verse en «Preferencias».
+2. Recarga la página y abre Perfil → Preferencias. Cerrar y abrir el modal no basta, porque los datos se leen al cargar la página.
+3. Compara con la terminal y presiona Enter para seguir. Con Ctrl+C sales cuando quieras.
+4. Al terminar, o si saliste antes, deja la base como estaba:
+
+```bash
+npm run correo:borrar-estados
+```
+
+Mientras las filas existan, el día de hoy cuenta como evaluado en la base local (también lo ve el Superadmin en su apartado), y desde el paso 10 la dirección de la cuenta de prueba queda excluida. Todo eso se va con el borrado.
+
+El script se niega a correr si `DATABASE_URL_MIGRACIONES` no apunta a `localhost` o si `NODE_ENV` es `production`. También se niega si quedaron filas de una corrida anterior, o si hoy, ayer o anteayer ya se evaluaron en esa base. Las filas llevan ids fijos, así que el borrado solo toca esas filas.
 
 ### Migraciones
 
