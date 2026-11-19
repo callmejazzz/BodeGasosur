@@ -8,16 +8,61 @@ puede hacer ahora que antes no se podía.
 
 ---
 
-## Por publicar
+## v0.9.0 — 2026-11-19
 
-Última migración incluida: `20261021120000_funciones_endurecidas`.
+Etiqueta `v0.9.0`, sobre el commit que la publica en `main`.
+
+Última migración incluida: `20261107120000_correo_y_preferencia`.
+
+Cierra la fase 9: acabado. Con esta versión el sistema avisa lo que pide atención: un
+correo cada mañana con lo que está bajo el mínimo, un tablero al entrar y lo pendiente de
+cada módulo a la vista. También se usa desde el celular, y toda acción que no se puede
+deshacer pide confirmarla.
+
+**Lo que cambia para quien va a usar el sistema**
+
+- **Alerta diaria por correo.** Quien la encienda en su perfil, en el apartado
+  «Preferencias», recibe a las 8:00 de la Ciudad de México un correo con los artículos
+  que están bajo su mínimo en cada bodega. Llega una vez al día y solo si hay algo bajo
+  el mínimo. Nadie más puede encenderla o apagarla por otra persona. En el mismo apartado
+  se ve si el último aviso se entregó, si quedó demorado o si la dirección dejó de
+  recibir correos.
+- **Tablero de inicio.** Al entrar se ven cinco tarjetas: los artículos bajo mínimo, las
+  salidas solicitadas y autorizadas, los préstamos abiertos, las entradas en borrador y
+  las estaciones con más gasto en el mes. Cada una lleva a su pantalla con «Ver …».
+- **Lo pendiente en la barra lateral.** Junto a cada módulo, cuántos pendientes tiene:
+  entradas en borrador, salidas sin cerrar, traspasos, devoluciones y conteos en
+  borrador, préstamos abiertos y artículos bajo mínimo. Reportes y Catálogos se abren y
+  se cierran, uno a la vez. Debajo del nombre se ve la versión que se está usando.
+- **El reporte de existencias cuenta artículos.** «N artículos bajo mínimo» cuenta cada
+  artículo una vez, aunque falte en varias bodegas.
+- **Desde el celular.** En pantallas angostas, el menú se abre desde una barra arriba.
+  Todas las pantallas se usan sin desplazarse de lado; las tablas anchas se deslizan
+  dentro de su recuadro.
+- **Confirmaciones claras.** Autorizar, rechazar, cancelar o retirar una salida,
+  confirmar su recepción, confirmar o descartar un borrador o una hoja de conteo y
+  revertir un movimiento piden confirmación en un recuadro que dice qué va a pasar. Si
+  la acción pide un motivo, se escribe ahí mismo.
+- **Mensajes que explican qué pasó.** Se distingue la sesión que terminó, la falta de
+  permiso, la regla que impidió la acción y el fallo del servidor o de la conexión. Si se
+  cae la conexión al guardar, lo capturado no se pierde.
+- **Listas vacías que orientan.** Una lista sin registros dice por qué y, si se puede,
+  ofrece el botón para empezar.
 
 **Por dentro**
 
+- Los correos salen con Resend desde `avisos.gasosurnet.com`. Cada lote se reserva en la
+  base antes de enviarse, con una llave que impide duplicados aunque una corrida se
+  repita o el servidor caiga a la mitad. Un webhook firmado registra entregas, rebotes y
+  quejas, y deja de escribir a las direcciones que rebotan o se quejan.
+- Un proceso programado de Sevalla dispara la alerta cada 15 minutos de 8:00 a 11:45 para
+  reintentar lo pendiente; cada día se evalúa una sola vez.
 - Las funciones de la base fijan su `search_path` y ya no las puede ejecutar cualquier
   rol: la aplicación conserva solo las que llama o que llaman sus triggers. En Supabase,
   `anon` y `authenticated` dejan de poder llamarlas aunque se encendiera la Data API.
-- 553 pruebas contra PostgreSQL real.
+- Next.js 16.4.5 y zod 4.6.7, por avisos de seguridad y de consumo de memoria. La
+  aplicación no optimiza imágenes, porque no las usa.
+- 648 pruebas contra PostgreSQL real.
 
 ## v0.8.0 — 2026-10-20
 

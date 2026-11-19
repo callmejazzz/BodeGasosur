@@ -1,6 +1,6 @@
 # BodeGasosur - contrato de la fase 9: Acabado
 
-**Estado:** contrato de la fase 9, pendiente de construir; objetivo `v0.9.0`. Define la alerta diaria de stock mínimo por correo y su seguimiento de entrega, la preferencia de cada usuario, el tablero de inicio, las alertas en pantalla y el acabado de la interfaz. §9 se llenará con las decisiones que tome la construcción. Complementa el [expediente de la fase](../entregables-fases/09-acabado.md), el [modelo de datos](../02-modelo-de-datos.md) y el [contrato de reportes](06-fase-8-reportes.md), cuya regla de bajo mínimo se reutiliza sin cambios.
+**Estado:** construido y publicado como `v0.9.0`. Define la alerta diaria de stock mínimo por correo y su seguimiento de entrega, la preferencia de cada usuario, el tablero de inicio, las alertas en pantalla y el acabado de la interfaz. §9 recoge las decisiones que tomó la construcción. Complementa el [expediente de la fase](../entregables-fases/09-acabado.md), el [modelo de datos](../02-modelo-de-datos.md) y el [contrato de reportes](06-fase-8-reportes.md), cuya regla de bajo mínimo se reutiliza sin cambios.
 
 ## 1. Resultado y límites
 
@@ -460,7 +460,7 @@ El diálogo dice qué va a pasar y usa un botón con verbo explícito («Confirm
 - **Despliegue.**
   - Sevalla gana un proceso cron en la misma aplicación.
   - En Resend se da de alta el webhook hacia `<URL_APLICACION>/api/webhooks/resend` con los eventos de §3.7.
-  - Ambos se documentarán en [versionado y despliegue](../05-versionado-y-despliegue.md) cuando existan.
+  - Ambos están en [versionado y despliegue](../05-versionado-y-despliegue.md) §8.
 
 ## 8. Pruebas de aceptación y cierre
 

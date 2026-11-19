@@ -4,9 +4,9 @@ Sistema de control de inventario para las bodegas del grupo gasolinero **Gasosur
 
 Controla la entrada y salida de material entre bodegas y estaciones, registrando hacia qué estación se envía, quién lo autoriza, quién lo entrega, cuándo, en qué cantidad, a qué costo unitario, a qué área se destina y con qué observaciones.
 
-**Última versión etiquetada: `v0.8.0`** - ver [CHANGELOG.md](CHANGELOG.md).
+**Última versión etiquetada: `v0.9.0`** - ver [CHANGELOG.md](CHANGELOG.md).
 
-**Estado:** fases 0 a 8 construidas en desarrollo. La fase 8 (cinco reportes, kardex y exportación a Excel de toda tabla) se publica como `v0.8.0` (commit `58b3f75`). Antes, la fase 7 (traspasos, devoluciones, préstamos, conteo físico y reversas) se publicó como `v0.7.0` (commit `2ac6ca3`), y `v0.7.1` (commit `22c1146`) corrige lo que encontró su revisión. `main` incluye además la corrección del teclado del selector de salidas (`afcea45`), sin etiqueta nueva por decisión del proyecto. Ver [entregables por fase](docs/entregables-fases/README.md).
+**Estado:** fases 0 a 9 construidas. La fase 9 (alerta diaria de stock mínimo por correo, tablero de inicio, pendientes en la barra lateral y acabado para celular) se publica como `v0.9.0`. La fase 8 (cinco reportes, kardex y exportación a Excel de toda tabla) se publicó como `v0.8.0` (commit `58b3f75`). Antes, la fase 7 (traspasos, devoluciones, préstamos, conteo físico y reversas) se publicó como `v0.7.0` (commit `2ac6ca3`), y `v0.7.1` (commit `22c1146`) corrige lo que encontró su revisión. `main` incluye además la corrección del teclado del selector de salidas (`afcea45`), sin etiqueta nueva por decisión del proyecto. Ver [entregables por fase](docs/entregables-fases/README.md).
 
 **Entorno:** local mientras dure el desarrollo. Producción: la aplicación en Sevalla y la
 base en Supabase, con Sevalla a prueba una semana — ver [versionado y despliegue](docs/05-versionado-y-despliegue.md) §8.
@@ -93,6 +93,7 @@ El script junta `prisma/sql/antes/`, el DDL que genera Prisma desde `schema.pris
 - **Salidas completas en el trabajo local** — solicitud, autorización, rechazo, cancelación, retiro PEPS y recepción, con lista filtrable y paginada, bandeja de pendientes, captura y detalle. Las Server Actions, la conciliación SQL y las pruebas protegen el flujo.
 - **Actor verificable en desarrollo** — cada escritura protegida de un usuario liga en PostgreSQL un JWT RS256 de Clerk a su transacción. La bitácora y las columnas de actor usan esa identidad; las escrituras ordinarias sin liga se rechazan. Producción se desplegará al cerrar los entregables.
 - **Traspasos, devoluciones y conteo** — traspasos que conservan fecha original y costo, devoluciones ligadas a su salida con saldo de préstamo, hojas de conteo que se vuelven ajustes y reversas por asiento inverso sobre las capas exactas. Una conciliación diferida en PostgreSQL impide que el libro quede distinto de sus partidas.
+- **Alerta diaria de stock mínimo por correo** — quien la encienda en «Preferencias» recibe a las 8:00 los artículos bajo mínimo, una vez al día y sin duplicados aunque una corrida se repita. Un webhook firmado de Resend registra entregas, rebotes y quejas, y las direcciones que rebotan dejan de recibir.
 - **Tablero de inicio** con los artículos bajo mínimo, las salidas, préstamos y entradas pendientes y el gasto del mes por estación. La barra lateral muestra cuántos pendientes tiene cada módulo.
 - **Interfaz para celular y escritorio** — barra superior con menú por debajo de 1024 px, confirmación en un diálogo propio para toda acción irreversible, mensajes que distinguen sesión, permiso, regla de negocio y fallo, y páginas propias de error y 404.
 
