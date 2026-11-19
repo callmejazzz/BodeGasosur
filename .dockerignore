@@ -2,6 +2,10 @@
 .env*
 
 .git
+# Solo lo que next.config.ts necesita para saber el commit; el historial no entra
+!.git/HEAD
+!.git/refs
+!.git/packed-refs
 node_modules
 .next
 *.tsbuildinfo

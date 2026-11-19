@@ -7,6 +7,7 @@ import { consultarMiCuenta } from "@/lib/cuenta/consultas";
 import { consultar, registrarAccesoDenegado, sesionActual } from "@/lib/db";
 import { leerContadores } from "@/lib/navegacion/contadores";
 import { usuarioTienePermiso } from "@/lib/permisos";
+import { VERSION } from "@/lib/version";
 
 /**
  * El sistema. Dibuja la barra lateral y decide quién la ve.
@@ -65,7 +66,7 @@ export default async function LayoutSistema({ children }: { children: ReactNode 
           reportes: usuarioTienePermiso(sesion.usuario, "reportes:leer"),
           usuarios: usuarioTienePermiso(sesion.usuario, "usuarios:administrar"),
         }}
-        sesion={<ControlesSesion rol={sesion.usuario.rol} miCuenta={miCuenta} />}
+        sesion={<ControlesSesion version={VERSION} miCuenta={miCuenta} />}
         contadores={contadores}
       >
         {children}
