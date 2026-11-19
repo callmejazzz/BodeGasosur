@@ -12,6 +12,7 @@ export type FilaExistencia = {
   id: string;
   bodegaId: string;
   bodega: string;
+  nombreBodega: string;
   bodegaActiva: boolean;
   articuloId: string;
   claveArticulo: string;
@@ -62,7 +63,7 @@ function base(f: FiltrosExistencias) {
 }
 
 const consultaFilas = (f: FiltrosExistencias) => sql`${base(f)}
-  SELECT id, "bodegaId", "claveBodega", bodega, "bodegaActiva", "articuloId", "claveArticulo", descripcion, unidad, "articuloActivo",
+  SELECT id, "bodegaId", "claveBodega", bodega, "nombreBodega", "bodegaActiva", "articuloId", "claveArticulo", descripcion, unidad, "articuloActivo",
          existencia, minimo, diferencia, "bajoMinimo", importe::text AS importe, "importeConIva"::text AS "importeConIva", "sinCosto"
   FROM filas`;
 const ORDEN = sql`"bajoMinimo" DESC, "claveBodega", "claveArticulo", id`;
