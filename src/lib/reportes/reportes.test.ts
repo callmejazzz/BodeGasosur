@@ -396,7 +396,7 @@ describe("existencias por bodega y mínimo", () => {
 
   it("el total suma el valor conocido y cuenta lo bajo mínimo", async () => {
     await expect(leer((db) => totalExistencias(db, { bodegaId: e.bodegaId, busqueda: sufijo, bajoMinimo: false }))).resolves.toMatchObject({
-      bajoMinimo: 1,
+      articulosBajoMinimo: 1,
       // El artículo de la prueba, el dado de baja y el agotado, que recuperó sus piezas sin costo con la reversa.
       filasSinCosto: 3,
     });
