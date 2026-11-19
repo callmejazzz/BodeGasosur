@@ -403,30 +403,47 @@ Cada tarjeta es una tabla de hasta **5 filas** con encabezado de columnas, sin c
 ### 6.1 Celular y escritorio
 
 - Todas las pantallas se pueden usar en un celular de 375 px de ancho y en escritorio, sin desplazamiento horizontal de la página.
-- **Navegación.** En celular, la barra lateral fija se sustituye por una barra superior con menú desplegable.
-- **Márgenes.** Los márgenes del contenido se ajustan al tamaño de la pantalla.
-- **Tablas.** Pueden desplazarse dentro de su tarjeta o apilarse, según la pantalla.
-- **Formularios.** Las rejillas de partidas, los selectores buscables y los botones de acción de los formularios de captura siguen siendo utilizables en celular.
+- **Navegación.** Por debajo de 1024 px, la barra lateral se sustituye por una barra superior con el nombre del sistema y un botón de menú. El menú se desliza desde la izquierda sobre un fondo oscuro, con el mismo contenido que la barra lateral (§5). Se cierra con su botón, con Escape, tocando el fondo o al elegir un módulo.
+  - Mientras está abierto, la página de atrás no se desplaza ni recibe el foco del tabulador.
+  - Al abrirlo, el foco pasa a «Cerrar menú». Si se cierra a mano, vuelve al botón del menú.
+  - Desde 1024 px se usa la barra lateral fija. Si la ventana crece con el menú abierto, el menú se cierra solo.
+- **Márgenes.** El contenido lleva 16 px a los lados en celular, 24 px desde 640 px y 32 px desde 1024 px.
+- **Encabezados.** Los botones del encabezado de una página pasan a otra fila cuando no caben.
+- **Tablas.** Se desplazan de lado dentro de su tarjeta; no se apilan. La página nunca se desplaza de lado. En la hoja de conteo, el nombre del artículo se parte en celular para acercar la columna «Contada».
+- **Formularios.** Los campos y las partidas de las capturas se apilan a todo el ancho, con sus botones al final. Los selectores buscables abiertos caben en la pantalla.
+- **Perfil.** El menú de la foto y el apartado «Preferencias» caben en la pantalla del celular.
 
 ### 6.2 Estados vacíos y errores
 
-- Toda lista, reporte o tarjeta sin filas explica por qué está vacía y, si aplica, qué acción la llena. Para eso se usa `EstadoVacio`.
-- Los mensajes distinguen entre:
-  - Falta de permiso.
-  - Sesión vencida.
-  - Regla de negocio, con el motivo concreto.
-  - Fallo del servidor o de la red.
-- Hay página de error y página 404 propias, en español.
+- Toda lista, reporte o tarjeta sin filas explica por qué está vacía con `EstadoVacio`. Si hay un filtro puesto, lo dice y sugiere cambiarlo. Si no, y quien la ve puede capturar, ofrece el botón que la llena («Nueva devolución», «Nueva hoja»). Las secciones de «Pendientes» de salidas dicen qué no está esperando cada una. Una hoja de conteo sin artículos explica que la bodega no tenía existencias al abrirla.
+- **Mensajes de las acciones.** Cada negativa y cada fallo tiene su propio mensaje ([`mensajes.ts`](../../src/lib/mensajes.ts)):
+
+  | Caso | Mensaje |
+  |---|---|
+  | Sesión terminada | «Tu sesión terminó. Recarga la página para volver a iniciar sesión.» |
+  | Usuario dado de baja o sin acceso | «Tu usuario ya no tiene acceso al sistema.» |
+  | Falta de permiso | «No tienes permiso para esta operación.», o el texto propio de catálogos, usuarios y «Preferencias» |
+  | Regla de negocio | El motivo concreto que da el servicio |
+  | Fallo del servidor | «No se pudo completar la operación por un fallo del servidor. Inténtalo de nuevo.» |
+  | Fallo de red | «No se pudo comunicar con el servidor. Revisa tu conexión e inténtalo de nuevo.» |
+
+- **Fallo de red.** Si una acción no llega al servidor, el aviso aparece en el formulario o en el diálogo que la lanzó, y lo capturado se conserva. Una hoja de conteo que no se pudo guardar no se da por guardada.
+- **Pantalla de error.** Si una pantalla del sistema no se puede leer, se muestra dentro del sistema, con la barra lateral. Distingue «No tienes permiso para ver esta pantalla», «Tu sesión terminó» y «Tu usuario ya no tiene acceso» de «No se pudo cargar esta pantalla». Solo esta última ofrece «Reintentar». Si falla el layout raíz, una página propia dice «BodeGasosur no pudo cargar» y ofrece «Reintentar».
+- **Páginas 404.** Un registro que no existe muestra «No encontramos lo que buscas» dentro del sistema. Una dirección que no existe muestra «Esta página no existe», fuera del sistema. Las dos llevan a «Ir al tablero».
 
 ### 6.3 Confirmaciones
 
-Toda acción irreversible pide confirmación con un diálogo propio, en lugar de `window.confirm`. Son irreversibles:
-- Cancelar un borrador.
-- Confirmar un movimiento.
-- Autorizar, cancelar o retirar una salida.
+Toda acción irreversible pide confirmación con un diálogo propio, nunca con `window.confirm`. Son irreversibles:
+- Confirmar una entrada, un traspaso, una devolución o un conteo.
+- Descartar un borrador de entrada, de traspaso o de devolución, o una hoja de conteo.
+- Autorizar, rechazar, cancelar o retirar una salida, y confirmar su recepción.
 - Revertir un movimiento.
 
-El diálogo dice qué va a pasar y usa un botón con verbo explícito («Confirmar entrada», «Revertir»). Se maneja con teclado, Escape lo cierra sin actuar y, al cerrarse, el foco vuelve al botón que lo abrió. Revertir conserva el motivo obligatorio que ya pide.
+El diálogo dice qué va a pasar y usa un botón con verbo explícito («Confirmar recepción», «Descartar borrador», «Registrar reversa»).
+- Las acciones que piden un dato lo piden dentro del diálogo: el motivo al rechazar, cancelar, descartar o revertir, y quién se lleva el material al retirar. El dato es obligatorio.
+- Al abrirse, el foco va a «Volver», que no ejecuta nada, o al campo si lo hay. Se maneja con teclado, y Escape o «Volver» lo cierran sin actuar. Al cerrarse, el foco vuelve al botón que lo abrió.
+- Mientras la acción está en curso, el diálogo no se puede cerrar.
+- Un error se muestra dentro del diálogo. Si la acción deja de aplicar, por ejemplo porque otro usuario ya movió la salida, el diálogo se cierra y el aviso queda en la pantalla.
 
 ## 7. Permisos, secretos y variables
 
@@ -540,7 +557,10 @@ Las pruebas simulan Resend con un doble que respeta su idempotencia: misma llave
     - Cada contador de la barra lateral es el total de su pantalla con su filtro. En salidas no cuentan las recibidas, rechazadas, canceladas ni revertidas.
     - Una tarjeta o un contador sin su permiso no se consulta.
 22. La plantilla produce HTML y texto con el asunto «Stock bajo mínimo: 1 artículo» cuando N es 1 y «… N artículos» en otro caso. Agrupa por nombre de bodega sin mostrar su clave, muestra la clave del artículo, respeta el tope de 50 renglones y escapa el texto de los artículos.
-23. Las pantallas de operación y reportes, y el apartado «Preferencias» del perfil, se usan sin desplazamiento horizontal de página a 375 px, y toda acción de §6.3 pide confirmación.
+23. **A 375 px y en escritorio:**
+    - Las pantallas de operación, reportes, catálogos y usuarios, y el apartado «Preferencias» del perfil, se usan sin desplazamiento horizontal de la página.
+    - El menú de la barra superior se abre, se cierra con Escape, con su botón o tocando el fondo, y devuelve el foco como dice §6.1.
+    - Toda acción de §6.3 pide confirmación en el diálogo y se maneja con teclado.
 
 El cierre funcional exige las pruebas 1 a 22 contra PostgreSQL real, siguiendo el patrón de [`reportes.test.ts`](../../src/lib/reportes/reportes.test.ts), y la revisión 23 en el navegador. En Sevalla, el proceso cron se ejecuta a mano una vez antes de dejarlo programado, y el webhook de Resend se prueba con un evento de ejemplo desde su panel.
 
@@ -633,3 +653,13 @@ El cierre funcional exige las pruebas 1 a 22 contra PostgreSQL real, siguiendo e
 - **Consultas propias del tablero.** `salidasEnCurso` y `borradoresMasAntiguos` viven junto a los listados, en `salidas/repo.ts` y `entradas/repo.ts`, y comparten su `select`: solo cambian el filtro y el orden.
 - **Los contadores viven en un solo archivo.** [`contadores.ts`](../../src/lib/navegacion/contadores.ts) declara cada uno con su ruta, sus permisos y su consulta. El layout manda la lectura como promesa, como en «Preferencias», y cada contador la resuelve con `Suspense`.
 - **Sin migración ni permisos nuevos.**
+
+### Entrega 4: acabado de la interfaz
+
+- **Diálogo nativo.** [`dialogo.tsx`](../../src/components/ui/dialogo.tsx) usa `<dialog>` con `showModal()`, sin dependencias: el navegador atrapa el foco y maneja Escape. Se abre al montarse y se cierra al desmontarse. Va en un portal porque la hoja de conteo ya es un formulario, y corta la propagación del envío para que la hoja no se guarde al confirmar o descartar.
+- **El `digest` distingue la negativa.** En producción, Next oculta el mensaje de un error del servidor, pero conserva el `digest` que el error ya trae. `SinAcceso` y `SinPermiso` llevan uno propio (`bodegasosur:sin-sesion`, `bodegasosur:sin-acceso` y `bodegasosur:sin-permiso`), y `error.tsx` lo lee. No se usa `forbidden()`, porque en Next 16 exige la bandera experimental `authInterrupts`.
+- **`SinAcceso` sabe su motivo:** sin sesión de Clerk, o con sesión pero sin un usuario activo. `mensajeDeNegativa`, en [`db.ts`](../../src/lib/db.ts), traduce las dos negativas para todas las acciones.
+- **El fallo de red se atrapa en el cliente.** `llamarAlServidor` y `conConexion`, en [`conexion.ts`](../../src/lib/conexion.ts), envuelven las llamadas de los componentes y la acción de cada `useActionState`. Dejan pasar las redirecciones de Next (`unstable_rethrow`).
+- **El menú móvil envuelve el contenido.** `Navegacion` dibuja también el `main`, para dejarlo `inert` mientras el menú está abierto.
+- **Revisión 23.** Se recorrieron 41 pantallas en un marco de 375 px, midiendo lo que desborda la página fuera de un contenedor con desplazamiento. Se revisaron a la vista las capturas, la hoja de conteo, el selector buscable, el diálogo y «Preferencias».
+- **Sin migración, permisos, variables ni dependencias nuevas.**
