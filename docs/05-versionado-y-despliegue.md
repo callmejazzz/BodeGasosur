@@ -148,7 +148,7 @@ Mientras dure el desarrollo el sistema sigue siendo local ([01-arquitectura.md](
 | Conexión de la aplicación | **Directa** (`db.<proyecto>.supabase.co`), con el complemento IPv4. Supavisor en modo sesión (5432) solo como alternativa; nunca el modo transacción (6543) |
 | Conexión del dueño | **Directa**, desde una terminal |
 
-**La base va donde está la aplicación.** El tablero hace once consultas seguidas y confirmar un movimiento encadena varias con candados puestos: dentro de Ashburn cada ida y vuelta cuesta 1–2 ms; contra Ohio, 10–15 ms, y los candados duran lo mismo de más.
+**La base va donde está la aplicación.** Abrir el tablero suma doce consultas (cinco de sus tarjetas y siete de los contadores de la barra lateral) y confirmar un movimiento encadena varias con candados puestos: dentro de Ashburn cada ida y vuelta cuesta 1–2 ms; contra Ohio, 10–15 ms, y los candados duran lo mismo de más.
 
 **Separadas, porque el libro contable no debe depender del hosting de la aplicación.** La
 aplicación se puede cambiar de proveedor sin tocar la base; los proyectos que lean `catalogo_gasosur` se conectan a la base y no a Sevalla; y la credencial del dueño nunca
