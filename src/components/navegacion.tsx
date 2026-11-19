@@ -1,9 +1,9 @@
 "use client";
 
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Menu, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Fragment, Suspense, use, useId, useState, type ReactNode } from "react";
+import { Fragment, Suspense, use, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { CATALOGOS } from "@/lib/catalogos/definiciones";
 import type { Contadores, RutaConContador } from "@/lib/navegacion/contadores";
 import { cantidad, cn } from "@/lib/utils";
@@ -128,16 +128,59 @@ type Desplegable = "reportes" | "catalogos";
 const desplegableDe = (ruta: string): Desplegable | null =>
   ruta.startsWith("/reportes") ? "reportes" : ruta.startsWith("/catalogos") ? "catalogos" : null;
 
-export function Navegacion({ sesion, accesos, contadores }: { sesion?: ReactNode; accesos: Accesos; contadores: Promise<Contadores> | null }) {
+// Debajo de lg la barra lateral es un menú que se abre desde la barra superior
+const ESCRITORIO = "(min-width: 1024px)";
+
+export function Navegacion({ sesion, accesos, contadores, children }: {
+  sesion?: ReactNode;
+  accesos: Accesos;
+  contadores: Promise<Contadores> | null;
+  children: ReactNode;
+}) {
   const ruta = usePathname();
   const visibles = (enlaces: Enlace[]) => enlaces.filter((e) => !e.acceso || accesos[e.acceso]);
   const administracion = visibles(ADMINISTRACION);
   const reportes = visibles(REPORTES);
 
-  // Una desplegable a la vez
-  const [abierta, setAbierta] = useState({ ruta, seccion: desplegableDe(ruta) });
-  if (abierta.ruta !== ruta) setAbierta({ ruta, seccion: desplegableDe(ruta) ?? abierta.seccion });
-  const alternar = (seccion: Desplegable) => () => setAbierta((a) => ({ ...a, seccion: a.seccion === seccion ? null : seccion }));
+  // Una desplegable a la vez. Al cambiar de ruta se cierra el menú
+  const [estado, setEstado] = useState({ ruta, seccion: desplegableDe(ruta), menu: false });
+  if (estado.ruta !== ruta) setEstado({ ruta, seccion: desplegableDe(ruta) ?? estado.seccion, menu: false });
+  const alternar = (seccion: Desplegable) => () => setEstado((e) => ({ ...e, seccion: e.seccion === seccion ? null : seccion }));
+
+  const botonMenu = useRef<HTMLButtonElement>(null);
+  const botonCerrar = useRef<HTMLButtonElement>(null);
+  // Cerrado a mano, el foco vuelve al botón del menú; al navegar, no
+  const devolverFoco = useRef(false);
+  const abrirMenu = () => setEstado((e) => ({ ...e, menu: true }));
+  const cerrarMenu = () => {
+    devolverFoco.current = true;
+    setEstado((e) => ({ ...e, menu: false }));
+  };
+
+  useEffect(() => {
+    if (!estado.menu) {
+      if (devolverFoco.current) botonMenu.current?.focus();
+      devolverFoco.current = false;
+      return;
+    }
+    botonCerrar.current?.focus();
+    const raiz = document.documentElement;
+    raiz.style.overflow = "hidden";
+    const alTeclear = (ev: KeyboardEvent) => {
+      if (ev.key !== "Escape") return;
+      devolverFoco.current = true;
+      setEstado((e) => ({ ...e, menu: false }));
+    };
+    const escritorio = window.matchMedia(ESCRITORIO);
+    const alCrecer = () => escritorio.matches && setEstado((e) => ({ ...e, menu: false }));
+    document.addEventListener("keydown", alTeclear);
+    escritorio.addEventListener("change", alCrecer);
+    return () => {
+      raiz.style.overflow = "";
+      document.removeEventListener("keydown", alTeclear);
+      escritorio.removeEventListener("change", alCrecer);
+    };
+  }, [estado.menu]);
 
   const contador = (href: string) =>
     contadores && tieneContador(href) ? (
@@ -147,52 +190,94 @@ export function Navegacion({ sesion, accesos, contadores }: { sesion?: ReactNode
     ) : undefined;
 
   return (
-    <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col self-start overflow-y-auto bg-primary px-3 py-5 text-white">
-      <Link href="/" className="mb-7 block px-3">
-        <span className="block text-lg leading-tight font-semibold">BodeGasosur</span>
-        <span className="block text-xs text-white/50">Control de inventario</span>
-      </Link>
-
-      <Seccion titulo="Operación">
-        {visibles(OPERACION).map((e) => (
-          <Item key={e.href} enlace={e} activo={e.href === "/" ? ruta === "/" : ruta.startsWith(e.href)} contador={contador(e.href)} />
-        ))}
-      </Seccion>
-
-      {reportes.length > 0 && (
-        <SeccionDesplegable
-          titulo="Reportes"
-          abierta={abierta.seccion === "reportes"}
-          alternar={alternar("reportes")}
-          resumen={reportes.map((e) => <Fragment key={e.href}>{contador(e.href)}</Fragment>)}
+    <div className="flex min-h-full w-full flex-col lg:flex-row">
+      <header inert={estado.menu} className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 bg-primary px-4 text-white lg:hidden">
+        <Link href="/" className="text-lg font-semibold">BodeGasosur</Link>
+        <button
+          ref={botonMenu}
+          type="button"
+          onClick={abrirMenu}
+          aria-expanded={estado.menu}
+          aria-controls="navegacion"
+          className="-mr-2 rounded-md p-2 transition-colors hover:bg-white/10"
         >
-          {reportes.map((e) => (
-            <Item key={e.href} enlace={e} activo={ruta.startsWith(e.href)} contador={contador(e.href)} />
-          ))}
-        </SeccionDesplegable>
-      )}
+          <Menu aria-hidden className="size-5" />
+          <span className="sr-only">Abrir menú</span>
+        </button>
+      </header>
 
-      <SeccionDesplegable titulo="Catálogos" abierta={abierta.seccion === "catalogos"} alternar={alternar("catalogos")}>
-        {CATALOGOS.map((c) => (
-          <Item
-            key={c.slug}
-            enlace={{ href: `/catalogos/${c.slug}`, etiqueta: c.titulo }}
-            activo={ruta.startsWith(`/catalogos/${c.slug}`)}
-          />
-        ))}
-      </SeccionDesplegable>
+      <div
+        aria-hidden
+        onClick={cerrarMenu}
+        className={cn("fixed inset-0 z-40 bg-black/40 transition-opacity duration-300 lg:hidden", estado.menu ? "opacity-100" : "pointer-events-none opacity-0")}
+      />
 
-      {administracion.length > 0 && (
-        <Seccion titulo="Administración">
-          {administracion.map((e) => (
-            <Item key={e.href} enlace={e} activo={ruta.startsWith(e.href)} />
+      <aside
+        id="navegacion"
+        aria-label="Navegación"
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col overflow-y-auto bg-primary px-3 py-5 text-white motion-reduce:transition-none",
+          "lg:visible lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:w-60 lg:max-w-none lg:shrink-0 lg:translate-x-0 lg:self-start lg:transition-none",
+          // Se hace visible al instante para poder enfocarlo, y se oculta hasta terminar de cerrarse
+          estado.menu
+            ? "visible translate-x-0 [transition:translate_300ms_ease-in-out,visibility_0s]"
+            : "invisible -translate-x-full [transition:translate_300ms_ease-in-out,visibility_0s_300ms]",
+        )}
+      >
+        <div className="mb-7 flex items-start justify-between gap-2 px-3">
+          <Link href="/" className="block">
+            <span className="block text-lg leading-tight font-semibold">BodeGasosur</span>
+            <span className="block text-xs text-white/50">Control de inventario</span>
+          </Link>
+          <button ref={botonCerrar} type="button" onClick={cerrarMenu} className="-mt-1 -mr-2 rounded-md p-2 transition-colors hover:bg-white/10 lg:hidden">
+            <X aria-hidden className="size-5" />
+            <span className="sr-only">Cerrar menú</span>
+          </button>
+        </div>
+
+        <Seccion titulo="Operación">
+          {visibles(OPERACION).map((e) => (
+            <Item key={e.href} enlace={e} activo={e.href === "/" ? ruta === "/" : ruta.startsWith(e.href)} contador={contador(e.href)} />
           ))}
         </Seccion>
-      )}
 
-      <div className="mt-auto">
-        {sesion}
-      </div>
-    </aside>
+        {reportes.length > 0 && (
+          <SeccionDesplegable
+            titulo="Reportes"
+            abierta={estado.seccion === "reportes"}
+            alternar={alternar("reportes")}
+            resumen={reportes.map((e) => <Fragment key={e.href}>{contador(e.href)}</Fragment>)}
+          >
+            {reportes.map((e) => (
+              <Item key={e.href} enlace={e} activo={ruta.startsWith(e.href)} contador={contador(e.href)} />
+            ))}
+          </SeccionDesplegable>
+        )}
+
+        <SeccionDesplegable titulo="Catálogos" abierta={estado.seccion === "catalogos"} alternar={alternar("catalogos")}>
+          {CATALOGOS.map((c) => (
+            <Item
+              key={c.slug}
+              enlace={{ href: `/catalogos/${c.slug}`, etiqueta: c.titulo }}
+              activo={ruta.startsWith(`/catalogos/${c.slug}`)}
+            />
+          ))}
+        </SeccionDesplegable>
+
+        {administracion.length > 0 && (
+          <Seccion titulo="Administración">
+            {administracion.map((e) => (
+              <Item key={e.href} enlace={e} activo={ruta.startsWith(e.href)} />
+            ))}
+          </Seccion>
+        )}
+
+        <div className="mt-auto">
+          {sesion}
+        </div>
+      </aside>
+
+      <main inert={estado.menu} className="min-w-0 flex-1 px-4 py-5 sm:px-6 lg:px-8 lg:py-7">{children}</main>
+    </div>
   );
 }
