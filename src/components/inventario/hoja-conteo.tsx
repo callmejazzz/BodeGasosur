@@ -128,7 +128,7 @@ export function HojaConteo({
               const error = estado.errores[`partidas.${i}.cantidadContada`];
               return (
                 <Tr key={r.articuloId} data-fila={i} hidden={!visible(i)}>
-                  <Td className="whitespace-nowrap">
+                  <Td className="min-w-40 sm:whitespace-nowrap">
                     <input type="hidden" name={`partidas.${i}.articuloId`} value={r.articuloId} />
                     <span className="font-medium">{r.clave}</span> <span className="text-muted">{r.descripcion}</span>
                   </Td>
@@ -175,7 +175,7 @@ export function HojaConteo({
       {editable && (
         <div className="flex flex-col gap-4 border-t border-border px-5 py-4">
           <div className="flex flex-wrap items-center gap-2">
-            <Select value={nuevo} onChange={(ev) => setNuevo(ev.target.value)} className="h-8 w-80" aria-label="Artículo encontrado en la bodega">
+            <Select value={nuevo} onChange={(ev) => setNuevo(ev.target.value)} className="h-8 w-full sm:w-80" aria-label="Artículo encontrado en la bodega">
               <option value="">Agregar un artículo que no está en la hoja…</option>
               {disponibles.map((a) => (
                 <option key={a.id} value={a.id}>{a.clave} · {a.descripcion}</option>
