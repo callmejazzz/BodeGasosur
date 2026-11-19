@@ -9,6 +9,11 @@ WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 
 FROM base AS dependencias
+# Prisma busca OpenSSL al generar el cliente y al migrar; la imagen slim no lo trae.
+# La imagen final sale de base: no lo necesita al ejecutar
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends openssl \
+ && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
 RUN npm ci
 

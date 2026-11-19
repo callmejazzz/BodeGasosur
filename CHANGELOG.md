@@ -8,6 +8,16 @@ puede hacer ahora que antes no se podía.
 
 ---
 
+## Por publicar
+
+Última migración incluida: `20261107120000_correo_y_preferencia`.
+
+**Por dentro**
+
+- La imagen instala OpenSSL al construir: Prisma ya no avisa en cada build ni en cada
+  migración que no lo encuentra, y su motor de migraciones usa la versión de OpenSSL de la
+  imagen.
+
 ## v0.9.0 — 2026-11-19
 
 Etiqueta `v0.9.0`, sobre el commit que la publica en `main`.
