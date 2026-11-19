@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/campos";
+import { DialogoConfirmacion } from "@/components/ui/dialogo";
 import type { ResultadoAccion } from "@/lib/inventario/acciones";
 
 /*
@@ -28,51 +28,36 @@ export function RevertirMovimiento({ id, folio, revertir }: { id: string; folio:
     setMensaje(null);
     setAbierto(false);
   };
+  const registrar = () =>
+    iniciar(async () => {
+      setMensaje(null);
+      const r = await revertir(id, motivo);
+      if (!r.ok) {
+        setMensaje(r.mensaje);
+        router.refresh();
+      } else if (r.href) {
+        router.push(r.href);
+      }
+    });
 
   return (
-    <div className="flex flex-col gap-3 border-t border-border px-5 py-4">
-      {mensaje && (
-        <p role="alert" className="rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger">
-          {mensaje}
-        </p>
-      )}
-      {abierto ? (
-        <form
-          className="flex flex-wrap items-end gap-2"
-          onSubmit={(ev) => {
-            ev.preventDefault();
-            iniciar(async () => {
-              setMensaje(null);
-              const r = await revertir(id, motivo);
-              if (!r.ok) {
-                setMensaje(r.mensaje);
-                router.refresh();
-              } else if (r.href) {
-                router.push(r.href);
-              }
-            });
-          }}
-        >
-          <label className="flex min-w-64 flex-1 flex-col gap-1.5 text-sm font-medium text-muted-strong">
-            ¿Por qué se revierte {folio}?
-            <Input value={motivo} onChange={(ev) => setMotivo(ev.target.value)} maxLength={300} autoFocus required />
-            <span className="text-xs font-normal text-muted">
-              Crea un asiento inverso con folio propio. {folio} no se borra ni se edita, y solo se revierte una vez.
-            </span>
-          </label>
-          <Button type="submit" variante="peligro" disabled={pendiente}>
-            {pendiente ? "Revirtiendo…" : "Registrar reversa"}
-          </Button>
-          <Button type="button" variante="secundario" onClick={volver} disabled={pendiente}>
-            Volver
-          </Button>
-        </form>
-      ) : (
-        <div className="flex justify-end">
-          <Button type="button" variante="secundario" onClick={abrir}>
-            Revertir
-          </Button>
-        </div>
+    <div className="flex justify-end border-t border-border px-5 py-4">
+      <Button type="button" variante="secundario" onClick={abrir}>
+        Revertir
+      </Button>
+      {abierto && (
+        <DialogoConfirmacion
+          titulo={`¿Revertir ${folio}?`}
+          descripcion={`Crea un asiento inverso con folio propio. ${folio} no se borra ni se edita, y solo se revierte una vez.`}
+          campo={{ etiqueta: `¿Por qué se revierte ${folio}?`, valor: motivo, alCambiar: setMotivo, max: 300 }}
+          confirmar="Registrar reversa"
+          enCurso="Revirtiendo…"
+          peligro
+          pendiente={pendiente}
+          mensaje={mensaje}
+          alConfirmar={registrar}
+          alCerrar={volver}
+        />
       )}
     </div>
   );

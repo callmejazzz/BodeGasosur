@@ -32,8 +32,8 @@ export default async function PaginaDevolucion({ params, searchParams }: PagePro
         confirmar: confirmarDevolucion,
         descartar: descartarDevolucion,
         aviso: m.devuelveA
-          ? `¿Confirmas que el material ya volvió? Entra con el costo de ${m.devuelveA.folio} y reduce lo que falta por volver. Después no se edita.`
-          : "¿Confirmas que el material ya volvió? Entra sin costo, como procedencia no comprobada. Después no se edita.",
+          ? `Confirma que el material ya volvió: entra con el costo de ${m.devuelveA.folio} y reduce lo que falta por volver. Después no se edita.`
+          : "Confirma que el material ya volvió: entra sin costo, como procedencia no comprobada. Después no se edita.",
         texto: "Confirmar devolución",
       }}
       revertir={revertirMovimiento}

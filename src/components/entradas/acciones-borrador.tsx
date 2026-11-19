@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/campos";
+import { DialogoConfirmacion } from "@/components/ui/dialogo";
 import type { ResultadoAccion } from "@/app/(sistema)/entradas/actions";
 
 /*
@@ -26,7 +26,7 @@ export function AccionesBorrador({
   const router = useRouter();
   const [pendiente, iniciar] = useTransition();
   const [mensaje, setMensaje] = useState<string | null>(null);
-  const [descartando, setDescartando] = useState(false);
+  const [dialogo, setDialogo] = useState<"confirmar" | "descartar" | null>(null);
   const [motivo, setMotivo] = useState("");
 
   const ejecutar = (fn: () => Promise<ResultadoAccion>) =>
@@ -34,67 +34,67 @@ export function AccionesBorrador({
       const r = await fn();
       if (r.ok) {
         setMensaje(null);
+        setDialogo(null);
         router.refresh();
       } else {
         setMensaje(r.mensaje);
       }
     });
-  const abrir = () => {
+  const abrir = (d: "confirmar" | "descartar") => {
     setMotivo("");
     setMensaje(null);
-    setDescartando(true);
+    setDialogo(d);
   };
   const volver = () => {
     setMensaje(null);
-    setDescartando(false);
+    setDialogo(null);
   };
+  const vigente = dialogo === "confirmar" && !puedeConfirmar ? null : dialogo;
 
   return (
     <div className="flex flex-col gap-3 px-5 py-4">
-      {mensaje && (
+      {mensaje && !vigente && (
         <p role="alert" className="rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger">
           {mensaje}
         </p>
       )}
 
-      {descartando ? (
-        <form
-          className="flex flex-wrap items-end gap-2"
-          onSubmit={(ev) => {
-            ev.preventDefault();
-            ejecutar(() => descartar(id, motivo));
-          }}
-        >
-          <label className="flex min-w-64 flex-1 flex-col gap-1.5 text-sm font-medium text-muted-strong">
-            ¿Por qué se descarta?
-            <Input value={motivo} onChange={(ev) => setMotivo(ev.target.value)} maxLength={300} autoFocus required />
-          </label>
-          <Button type="submit" variante="peligro" disabled={pendiente}>
-            {pendiente ? "Descartando…" : "Descartar borrador"}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Button type="button" variante="sutil" onClick={() => abrir("descartar")} disabled={pendiente}>
+          Descartar borrador
+        </Button>
+        {puedeConfirmar && (
+          <Button type="button" onClick={() => abrir("confirmar")} disabled={pendiente}>
+            Confirmar recepción
           </Button>
-          <Button type="button" variante="secundario" onClick={volver} disabled={pendiente}>
-            Volver
-          </Button>
-        </form>
-      ) : (
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <Button type="button" variante="sutil" onClick={abrir} disabled={pendiente}>
-            Descartar borrador
-          </Button>
-          {puedeConfirmar && (
-            <Button
-              type="button"
-              disabled={pendiente}
-              onClick={() => {
-                if (window.confirm("¿Confirmas que el material ya está en la bodega? Se asignará folio y la existencia subirá. Después no se puede editar.")) {
-                  ejecutar(() => confirmar(id));
-                }
-              }}
-            >
-              {pendiente ? "Confirmando…" : "Confirmar recepción"}
-            </Button>
-          )}
-        </div>
+        )}
+      </div>
+
+      {vigente === "confirmar" && (
+        <DialogoConfirmacion
+          titulo="¿Confirmar la recepción?"
+          descripcion="Confirma que el material ya está en la bodega: se asigna folio y la existencia sube. Después no se puede editar."
+          confirmar="Confirmar recepción"
+          enCurso="Confirmando…"
+          pendiente={pendiente}
+          mensaje={mensaje}
+          alConfirmar={() => ejecutar(() => confirmar(id))}
+          alCerrar={volver}
+        />
+      )}
+      {vigente === "descartar" && (
+        <DialogoConfirmacion
+          titulo="¿Descartar este borrador?"
+          descripcion="El borrador queda descartado sin mover inventario. No se puede deshacer."
+          campo={{ etiqueta: "¿Por qué se descarta?", valor: motivo, alCambiar: setMotivo, max: 300 }}
+          confirmar="Descartar borrador"
+          enCurso="Descartando…"
+          peligro
+          pendiente={pendiente}
+          mensaje={mensaje}
+          alConfirmar={() => ejecutar(() => descartar(id, motivo))}
+          alCerrar={volver}
+        />
       )}
     </div>
   );
