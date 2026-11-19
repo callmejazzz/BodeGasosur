@@ -12,6 +12,7 @@ import { URL_PRUEBAS } from "../../../../../pruebas/base-de-pruebas";
 import { formDataEspia } from "../../../../../pruebas/formulario-espia";
 import { sembrarEntorno, type Entorno } from "../../../../../pruebas/semilla-entradas";
 import { ESTADO_INICIAL } from "@/lib/catalogos/formulario";
+import { SIN_SESION } from "@/lib/mensajes";
 
 const sesion = vi.hoisted(() => ({ userId: null as string | null, token: undefined as ((userId: string) => string | null) | undefined }));
 
@@ -50,10 +51,10 @@ function bodega(nombre: string) {
 describe("guardarCatalogo", () => {
   it("sin sesión o sin permiso, la negativa llega antes de abrir el FormData", async () => {
     const casos = [
-      { rol: null, slug: "bodegas", mensaje: "No tienes permiso para modificar bodegas." },
+      { rol: null, slug: "bodegas", mensaje: SIN_SESION },
       { rol: "JEFE", slug: "bodegas", mensaje: "No tienes permiso para modificar bodegas." },
       { rol: "COMPRAS", slug: "empresas", mensaje: "No tienes permiso para modificar empresas." },
-      { rol: null, slug: "no-existe", mensaje: "No tienes permiso para esta operación." },
+      { rol: null, slug: "no-existe", mensaje: SIN_SESION },
     ] as const;
     for (const { rol, slug, mensaje } of casos) {
       await como(rol);

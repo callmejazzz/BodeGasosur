@@ -3,8 +3,11 @@ import type { ReactNode } from "react";
 import { Navegacion } from "@/components/navegacion";
 import { RefrescarAlEnfocar } from "@/components/refrescar-al-enfocar";
 import { ControlesSesion } from "@/components/sesion";
-import { registrarAccesoDenegado, sesionActual } from "@/lib/db";
+import { consultarMiCuenta } from "@/lib/cuenta/consultas";
+import { consultar, registrarAccesoDenegado, sesionActual } from "@/lib/db";
+import { leerContadores } from "@/lib/navegacion/contadores";
 import { usuarioTienePermiso } from "@/lib/permisos";
+import { VERSION } from "@/lib/version";
 
 /**
  * El sistema. Dibuja la barra lateral y decide quién la ve.
@@ -30,6 +33,21 @@ export default async function LayoutSistema({ children }: { children: ReactNode 
     await registrarAccesoDenegado();
     redirect("/acceso-denegado");
   }
+  
+  const miCuenta = usuarioTienePermiso(sesion.usuario, "cuenta:editar")
+    ? consultarMiCuenta().catch((error: unknown) => {
+        console.error("Fallo al leer las preferencias:", error);
+        return null;
+      })
+    : null;
+
+  // Se actualizan al recargar o al volver a la pestaña: el layout no se vuelve a ejecutar al navegar
+  const contadores = usuarioTienePermiso(sesion.usuario, "catalogos:leer")
+    ? consultar("catalogos:leer", (db, yo) => leerContadores(db, (permiso) => usuarioTienePermiso(yo, permiso))).catch((error: unknown) => {
+        console.error("Fallo al contar lo pendiente de la barra lateral:", error);
+        return {};
+      })
+    : null;
 
   return (
     <>
@@ -48,9 +66,11 @@ export default async function LayoutSistema({ children }: { children: ReactNode 
           reportes: usuarioTienePermiso(sesion.usuario, "reportes:leer"),
           usuarios: usuarioTienePermiso(sesion.usuario, "usuarios:administrar"),
         }}
-        sesion={<ControlesSesion rol={sesion.usuario.rol} />}
-      />
-      <main className="min-w-0 flex-1 px-8 py-7">{children}</main>
+        sesion={<ControlesSesion version={VERSION} miCuenta={miCuenta} />}
+        contadores={contadores}
+      >
+        {children}
+      </Navegacion>
     </>
   );
 }

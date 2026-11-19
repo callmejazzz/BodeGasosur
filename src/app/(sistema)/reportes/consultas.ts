@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import type { PaginaDeOpciones } from "@/components/ui/selector-buscable";
-import { consultarDesdeAccion, SinAcceso, SinPermiso } from "@/lib/db";
+import { consultarDesdeAccion, mensajeDeNegativa } from "@/lib/db";
 import { acotarPagina } from "@/lib/paginacion";
 import { articulosDelSelector, type OpcionArticulo } from "@/lib/reportes/pantallas";
 
@@ -21,7 +21,8 @@ export async function buscarArticulos(texto: unknown, pagina: unknown): Promise<
       return { opciones: filas, pagina: p, aviso: null };
     });
   } catch (error) {
-    if (error instanceof SinAcceso || error instanceof SinPermiso) return vacia("Sin permiso para consultar artículos.");
+    const negativa = mensajeDeNegativa(error, "Sin permiso para consultar artículos.");
+    if (negativa) return vacia(negativa);
     throw error;
   }
 }

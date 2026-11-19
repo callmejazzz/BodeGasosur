@@ -65,9 +65,11 @@ export async function guardarAcceso(
   },
 ) {
   const { clerkUserId, ...resto } = datos;
+  // select para no traer la fila completa
   await db.usuario.upsert({
     where: { clerkUserId },
     update: resto,
     create: { clerkUserId, ...resto },
+    select: { id: true },
   });
 }

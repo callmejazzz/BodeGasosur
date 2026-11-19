@@ -35,7 +35,14 @@ export default async function PaginaDevoluciones({ searchParams }: PageProps<"/d
         {filas.length === 0 ? (
           <EstadoVacio
             titulo={filtrando ? "Sin coincidencias" : "Todavía no hay devoluciones"}
-            descripcion={filtrando ? "Prueba con otra búsqueda o cambia el filtro." : undefined}
+            descripcion={
+              filtrando
+                ? "Prueba con otra búsqueda o cambia el filtro."
+                : puedeCapturar
+                  ? "Registra el material que vuelve de una estación a su bodega."
+                  : "Nadie ha capturado ninguna todavía."
+            }
+            accion={!filtrando && puedeCapturar ? <ButtonLink href="/devoluciones/nueva" tamano="sm" prefetch={false}>Nueva devolución</ButtonLink> : undefined}
           />
         ) : (
           <TablaMovimientos ruta="/devoluciones" filas={filas} columnas={["estacion", "destino", "detalle"]} />

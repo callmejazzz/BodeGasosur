@@ -1,7 +1,8 @@
 import "server-only";
 import type { Prisma } from "@prisma/client";
 import type { z } from "zod";
-import { accionProtegida, SinAcceso, SinPermiso, type UsuarioSesion } from "@/lib/db";
+import { accionProtegida, mensajeDeNegativa, type UsuarioSesion } from "@/lib/db";
+import { FALLO_DEL_SERVIDOR } from "@/lib/mensajes";
 import { erroresDe, type ErroresFormulario } from "@/lib/movimientos/formulario";
 import type { Permiso } from "@/lib/permisos";
 import { ErrorDeDominio, traducida } from "./errores";
@@ -42,15 +43,14 @@ export function protegida<E extends z.ZodType, T, I = unknown>(
 /** Resultado de una acción sin formulario: la pantalla lo muestra tal cual y relee el detalle. */
 export type ResultadoAccion = { ok: true; href?: string } | { ok: false; mensaje: string };
 
-export const SIN_PERMISO = "No tienes permiso para esta operación.";
-
 /** Lo único que ve la persona: la negativa, el error del dato o del dominio, o uno genérico. */
 export function mensajeSeguro(error: unknown, noExiste: string): string {
-  if (error instanceof SinAcceso || error instanceof SinPermiso) return SIN_PERMISO;
+  const negativa = mensajeDeNegativa(error);
+  if (negativa) return negativa;
   if (error instanceof DatosInvalidos) return error.errores.id ? noExiste : (Object.values(error.errores)[0] ?? "Datos inválidos.");
   if (error instanceof ErrorDeDominio) return error.message;
   console.error("[inventario]", error);
-  return "No se pudo completar la operación. Inténtalo de nuevo.";
+  return FALLO_DEL_SERVIDOR;
 }
 
 /** Una acción sin formulario: el resultado seguro y, si salió bien, el refresco de sus pantallas. */

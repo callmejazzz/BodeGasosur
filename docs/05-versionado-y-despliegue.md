@@ -109,6 +109,11 @@ decisión del proyecto: `main` va por delante de la última versión etiquetada.
 ya traía `package.json` en `0.8.0` y su entrada del CHANGELOG. Se publica como `v0.8.0` al
 mezclar `feat-reportes` a `main` en un solo commit, que es el que lleva la etiqueta.
 
+**Fase 9:** se construyó en la rama `feat/fase-9`, con un PR por entrega (#24, #27 a #30).
+La rama `release/v0.9.0` sale de ella con `package.json` en `0.9.0`, la entrada del
+CHANGELOG y el estado de los documentos, y se mezcla a `main` en un solo commit, que lleva
+la etiqueta `v0.9.0`.
+
 Los mensajes de commit siguen siendo prosa en español que describe decisiones. **No se
 adopta Conventional Commits:** con este desarrollo por fases y un desarrollador, el
 changelog a mano sale mejor escrito que uno generado, y los mensajes actuales documentan
@@ -148,7 +153,7 @@ Mientras dure el desarrollo el sistema sigue siendo local ([01-arquitectura.md](
 | Conexión de la aplicación | **Directa** (`db.<proyecto>.supabase.co`), con el complemento IPv4. Supavisor en modo sesión (5432) solo como alternativa; nunca el modo transacción (6543) |
 | Conexión del dueño | **Directa**, desde una terminal |
 
-**La base va donde está la aplicación.** El tablero hace once consultas seguidas y confirmar un movimiento encadena varias con candados puestos: dentro de Ashburn cada ida y vuelta cuesta 1–2 ms; contra Ohio, 10–15 ms, y los candados duran lo mismo de más.
+**La base va donde está la aplicación.** Abrir el tablero suma doce consultas (cinco de sus tarjetas y siete de los contadores de la barra lateral) y confirmar un movimiento encadena varias con candados puestos: dentro de Ashburn cada ida y vuelta cuesta 1–2 ms; contra Ohio, 10–15 ms, y los candados duran lo mismo de más.
 
 **Separadas, porque el libro contable no debe depender del hosting de la aplicación.** La
 aplicación se puede cambiar de proveedor sin tocar la base; los proyectos que lean `catalogo_gasosur` se conectan a la base y no a Sevalla; y la credencial del dueño nunca
@@ -230,9 +235,9 @@ en su rol —la base enseña la hora de México—, así que los scripts que esc
   es `output: "standalone"`, corre con Node 24 como usuario sin privilegios y no lleva
   migraciones ni la credencial del dueño.
 - **Variables.** Al construir: las `NEXT_PUBLIC_*`, que quedan incrustadas en el navegador.
-  En ejecución: `DATABASE_URL`, `CLERK_SECRET_KEY`, `CLERK_WEBHOOK_SIGNING_SECRET` y
-  `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`. **Nunca `DATABASE_URL_MIGRACIONES`:** en Sevalla
-  las variables son de la aplicación, no del proceso, y cualquier proceso la vería.
+  En ejecución: `DATABASE_URL`, `CLERK_SECRET_KEY`, `CLERK_WEBHOOK_SIGNING_SECRET`,
+  `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` y, para la alerta diaria, `RESEND_API_KEY`,
+  `RESEND_WEBHOOK_SECRET`, `CORREO_REMITENTE`, `CRON_SECRET` y `URL_APLICACION`. **Nunca `DATABASE_URL_MIGRACIONES`:** en Sevalla las variables son de la aplicación, no del proceso, y cualquier proceso la vería.
 - **Readiness y liveness en `/api/salud`**, que no consulta la base: si Supabase cae,
   reiniciar la aplicación en bucle no arregla nada. La readiness es lo que hace que un
   despliegue no corte el servicio.
@@ -246,6 +251,20 @@ en su rol —la base enseña la hora de México—, así que los scripts que esc
   en memoria— se contarían por instancia.
 - **El webhook de Clerk** apunta a `https://<dominio>/api/webhooks/clerk`, con la instancia
   de producción de Clerk.
+- **El webhook de Resend** apunta a `https://<dominio>/api/webhooks/resend` y está suscrito a
+  `email.sent`, `email.delivered`, `email.delivery_delayed`, `email.bounced`,
+  `email.complained`, `email.failed` y `email.suppressed`. Su secreto de firma es
+  `RESEND_WEBHOOK_SECRET`. El plan gratuito de Resend admite un solo webhook: es el de
+  esta aplicación ([fase 9](contratos-otros/07-fase-9-acabado.md) §3.7).
+- **El proceso cron** de la alerta diaria vive en la misma aplicación: comando
+  `node scripts/disparar-resumen.mjs`, horario `*/15 8-11 * * *` en la zona
+  `America/Mexico_City` (por omisión Sevalla usa UTC), `concurrency_policy` Forbid y
+  `active_deadline_seconds` de 240. Sevalla reintenta una vez una corrida que sale con un
+  código distinto de 0. La ruta que llama rechaza las corridas fuera de 8:00 a 12:00, así
+  que un cron en UTC se nota en vez de pasar en silencio ([fase 9](contratos-otros/07-fase-9-acabado.md) §3.9).
+- **Al publicar algo que cambie la alerta,** el cron se ejecuta a mano una vez antes de
+  dejarlo programado, y el webhook se prueba con un evento de ejemplo desde el panel de
+  Resend.
 
 ### Versiones sin errores al guardar
 
@@ -339,13 +358,17 @@ facultado.
 
 ## 9. La versión tiene que verse en la aplicación
 
-En el pie de página, la versión y el hash corto del commit (`v1.1.0 · a3f9c21`). Sevalla no
-expone el commit al construir, así que llegará como variable de build del `Dockerfile`; se
-implementa con el acabado de la fase 9.
+Debajo del nombre del usuario, en la barra lateral, va la versión y el commit corto:
+`v0.9.0 - b53e569`.
 
 Sin eso, un reporte de Compras es inaccionable: no hay forma de saber si quien reporta está
 viendo lo último o una pestaña abierta desde hace tres días. Es la única pieza de esta
 política que el usuario final ve, y es la que la hace útil en soporte.
+
+Sevalla no expone el commit al construir, así que `next.config.ts` lo lee de `.git` durante
+el build, sin el programa `git`, que la imagen no trae. El `.dockerignore` deja pasar solo
+`HEAD` y las referencias de `.git`, no el historial, y la imagen final no lleva nada de
+`.git`. Si el build no recibe `.git`, se muestra solo la versión.
 
 ## 10. El contrato compartido, resuelto
 

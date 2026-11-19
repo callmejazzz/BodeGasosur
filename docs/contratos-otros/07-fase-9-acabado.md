@@ -1,10 +1,10 @@
 # BodeGasosur - contrato de la fase 9: Acabado
 
-**Estado:** contrato de la fase 9, pendiente de construir; objetivo `v0.9.0`. Define la alerta diaria de stock mínimo por correo y su seguimiento de entrega, la preferencia de cada usuario, el tablero de inicio, las alertas en pantalla y el acabado de la interfaz. §9 se llenará con las decisiones que tome la construcción. Complementa el [expediente de la fase](../entregables-fases/09-acabado.md), el [modelo de datos](../02-modelo-de-datos.md) y el [contrato de reportes](06-fase-8-reportes.md), cuya regla de bajo mínimo se reutiliza sin cambios.
+**Estado:** construido y publicado como `v0.9.0`. Define la alerta diaria de stock mínimo por correo y su seguimiento de entrega, la preferencia de cada usuario, el tablero de inicio, las alertas en pantalla y el acabado de la interfaz. §9 recoge las decisiones que tomó la construcción. Complementa el [expediente de la fase](../entregables-fases/09-acabado.md), el [modelo de datos](../02-modelo-de-datos.md) y el [contrato de reportes](06-fase-8-reportes.md), cuya regla de bajo mínimo se reutiliza sin cambios.
 
 ## 1. Resultado y límites
 
-Cada usuario puede elegir si recibe, una vez al día, un correo con los artículos que están por debajo de su mínimo. Al entrar al sistema, el tablero muestra lo que pide atención: artículos bajo mínimo, préstamos abiertos, salidas por autorizar y por retirar, entradas en borrador y las estaciones con más gasto del mes. La navegación avisa cuántos artículos están bajo mínimo. Las pantallas funcionan en celular y escritorio. Los estados vacíos y los errores se explican, y toda acción irreversible pide confirmación.
+Cada usuario puede elegir si recibe, una vez al día, un correo con los artículos que están por debajo de su mínimo. Al entrar al sistema, el tablero muestra lo que pide atención: artículos bajo mínimo, salidas solicitadas y autorizadas, préstamos abiertos, entradas en borrador y las estaciones con más gasto del mes. La barra lateral muestra cuántos pendientes tiene cada módulo de operación y cuántos artículos están bajo mínimo. Las pantallas funcionan en celular y escritorio. Los estados vacíos y los errores se explican, y toda acción irreversible pide confirmación.
 
 Quedan fuera:
 - La búsqueda global de artículo.
@@ -14,13 +14,13 @@ Quedan fuera:
 - El alcance de usuarios por bodega.
 - Cualquier correo que no sea la alerta diaria.
 
-El dominio propio del remitente es una tarea previa a `v1.0.0`, no de esta fase (§3.8).
+El dominio del remitente, `gasosurnet.com`, ya está verificado en Resend (§3.8).
 
 ## 2. Preferencia de alertas por correo
 
-- **Dato.** `Usuario.alertasCorreo`, booleano, `false` por omisión. Un usuario nuevo, sincronizado por el webhook de Clerk, empieza sin alertas. La migración no enciende la preferencia de ningún usuario existente.
-- **Quién la ve y la cambia.** Solo el propio usuario, desde la pantalla «Mi cuenta» (`/cuenta`). Nadie más puede verla ni cambiarla, tampoco el Superadmin:
-  - La ruta no lleva identificador de usuario. Lectura y escritura toman siempre el usuario de la sesión, y cualquier identificador que llegue en el formulario o en la URL se ignora.
+- **Dato.** `Usuario.alertasCorreo`, booleano, `false` por omisión. Un usuario nuevo, dado de alta por el Superadmin o por el arranque, empieza sin alertas. La migración no enciende la preferencia de ningún usuario existente.
+- **Quién la ve y la cambia.** Solo el propio usuario, desde el apartado «Preferencias» de su perfil: el modal de Clerk que se abre con su foto en la barra lateral. Nadie más puede verla ni cambiarla, tampoco el Superadmin:
+  - El apartado no tiene ruta propia ni lleva identificador de usuario. Lectura y escritura toman siempre el usuario de la sesión, y cualquier identificador que llegue en el formulario se ignora.
   - La preferencia no aparece en la administración de usuarios, en su exportación a Excel ni en ninguna otra pantalla o descarga.
   - Las consultas de usuarios seleccionan campos explícitos, nunca la fila completa.
 - **Permiso.** `cuenta:editar`, para los tres roles. Lo exige la Server Action en el servidor, igual que los demás permisos (`accionProtegida`), y la escritura toca solo esa columna de esa fila.
@@ -34,7 +34,7 @@ El dominio propio del remitente es una tarea previa a `v1.0.0`, no de esta fase 
   - Cada cambio de la preferencia deja un renglón con el propio usuario como actor y `alertasCorreo` en `antes` y `despues`.
   - Cualquier otro cambio a la fila (un cambio de rol, una baja, la sincronización de correo de Clerk) también lleva `alertasCorreo` en `antes` y `despues`, aunque no la toque.
   - La bitácora no tiene pantalla ni descarga en la aplicación; solo la consulta quien tiene acceso directo a la base. Es la **única excepción** a la privacidad de la preferencia.
-- **Qué muestra «Mi cuenta».**
+- **Qué muestra el apartado «Preferencias».**
   - La preferencia.
   - El correo al que llegará la alerta, que es la copia sincronizada desde Clerk.
   - La hora de envío.
@@ -48,7 +48,7 @@ El dominio propio del remitente es una tarea previa a `v1.0.0`, no de esta fase 
 
 Es la misma regla del reporte de existencias (§3.2 del [contrato de reportes](06-fase-8-reportes.md)): artículo activo, bodega activa y `Existencia.cantidad < Articulo.stockMinimo`, comparado en cada bodega. Mínimo cero nunca es bajo mínimo. Se lee la existencia actual al momento de la reserva (§3.4), en una sola sentencia sobre la consulta base del reporte; no se escribe una segunda versión de la regla. Como los usuarios no tienen alcance por bodega, todos los destinatarios reciben la misma lista.
 
-**Cuántos artículos (N).** N es el número de **artículos distintos** bajo mínimo en al menos una bodega activa: un artículo que falta en dos bodegas cuenta una vez, aunque ocupe dos renglones de la tabla. Se calcula en la misma instantánea que los renglones, sobre la misma consulta, y no se acota con el tope de §3.3. El asunto del correo, el tablero (§4) y la navegación (§5) usan esta misma N.
+**Cuántos artículos (N).** N es el número de **artículos distintos** bajo mínimo en al menos una bodega activa: un artículo que falta en dos bodegas cuenta una vez, aunque ocupe dos renglones de la tabla. Se calcula en la misma instantánea que los renglones, sobre la misma consulta, y no se acota con el tope de §3.3. El asunto del correo, el aviso del reporte de existencias y la barra lateral (§5) usan esta misma N.
 
 ### 3.2 Cuándo y a quién
 
@@ -66,7 +66,8 @@ Es la misma regla del reporte de existencias (§3.2 del [contrato de reportes](0
   - Una tabla agrupada por bodega. Cada grupo lleva solo el **nombre** de la bodega, sin su clave (`BDG-…`). Cada renglón lleva clave del artículo, descripción, unidad, existencia, mínimo y faltante (mínimo − existencia).
   - Orden: nombre de bodega, luego clave de artículo. El nombre de bodega es único, así que identifica cada grupo sin la clave.
 - **Tope:** 50 renglones. Si hay más, el correo dice cuántos renglones faltan («y M renglones más») y remite al reporte.
-- **Enlaces:** uno al reporte de existencias con el filtro de bajo mínimo y otro a «Mi cuenta» para desactivar la alerta. Las direcciones se arman con la URL pública de la aplicación.
+- **Enlace:** uno al reporte de existencias con el filtro de bajo mínimo. La dirección se arma con la URL pública de la aplicación.
+- **Cómo desactivarla:** el correo dice que la alerta se desactiva desde el perfil en BodeGasosur, apartado «Preferencias». No lleva enlace para desactivarla, porque el apartado vive en el modal de Clerk y no tiene dirección propia.
 - **Formatos:** cada correo lleva versión HTML y versión de texto. Todo texto que venga de la base se escapa.
 - **Plantilla:** se escribe con `react-email` y puede previsualizarse en local con datos de ejemplo.
 - **Datos:** el correo no incluye importes ni costos.
@@ -107,7 +108,7 @@ Es la misma regla del reporte de existencias (§3.2 del [contrato de reportes](0
 ### 3.5 Envío y conciliación
 
 - **Ninguna transacción queda abierta mientras se espera a Resend.** Cada lote se manda en tres pasos:
-  1. **Arrendar.** Una transacción corta hace un `UPDATE` que sube `intentos`, fija el último intento y pone `arrendadoHasta = now() + 5 minutos`. Solo afecta al lote si es de la fecha de hoy y está libre, es decir, sin arriendo o con uno vencido. Además, el lote debe estar `PENDIENTE` o `ACEPTADO` con integrantes sin identificador. Si no toca ninguna fila, el lote lo tiene otra corrida y se salta. El arriendo se confirma antes de llamar a Resend, así que el intento queda contado aunque el proceso caiga.
+  1. **Arrendar.** Una transacción corta hace un `UPDATE` que sube `intentos`, fija el último intento y pone `arrendadoHasta = now() + 5 minutos`. Solo afecta al lote si es de la fecha de hoy y está libre, es decir, sin arriendo o con uno vencido. Además, el lote debe estar `PENDIENTE` o `ACEPTADO` con integrantes todavía `PENDIENTE`. Si no toca ninguna fila, el lote lo tiene otra corrida y se salta. El arriendo se confirma antes de llamar a Resend, así que el intento queda contado aunque el proceso caiga.
   2. **Llamar.** Se llama sin transacción y sin retener conexión. El cuerpo se arma solo con lo guardado: remitente, asunto, HTML y texto del lote, más el correo de cada integrante en orden de posición, con la etiqueta `registro=<id de RegistroCorreos>`. Va con la llave del lote y un tiempo de espera de 30 segundos. Nunca se vuelven a leer existencias ni usuarios, así que un reintento manda el mismo cuerpo, byte por byte.
   3. **Conciliar.** Una transacción corta aplica el resultado con la regla de abajo.
 - **Duración de las transacciones.** Las tres son de milisegundos, porque ninguna espera a la red. El arriendo de 5 minutos dura más que el tiempo de espera de 30 segundos, así que dos corridas no llaman a Resend por el mismo lote a la vez. Si llegara a pasar, Resend responde `409 concurrent_idempotent_requests` y no duplica.
@@ -116,11 +117,17 @@ Es la misma regla del reporte de existencias (§3.2 del [contrato de reportes](0
   - Si Resend no lo recibió, la siguiente corrida lo envía por primera vez.
   - En los dos casos sale una sola vez. Mientras tanto, el webhook puede conciliar por su lado (§3.7).
   - Si la respuesta tardía llega después de abortar, se descarta.
-- **Qué pasa según la respuesta:**
+- **Qué pasa según la respuesta.** Se clasifica por el código HTTP y el tipo de error (`name`) que devuelve Resend, nunca por su mensaje:
   - **Éxito:** se concilia la aceptación de cada integrante, cuya posición `i` en `data` corresponde a la posición `i` del lote.
-  - **Rechazo definitivo** (`400` de llave, `403`, `422`): el lote queda `RECHAZADO` y sus integrantes `FALLIDO` con el motivo, salvo los que ya estén `ENVIADO`. Los demás lotes siguen.
-  - **Rechazo pasajero** (`409 concurrent_idempotent_requests`, `429`, `5xx`, tiempo agotado, fallo de red): no se escribe nada. El lote espera a que venza su arriendo y lo retoma la siguiente corrida.
+  - **Rechazo de los datos** (`400` o `422` de validación: `validation_error`, `invalid_parameter`, `missing_required_field`, `invalid_idempotency_key` o `invalid_attachment`): la petición no es válida y repetirla no sirve. El lote queda `RECHAZADO` y sus integrantes `FALLIDO` con el motivo, salvo los que ya estén `ENVIADO`. Si el lote ya estaba `ACEPTADO` porque antes llegó un evento asociado, sigue así: sus integrantes `PENDIENTE` pasan a `SIN_CONFIRMAR`, porque pudieron haber salido, y no se vuelven a pedir. Los demás lotes siguen.
+  - **Rechazo pasajero** (`409 concurrent_idempotent_requests`, `429` que no sea de cuota, `5xx`, tiempo agotado o fallo de red): no se escribe nada. El lote espera a que venza su arriendo y lo retoma la siguiente corrida.
+  - **Incidente operativo:** el fallo no depende de los destinatarios y se repara fuera del sistema. Nadie queda `FALLIDO`: el lote sigue `PENDIENTE` con el motivo, la corrida no intenta más lotes y el día queda no sano. Ya reparado, la siguiente corrida lo envía con la misma llave.
+    - **Autenticación:** `401` o una llave inválida (`missing_api_key`, `restricted_api_key` o `invalid_api_key`).
+    - **Remitente:** cualquier otro `403`, como el dominio sin verificar (§3.8), o `invalid_from_address`.
+    - **Cuota:** `daily_quota_exceeded` o `monthly_quota_exceeded`.
+    - **Operativo:** cualquier otro código o tipo de esta lista. Ante lo desconocido, nadie se marca `FALLIDO`.
   - **`409 invalid_idempotent_request`:** indica que el cuerpo cambió, lo cual no debe pasar. El lote queda `SIN_CONFIRMAR`, se deja una línea de error y no se reenvía.
+  - **El motivo** es una descripción propia con el código y el tipo, por ejemplo «Resend rechazó la llave de la API (401 restricted_api_key)». El mensaje de Resend no se guarda ni se registra, porque puede traer direcciones. Cuando el lote pasa a `ACEPTADO` o el registro a `ENVIADO`, su motivo se borra: un estado de éxito no conserva el de un fallo anterior.
 - **Regla de conciliación.** La aplican la respuesta de `batch.send` y el webhook (§3.7), en cualquier orden y las veces que haga falta, con el mismo resultado:
   - **Orden de candados.** Primero el lote (`FOR UPDATE`) y luego sus registros por posición. Los dos escritores siguen ese orden, así que no forman ciclo.
   - **Registro.** El hecho que se concilia es el par (registro, identificador de Resend):
@@ -129,17 +136,19 @@ Es la misma regla del reporte de existencias (§3.2 del [contrato de reportes](0
     - Con otro identificador: no se sobrescribe. Desde el webhook este caso no llega a la conciliación, porque el evento ya se marcó como anómalo (§3.7). Desde la respuesta del lote, deja una línea de error, y los eventos posteriores de ese otro identificador quedan como anomalía.
 
     `ENVIADO` es final y el identificador se fija una sola vez.
-  - **Lote.** Si un solo integrante tiene prueba de aceptación, la petición fue aceptada: el lote pasa a `ACEPTADO` desde cualquier estado, y `ACEPTADO` es final. Un lote `ACEPTADO` con integrantes todavía sin identificador puede volver a pedirse ese día con la misma llave, y Resend devuelve la respuesta original con los identificadores que faltan.
-  - **Rechazo.** Un rechazo solo cambia lo que sigue `PENDIENTE`: nunca pisa un `ENVIADO` ni un `ACEPTADO`.
+  - **Lote.** Si un solo integrante tiene prueba de aceptación, la petición fue aceptada: el lote pasa a `ACEPTADO` desde cualquier estado, y `ACEPTADO` es final. Un lote `ACEPTADO` con integrantes todavía `PENDIENTE` puede volver a pedirse ese día con la misma llave, y Resend devuelve la respuesta original con los identificadores que faltan.
+  - **Rechazo.** Un rechazo solo cambia lo que sigue `PENDIENTE`: nunca pisa un `ENVIADO` ni un `ACEPTADO`. En un lote `ACEPTADO`, sus integrantes `PENDIENTE` pasan a `SIN_CONFIRMAR`, no a `FALLIDO`.
 
 ### 3.6 Recuperación y cierre
 
 - **Ejecutor.** El cron de Sevalla corre cada 15 minutos de 8:00 a 11:45 (`*/15 8-11 * * *`), 16 corridas al día. Cada corrida hace, en orden:
-  1. Cierra los lotes de fechas anteriores.
+  1. Cierra los lotes de fechas anteriores, en tandas de 20.
   2. Evalúa y reserva, si el día aún no tiene evaluación.
   3. Envía los lotes del día que lo necesiten (§3.5).
 
-  La primera corrida que funciona evalúa el día, y las demás solo reintentan lo pendiente.
+  La primera corrida que funciona evalúa el día, y las demás solo reintentan lo pendiente. Cada paso empieza solo si cabe en el plazo de la corrida (§3.9).
+- **Cierre parcial.** Los atrasos solo usan el tiempo que sobra después de apartar la evaluación y un lote de hoy: la alerta del día va primero. Cada tanda es una transacción corta que toma los candados por fecha y número. Si no alcanza el tiempo, lo que queda lo cierra la siguiente corrida, y la respuesta lo indica con `cierrePendiente`.
+- **Límite del mediodía.** La corrida vuelve a mirar la hora antes de evaluar y antes de cada lote. A partir de las 12:00 no empieza ninguno, aunque la corrida haya empezado antes, y responde `detenidaPor: "MEDIODIA"`. Lo que quede `PENDIENTE` lo cierra la corrida del día siguiente.
 - **No hay ejecución garantizada.** Si Sevalla no ejecuta ninguna corrida en la ventana, ese día no hay alerta. Se nota porque no hay evaluación del día ni líneas en el registro del servidor. Lo que sí se garantiza:
   - A lo más un correo por persona al día.
   - Reintentos durante toda la ventana.
@@ -203,21 +212,40 @@ Es la misma regla del reporte de existencias (§3.2 del [contrato de reportes](0
     - El regreso a una dirección propia que se había excluido.
   - **Fin de la exclusión:** solo termina cuando el usuario pasa a una dirección no excluida.
   - La preferencia no se toca: solo el propio usuario la cambia (§2).
-  - «Mi cuenta» le explica que su dirección actual está excluida y por qué tipo de evento, sin decir qué cuenta lo recibió.
+  - El apartado «Preferencias» le explica que su dirección actual está excluida y por qué tipo de evento, sin decir qué cuenta lo recibió.
   - Los eventos anómalos no excluyen.
   - Limitación conocida: si alguien quita la dirección de la lista de supresión en el panel de Resend, la exclusión sigue mientras la dirección sea la misma.
 - **Respuesta.** La ruta responde 200 solo después de confirmar la escritura. Si la base falla, responde 500 y Resend reintenta.
 - **Qué se afirma.** «Entregado» significa que el servidor de correo del destinatario aceptó el mensaje (`email.delivered`), no que la persona lo haya leído. La interfaz nunca dice «leído».
 
-### 3.8 Remitente durante el desarrollo
+### 3.8 Remitente
 
-Mientras no haya dominio verificado, el remitente es el que Resend ofrece por defecto (`onboarding@resend.dev`). Con él, Resend solo entrega al correo de la propia cuenta de Resend y responde `403 validation_error` a cualquier otro destinatario. Si ese rechazo llega por la petición completa, todo el lote queda `RECHAZADO` y sus integrantes `FALLIDO`, incluido el dueño de la cuenta. Por eso, durante el desarrollo, solo el usuario con el correo de la cuenta de Resend debe tener la alerta encendida. Es el comportamiento esperado hasta verificar el dominio antes de `v1.0.0`. El remitente se configura con una variable de entorno, así que cambiarlo no requiere tocar código.
+`gasosurnet.com` es el dominio de Gasosur y ya está verificado en Resend. Los correos salen de su subdominio `avisos.gasosurnet.com`, que es el que se dio de alta y separa la reputación de envío del dominio principal. Con ese remitente, Resend acepta cualquier destinatario, así que ya no hace falta limitar la alerta al correo de la cuenta de Resend. El remitente se configura con la variable de entorno `CORREO_REMITENTE`, así que cambiarlo no requiere tocar código.
+
+Si `CORREO_REMITENTE` usa un dominio sin verificar, Resend responde `403 validation_error`. Lo mismo pasa con `onboarding@resend.dev` para cualquier destinatario que no sea el correo de la cuenta de Resend. Ese rechazo no depende de los destinatarios, así que es un incidente de remitente (§3.5): el lote sigue `PENDIENTE` con el motivo, nadie queda `FALLIDO` y la corrida no intenta más lotes.
+- Si se verifica el dominio dentro de la ventana, la siguiente corrida envía el mismo lote con la misma llave.
+- Si el problema es el valor de `CORREO_REMITENTE`, los lotes del día ya guardaron ese remitente y no cambian. Corregirlo aplica desde la evaluación del día siguiente, y los lotes del día se cierran con las reglas de §3.6.
 
 ### 3.9 Disparo programado
 
 - Una ruta del servidor, `POST /api/tareas/resumen-diario`, ejecuta una corrida (§3.6).
 - No usa la sesión de Clerk. Su única protección es un secreto compartido que llega en `Authorization: Bearer …` y se compara en tiempo constante.
-- Sin secreto, o con uno incorrecto, responde 401 sin detalles y sin leer la base. Con el secreto correcto, devuelve en JSON el resultado de la evaluación del día y cuántos lotes y destinatarios quedaron en cada estado.
+- Sin secreto, o con uno incorrecto, responde 401 sin detalles y sin leer la base. `CRON_SECRET` debe tener al menos 32 caracteres; si no, toda llamada recibe 401.
+- **Ventana.** Solo corre de 8:00 a 12:00 de la Ciudad de México, sin incluir las 12:00, para no rechazar la corrida de las 11:45 ni su reintento. Fuera de ella responde 409 `FUERA_DE_VENTANA` con la hora de México, sin tocar la base, y deja una línea de error: así un cron que quedó en UTC se nota en vez de dar corridas sin correos.
+- **Plazo.** Cada petición tiene 120 segundos, que empiezan a contar al llegar. Es un **control de admisión de pasos**, no una cancelación:
+  - Una tanda de cierre, la evaluación o un lote solo empieza si su peor duración cabe en lo que queda, apartando lo necesario para leer el estado del día y responder.
+  - La peor duración suma la espera de conexión, el tope de su transacción y, en un lote, los 30 segundos de Resend.
+  - El plazo no interrumpe un paso ya empezado, que se acota con sus propios topes, y la lectura final del estado del día siempre se hace.
+  - Dentro de la base, cada transacción tiene su propio tope (`statement_timeout` y `lock_timeout`), así que ninguna espera de candado lo rebasa.
+  - Si el plazo no alcanza, la respuesta lo indica con `detenidaPor: "PLAZO"`, y lo pendiente queda para la siguiente corrida.
+- **Respuesta.** Con el secreto correcto y dentro de la ventana devuelve en JSON:
+  - el identificador de la corrida;
+  - el resultado de la evaluación del día;
+  - cuántos lotes y destinatarios quedaron en cada estado;
+  - `diaSano` y sus motivos;
+  - si se detuvo por plazo, mediodía o incidente, y cuál incidente.
+
+  Si la corrida falla, responde 500 con el identificador de la corrida. El registro del servidor solo lleva la clase y el código del error y ese identificador, nunca mensajes ni direcciones.
 - La dispara un proceso **Cron job** de Sevalla en la misma aplicación, con zona horaria `America/Mexico_City` y horario `*/15 8-11 * * *`. Una llamada extra, manual o repetida, es segura: no evalúa dos veces y solo retoma lo que lo necesita.
 
 ### 3.10 Acceso a la base sin usuario
@@ -230,7 +258,7 @@ En la base, `seguridad.actor_de_la_escritura` acepta cada origen únicamente par
 
 ### 3.11 Catálogo de estados
 
-Los estados viven en cuatro niveles: el día, la petición a Resend, cada destinatario y cada evento de Resend. Lo que ve el usuario en «Mi cuenta» se calcula a partir de ellos.
+Los estados viven en cuatro niveles: el día, la petición a Resend, cada destinatario y cada evento de Resend. Lo que ve el usuario en el apartado «Preferencias» se calcula a partir de ellos.
 
 **`EvaluacionCorreos.resultado`: el día.** Una fila por fecha; nunca cambia.
 
@@ -244,9 +272,9 @@ Los estados viven en cuatro niveles: el día, la petición a Resend, cada destin
 
 | Estado | Qué significa | Cuándo aparece | Puede pasar a |
 |---|---|---|---|
-| `PENDIENTE` | Reservado, pero todavía no hay respuesta de Resend | Al reservar el día. Sigue así tras un fallo pasajero (red, `429`, `5xx`, `409` concurrente, más de 30 segundos sin respuesta) o si el proceso cae antes de registrar la respuesta | Cualquiera de los de abajo |
+| `PENDIENTE` | Reservado, pero todavía no hay respuesta de Resend | Al reservar el día. Sigue así tras un fallo pasajero (red, `429` que no sea de cuota, `5xx`, `409` concurrente, más de 30 segundos sin respuesta), tras un incidente operativo (llave, remitente, cuota u otra causa ajena a los destinatarios), que deja su motivo, o si el proceso cae antes de registrar la respuesta | Cualquiera de los de abajo |
 | `ACEPTADO` | Resend aceptó la petición | Cuando llega la respuesta exitosa, o el primer evento asociado de cualquiera de sus correos (lo que ocurra primero) | Ninguno; es final |
-| `RECHAZADO` | Resend rechazó la petición de forma definitiva | Con una respuesta `400` de llave, `403` (por ejemplo, el dominio sin verificar) o `422` | `ACEPTADO`, solo si después llega un evento asociado que lo contradiga |
+| `RECHAZADO` | Resend rechazó los datos de la petición de forma definitiva | Con un `400` o `422` de validación (§3.5). Un `401`, un `403`, una cuota agotada u otra causa ajena a los destinatarios no lo producen: son incidentes y el lote sigue `PENDIENTE` | `ACEPTADO`, solo si después llega un evento asociado que lo contradiga |
 | `VENCIDO` | Se acabó su día y nunca se intentó enviar | La corrida de un día posterior lo cierra si tenía 0 intentos. Es seguro: nunca llegó a Resend | `ACEPTADO`, solo con un evento asociado (no debería pasar) |
 | `SIN_CONFIRMAR` | Pudo haber llegado a Resend, pero no se sabe | Se acabó su día con intentos y sin respuesta, o Resend respondió `409 invalid_idempotent_request`. No se reenvía, porque podría duplicar el correo | `ACEPTADO`, si llega un evento asociado de alguno de sus correos |
 
@@ -258,8 +286,8 @@ El lote también lleva `intentos`, el último intento y `arrendadoHasta`, pero n
 |---|---|---|---|
 | `PENDIENTE` | Está en un lote que todavía no tiene respuesta | Al reservar | Cualquiera de los de abajo |
 | `ENVIADO` | **Resend aceptó su correo** y hay un identificador de Resend. No afirma que haya llegado al buzón | Por la respuesta exitosa del lote o por cualquier evento asociado de su correo, lo que llegue primero | Ninguno; es final, y el identificador no cambia |
-| `FALLIDO` | Su correo no salió | Su lote quedó `RECHAZADO`, con el motivo de Resend, o `VENCIDO`, con «no se envió a tiempo» | `ENVIADO`, solo si llega un evento asociado que lo contradiga |
-| `SIN_CONFIRMAR` | No se sabe si salió | Su lote quedó `SIN_CONFIRMAR`, o su lote es `ACEPTADO` pero el día terminó sin que llegara su identificador | `ENVIADO`, si llega un evento asociado |
+| `FALLIDO` | Su correo no salió | Su lote quedó `RECHAZADO` por los datos de la petición, con el motivo (§3.5), o `VENCIDO`, con «no se envió a tiempo». Un incidente operativo nunca lo produce | `ENVIADO`, solo si llega un evento asociado que lo contradiga |
+| `SIN_CONFIRMAR` | No se sabe si salió | Su lote quedó `SIN_CONFIRMAR`; su lote ya era `ACEPTADO` cuando llegó un rechazo o un `409` de otro cuerpo; o su lote es `ACEPTADO` pero el día terminó sin que llegara su identificador | `ENVIADO`, si llega un evento asociado |
 
 **`EventoCorreo`: lo que avisa Resend después.** Cada evento es una fila de solo inserción, y un evento repetido (mismo `svix-id`) no inserta otra.
 
@@ -301,7 +329,7 @@ El lote también lleva `intentos`, el último intento y `arrendadoHasta`, pero n
 | 4 | Entrega demorada | Rebote `TRANSITORIO` o `INDETERMINADO`, o `email.delivery_delayed` | Por una entrega posterior |
 | 5 | Aceptado por Resend | Ningún evento asociado todavía | Por cualquier evento asociado |
 
-**Lo que ve el usuario en «Mi cuenta».** Un solo estado de su último aviso. La evidencia de Resend tiene prioridad sobre el estado del registro, así que nunca aparece «pendiente» junto a «entregado».
+**Lo que ve el usuario en el apartado «Preferencias».** Un solo estado de su último aviso. La evidencia de Resend tiene prioridad sobre el estado del registro, así que nunca aparece «pendiente» junto a «entregado».
 
 | Se muestra | Cuándo |
 |---|---|
@@ -314,7 +342,7 @@ El lote también lleva `intentos`, el último intento y `arrendadoHasta`, pero n
 | «No se envió» | Registro `FALLIDO` y sin eventos asociados |
 | «Sin confirmar» | Registro `SIN_CONFIRMAR` y sin eventos asociados |
 
-Además del estado, «Mi cuenta» puede mostrar avisos que no son estados de un envío:
+Además del estado, el apartado «Preferencias» puede mostrar avisos que no son estados de un envío:
 
 | Aviso | Cuándo |
 |---|---|
@@ -324,61 +352,102 @@ Además del estado, «Mi cuenta» puede mostrar avisos que no son estados de un 
 
 ## 4. Tablero de inicio
 
-El tablero sustituye el inicio demostrativo actual (avance de fases y artículos de muestra). Lee en una sola instantánea y reutiliza las consultas de los listados y reportes, sin calcular cifras por su cuenta.
+El tablero sustituye el inicio demostrativo (avance de fases y artículos de muestra). Lee en una sola instantánea y reutiliza las consultas de los listados y reportes, sin calcular cifras por su cuenta.
 
-**Todos ven lo mismo.** Superadmin, Compras y Jefe ven las mismas tarjetas con las mismas cifras. Ninguna depende de un permiso de acción (capturar, confirmar, autorizar, retirar) ni de la facultad `puedeAutorizar`: cada tarjeta exige solo el permiso de **lectura** de la pantalla a la que remite, y los tres roles ya los tienen todos. El servidor sigue comprobando ese permiso; si un rol futuro no lo tuviera, su tarjeta no se consultaría ni aparecería.
+**Todos ven lo mismo.** Superadmin, Compras y Jefe ven las mismas tarjetas con las mismas filas. Ninguna depende de un permiso de acción (capturar, confirmar, autorizar, retirar) ni de la facultad `puedeAutorizar`: cada tarjeta exige solo el permiso de **lectura** de la pantalla a la que remite, y los tres roles ya los tienen todos. El servidor sigue comprobando ese permiso; si un rol futuro no lo tuviera, su tarjeta no se consultaría ni aparecería.
 
-| Tarjeta | Qué muestra | De dónde sale | Permiso |
-|---|---|---|---|
-| Bajo mínimo | N (§3.1) y los primeros 10 renglones, en el orden del reporte | La consulta del reporte de existencias con el filtro de bajo mínimo (`filasExistencias` y el conteo de artículos distintos) | `reportes:leer` |
-| Préstamos abiertos | Número de préstamos abiertos y los más antiguos | `listarPrestamos(db, "abiertos", …)` | `devoluciones:leer` y `salidas:leer`, como el listado |
-| Salidas por autorizar y por retirar | Número de salidas solicitadas y de autorizadas, y las más antiguas de cada una | `seccionDeBandeja(db, "SOLICITADA", …)` y `seccionDeBandeja(db, "AUTORIZADA", …)`, que no filtran por usuario | `salidas:leer` |
-| Entradas en borrador | Número de borradores y los más recientes | `listarEntradas` con el filtro de estatus borrador | `entradas:leer` |
-| Gasto del mes por estación | Las **5 estaciones de mayor gasto** del día 1 del mes a hoy | `gastoPorEstacion` y `totalGasto` con ese rango | `reportes:leer` |
+Cada tarjeta es una tabla de hasta **5 filas** con encabezado de columnas, sin cifra de conteo: cuántos pendientes hay lo dice la barra lateral (§5). En la esquina lleva un botón «Ver …» que abre la pantalla de la que sale, con los mismos filtros.
 
-- **Salidas.** El tablero no usa `bandejaDeSalidas`, porque esa función solo devuelve las secciones en que el usuario puede actuar: sin `puedeAutorizar` no saldría «por autorizar», y el Jefe, que no retira, nunca vería «por retirar». Las cifras enlazan al listado de salidas filtrado por estatus (`/salidas?estatus=solicitadas` y `?estatus=autorizadas`), que cualquiera con `salidas:leer` consulta completo. No enlazan a «Salidas pendientes», que sigue mostrando solo lo que cada usuario puede atender.
-- Las 5 estaciones se ordenan por importe conocido sin IVA, de mayor a menor, con el número de estación como desempate. Las estaciones sin gasto en el mes no aparecen. Con piezas sin costo, el importe se rotula «valor conocido», como en el reporte.
-- Cada tarjeta enlaza a su pantalla con los mismos filtros. La cifra del tablero y la de esa pantalla deben coincidir. En bajo mínimo, N se compara con los artículos distintos del reporte filtrado, no con su número de renglones.
-- Una tarjeta en cero dice que no hay nada pendiente; no se presenta como error.
+| Tarjeta | Columnas | Filas | De dónde sale | Botón | Permiso |
+|---|---|---|---|---|---|
+| Existencias | Artículo, Bodega y Existencia («N de M» con la unidad del artículo) | Renglones bajo mínimo, en el orden del reporte | `filasExistencias` con el filtro de bajo mínimo | «Ver existencias»: el reporte filtrado | `reportes:leer` |
+| Salidas | Fecha, Bodega / Estación y Estatus | Solicitadas y autorizadas juntas, la de fecha más antigua primero | `salidasEnCurso`, que no filtra por usuario | «Ver salidas»: el listado sin filtro | `salidas:leer` |
+| Préstamos | Fecha, Bodega / Estación y Estatus («Abierto» o «Devuelto parcial») | Préstamos abiertos, en el orden de su listado: el retiro más antiguo primero | `listarPrestamos(db, "abiertos", …)` | «Ver préstamos»: el listado de abiertos | `devoluciones:leer` y `salidas:leer`, como el listado |
+| Entradas | Fecha, Bodega y Estatus | Borradores, el de fecha más antigua primero | `borradoresMasAntiguos` | «Ver entradas»: el listado de borradores | `entradas:leer` |
+| Gasto mensual por estación | Fecha (del día 1 del mes a hoy), Estación y Total sin IVA | Las estaciones de mayor gasto del mes | `estacionesDeMayorGasto`, sobre la consulta de `gastoPorEstacion` | «Ver gastos»: el reporte con ese rango | `reportes:leer` |
 
-## 5. Alertas en pantalla
+- **Nombres sin claves.** Artículos, bodegas y estaciones se muestran por su nombre (o alias), sin clave ni número. En salidas, préstamos y entradas, la fecha abre el detalle del movimiento.
+- **Salidas.** El tablero no usa `bandejaDeSalidas`, porque esa función solo devuelve las secciones en que el usuario puede actuar: sin `puedeAutorizar` no saldrían las solicitadas, y el Jefe, que no retira, nunca vería las autorizadas.
+- **Orden por fecha.** Salidas y entradas tienen consultas propias, porque sus listados muestran primero lo más nuevo. Sus filas pertenecen a la misma lista que su pantalla, pero no son sus primeras filas. Existencias no tiene fecha y sigue el orden del reporte.
+- **Gasto.** Se ordena por importe conocido sin IVA, de mayor a menor, con el número de estación como desempate. No aparecen las estaciones con importe cero o menor y sin piezas sin costo. Si una estación tiene piezas sin costo, su importe lleva debajo «Hay piezas sin costo». En escritorio la tarjeta ocupa el ancho de dos tarjetas.
+- **Tarjeta sin filas.** Muestra un texto centrado que dice que no hay nada pendiente; no se presenta como error:
 
-- La navegación muestra N (§3.1), el número de artículos distintos bajo mínimo, junto a «Existencias». La ve quien tiene `reportes:leer`, hoy los tres roles, y desaparece cuando N es cero.
-- El indicador «Bajo mínimo», en reportes y tablero, combina color, ícono y texto: no depende solo del color.
+  | Tarjeta | Texto |
+  |---|---|
+  | Existencias | «Aún no hay artículos bajo mínimo» |
+  | Salidas | «Aún no hay salidas por revisar» |
+  | Préstamos | «Aún no hay préstamos abiertos» |
+  | Entradas | «No hay entradas en borrador» |
+  | Gasto mensual por estación | «Todavía no hay movimientos este mes» |
+
+## 5. Barra lateral y alertas en pantalla
+
+- **Contadores.** Junto a cada módulo, la barra lateral muestra cuántos pendientes tiene, solo con la cifra. Un lector de pantalla oye además qué cuenta, por ejemplo «4 salidas sin cerrar». Un contador en cero no se muestra. Cada uno pide el permiso de lectura de su pantalla; sin él, no se consulta.
+
+  | Módulo | Qué cuenta | Permiso |
+  |---|---|---|
+  | Entradas | Borradores | `entradas:leer` |
+  | Salidas | Las que no están cerradas: solicitadas, autorizadas y retiradas. No cuentan las recibidas, rechazadas, canceladas ni las retiradas revertidas | `salidas:leer` |
+  | Traspasos | Borradores | `traspasos:leer` |
+  | Devoluciones | Borradores | `devoluciones:leer` |
+  | Préstamos | Abiertos, los mismos del listado de abiertos | `devoluciones:leer` y `salidas:leer` |
+  | Conteo físico | Hojas en borrador | `ajustes:leer` |
+  | Existencias, en Reportes | N (§3.1), los artículos distintos bajo mínimo | `reportes:leer` |
+
+- **Cuándo se actualizan.** Se leen juntos, en una transacción, al cargar el layout y sin detener el dibujo de la barra. Se vuelven a leer al recargar o al volver a la pestaña. Navegar entre pantallas no los actualiza, porque Next.js no vuelve a ejecutar el layout.
+- **Secciones.** OPERACIÓN y ADMINISTRACIÓN siempre están abiertas. REPORTES y CATÁLOGOS se abren y se cierran desde su encabezado, y solo una puede estar abierta: abrir una cierra la otra. Entrar a una pantalla de una de ellas la abre. Mientras REPORTES está cerrada, la N de bajo mínimo aparece junto a su encabezado.
+- **Indicador de bajo mínimo.** En el reporte de existencias, la insignia «Bajo mínimo» de cada renglón y el aviso «N artículos bajo mínimo» combinan color y texto: no dependen solo del color.
 
 ## 6. Acabado de la interfaz
 
 ### 6.1 Celular y escritorio
 
 - Todas las pantallas se pueden usar en un celular de 375 px de ancho y en escritorio, sin desplazamiento horizontal de la página.
-- **Navegación.** En celular, la barra lateral fija se sustituye por una barra superior con menú desplegable.
-- **Márgenes.** Los márgenes del contenido se ajustan al tamaño de la pantalla.
-- **Tablas.** Pueden desplazarse dentro de su tarjeta o apilarse, según la pantalla.
-- **Formularios.** Las rejillas de partidas, los selectores buscables y los botones de acción de los formularios de captura siguen siendo utilizables en celular.
+- **Navegación.** Por debajo de 1024 px, la barra lateral se sustituye por una barra superior con el nombre del sistema y un botón de menú. El menú se desliza desde la izquierda sobre un fondo oscuro, con el mismo contenido que la barra lateral (§5). Se cierra con su botón, con Escape, tocando el fondo o al elegir un módulo.
+  - Mientras está abierto, la página de atrás no se desplaza ni recibe el foco del tabulador.
+  - Al abrirlo, el foco pasa a «Cerrar menú». Si se cierra a mano, vuelve al botón del menú.
+  - Desde 1024 px se usa la barra lateral fija. Si la ventana crece con el menú abierto, el menú se cierra solo.
+- **Márgenes.** El contenido lleva 16 px a los lados en celular, 24 px desde 640 px y 32 px desde 1024 px.
+- **Encabezados.** Los botones del encabezado de una página pasan a otra fila cuando no caben.
+- **Tablas.** Se desplazan de lado dentro de su tarjeta; no se apilan. La página nunca se desplaza de lado. En la hoja de conteo, el nombre del artículo se parte en celular para acercar la columna «Contada».
+- **Formularios.** Los campos y las partidas de las capturas se apilan a todo el ancho, con sus botones al final. Los selectores buscables abiertos caben en la pantalla.
+- **Perfil.** El menú de la foto y el apartado «Preferencias» caben en la pantalla del celular.
 
 ### 6.2 Estados vacíos y errores
 
-- Toda lista, reporte o tarjeta sin filas explica por qué está vacía y, si aplica, qué acción la llena. Para eso se usa `EstadoVacio`.
-- Los mensajes distinguen entre:
-  - Falta de permiso.
-  - Sesión vencida.
-  - Regla de negocio, con el motivo concreto.
-  - Fallo del servidor o de la red.
-- Hay página de error y página 404 propias, en español.
+- Toda lista, reporte o tarjeta sin filas explica por qué está vacía con `EstadoVacio`. Si hay un filtro puesto, lo dice y sugiere cambiarlo. Si no, y quien la ve puede capturar, ofrece el botón que la llena («Nueva devolución», «Nueva hoja»). Las secciones de «Pendientes» de salidas dicen qué no está esperando cada una. Una hoja de conteo sin artículos explica que la bodega no tenía existencias al abrirla.
+- **Mensajes de las acciones.** Cada negativa y cada fallo tiene su propio mensaje ([`mensajes.ts`](../../src/lib/mensajes.ts)):
+
+  | Caso | Mensaje |
+  |---|---|
+  | Sesión terminada | «Tu sesión terminó. Recarga la página para volver a iniciar sesión.» |
+  | Usuario dado de baja o sin acceso | «Tu usuario ya no tiene acceso al sistema.» |
+  | Falta de permiso | «No tienes permiso para esta operación.», o el texto propio de catálogos, usuarios y «Preferencias» |
+  | Regla de negocio | El motivo concreto que da el servicio |
+  | Fallo del servidor | «No se pudo completar la operación por un fallo del servidor. Inténtalo de nuevo.» |
+  | Fallo de red | «No se pudo comunicar con el servidor. Revisa tu conexión e inténtalo de nuevo.» |
+
+- **Fallo de red.** Si una acción no llega al servidor, el aviso aparece en el formulario o en el diálogo que la lanzó, y lo capturado se conserva. Una hoja de conteo que no se pudo guardar no se da por guardada.
+- **Pantalla de error.** Si una pantalla del sistema no se puede leer, se muestra dentro del sistema, con la barra lateral. Distingue «No tienes permiso para ver esta pantalla», «Tu sesión terminó» y «Tu usuario ya no tiene acceso» de «No se pudo cargar esta pantalla». Solo esta última ofrece «Reintentar». Si falla el layout raíz, una página propia dice «BodeGasosur no pudo cargar» y ofrece «Reintentar».
+- **Páginas 404.** Un registro que no existe muestra «No encontramos lo que buscas» dentro del sistema. Una dirección que no existe muestra «Esta página no existe», fuera del sistema. Las dos llevan a «Ir al tablero».
 
 ### 6.3 Confirmaciones
 
-Toda acción irreversible pide confirmación con un diálogo propio, en lugar de `window.confirm`. Son irreversibles:
-- Cancelar un borrador.
-- Confirmar un movimiento.
-- Autorizar, cancelar o retirar una salida.
+Toda acción irreversible pide confirmación con un diálogo propio, nunca con `window.confirm`. Son irreversibles:
+- Confirmar una entrada, un traspaso, una devolución o un conteo.
+- Descartar un borrador de entrada, de traspaso o de devolución, o una hoja de conteo.
+- Autorizar, rechazar, cancelar o retirar una salida, y confirmar su recepción.
 - Revertir un movimiento.
 
-El diálogo dice qué va a pasar y usa un botón con verbo explícito («Confirmar entrada», «Revertir»). Se maneja con teclado, Escape lo cierra sin actuar y, al cerrarse, el foco vuelve al botón que lo abrió. Revertir conserva el motivo obligatorio que ya pide.
+El diálogo dice qué va a pasar y usa un botón con verbo explícito («Confirmar recepción», «Descartar borrador», «Registrar reversa»).
+- Las acciones que piden un dato lo piden dentro del diálogo: el motivo al rechazar, cancelar, descartar o revertir, y quién se lleva el material al retirar. El dato es obligatorio.
+- Al abrirse, el foco va a «Volver», que no ejecuta nada, o al campo si lo hay. Se maneja con teclado, y Escape o «Volver» lo cierran sin actuar. Al cerrarse, el foco vuelve al botón que lo abrió.
+- Mientras la acción está en curso, el diálogo no se puede cerrar.
+- Un error se muestra dentro del diálogo. Si la acción deja de aplicar, por ejemplo porque otro usuario ya movió la salida, el diálogo se cierra y el aviso queda en la pantalla.
 
 ## 7. Permisos, secretos y variables
 
-- **Permiso nuevo:** `cuenta:editar`, para Superadmin, Compras y Jefe. Lo acompaña el cambio de la guarda de `Usuario` en la base (§2). El tablero no necesita permisos nuevos: sus tarjetas piden `reportes:leer`, `salidas:leer`, `devoluciones:leer` y `entradas:leer`, que los tres roles ya tienen.
+- **Permiso nuevo:** `cuenta:editar`, para Superadmin, Compras y Jefe. Lo acompaña el cambio de la guarda de `Usuario` en la base (§2). El tablero y la barra lateral no necesitan permisos nuevos: piden `reportes:leer`, `salidas:leer`, `devoluciones:leer`, `entradas:leer`, `traspasos:leer` y `ajustes:leer`, que los tres roles ya tienen.
 - **Código de error nuevo:** `BG712`, para un cambio de `alertasCorreo` que no hace el propio usuario.
 - **Variables de entorno nuevas:**
   - `RESEND_API_KEY`
@@ -391,7 +460,7 @@ El diálogo dice qué va a pasar y usa un botón con verbo explícito («Confirm
 - **Despliegue.**
   - Sevalla gana un proceso cron en la misma aplicación.
   - En Resend se da de alta el webhook hacia `<URL_APLICACION>/api/webhooks/resend` con los eventos de §3.7.
-  - Ambos se documentarán en [versionado y despliegue](../05-versionado-y-despliegue.md) cuando existan.
+  - Ambos están en [versionado y despliegue](../05-versionado-y-despliegue.md) §8.
 
 ## 8. Pruebas de aceptación y cierre
 
@@ -420,7 +489,7 @@ Las pruebas simulan Resend con un doble que respeta su idempotencia: misma llave
    - En el orden inverso el estado final es el mismo.
    - Repetir cualquiera de las dos conciliaciones no cambia nada.
    - Si la respuesta del lote trae un identificador distinto al que ya dejó el webhook, no se sobrescribe y deja una línea de error.
-8. **`email.delivered` sin `email.sent`.** Un registro `PENDIENTE` queda `ENVIADO` con el identificador del evento, y «Mi cuenta» muestra «Entregado», nunca un envío pendiente.
+8. **`email.delivered` sin `email.sent`.** Un registro `PENDIENTE` queda `ENVIADO` con el identificador del evento, y el apartado «Preferencias» muestra «Entregado», nunca un envío pendiente.
 9. **Fechas anteriores.** Al cerrarlas, sin llamar a Resend:
    - Un lote `PENDIENTE` sin intentos queda `VENCIDO`, con sus integrantes `FALLIDO`.
    - Un lote `PENDIENTE` con intentos queda `SIN_CONFIRMAR`.
@@ -429,12 +498,12 @@ Las pruebas simulan Resend con un doble que respeta su idempotencia: misma llave
 10. **Día evaluado sin bajo mínimo.** A las 8:00 no hay artículos bajo mínimo:
     - Queda la evaluación `SIN_BAJO_MINIMO`, sin lotes ni registros, y no se llama a Resend.
     - A las 8:15 ya hay un artículo bajo mínimo, y la corrida no evalúa otra vez, no reserva y no llama a Resend.
-    - «Mi cuenta» muestra «Hoy no hubo artículos bajo mínimo».
+    - El apartado «Preferencias» muestra «Hoy no hubo artículos bajo mínimo».
     - Al día siguiente, la corrida de las 8:00 sí evalúa y envía.
 11. **Día evaluado sin destinatarios.** A las 8:00 hay artículos bajo mínimo pero nadie con la preferencia encendida:
     - Queda la evaluación `SIN_DESTINATARIOS`, sin lotes, y no se llama a Resend.
     - Un usuario enciende su preferencia a las 8:05, y la corrida de las 8:15 no evalúa otra vez ni le reserva.
-    - «Mi cuenta» le muestra «Empieza mañana».
+    - El apartado «Preferencias» le muestra «Empieza mañana».
     - Al día siguiente queda incluido.
 12. Un rechazo definitivo de un lote deja a sus integrantes `FALLIDO` con el motivo, no pisa un `ENVIADO` y no impide enviar los demás lotes.
 13. La ruta programada responde 401 sin secreto o con uno incorrecto, y en ese caso no lee la base.
@@ -466,7 +535,7 @@ Las pruebas simulan Resend con un doble que respeta su idempotencia: misma llave
     - La supresión y la queja excluyen igual que el rebote duro.
     - Un rebote anómalo no excluye ninguna dirección.
 18. **Privacidad de la preferencia en la aplicación:**
-    - «Mi cuenta» devuelve solo los datos de la sesión.
+    - El apartado «Preferencias» devuelve solo los datos de la sesión.
     - La acción ignora cualquier identificador ajeno que reciba.
     - La administración de usuarios y su Excel no contienen la preferencia.
 19. **Guarda de `Usuario` en la base**, con actor verificado:
@@ -481,12 +550,116 @@ Las pruebas simulan Resend con un doble que respeta su idempotencia: misma llave
     - El usuario de la aplicación no puede borrar filas de `EvaluacionCorreos`, `LoteCorreos`, `RegistroCorreos` ni `EventoCorreo`, ni modificar las de `EvaluacionCorreos`.
     - No puede cambiar el contenido, la llave, los integrantes ni su posición.
     - No puede sacar de `ENVIADO` o de `ACEPTADO`, ni reemplazar un identificador de Resend.
-21. Las cifras de cada tarjeta del tablero coinciden con su pantalla de origen. Superadmin, Compras, un Jefe con `puedeAutorizar` y uno sin ella ven las mismas cifras, también en salidas por autorizar y por retirar. El gasto devuelve como máximo 5 estaciones en el orden de §4, y una tarjeta sin permiso no se consulta.
+21. **Tablero y barra lateral:**
+    - Las filas de cada tarjeta salen de su pantalla de origen, leída con los filtros de su botón, en el orden de §4 y como máximo 5. Salidas y entradas van por fecha, no por estatus ni por orden de captura.
+    - El gasto sigue el orden de §4, y una estación sin gasto no aparece.
+    - Superadmin, Compras, un Jefe con `puedeAutorizar` y uno sin ella ven las mismas filas.
+    - Cada contador de la barra lateral es el total de su pantalla con su filtro. En salidas no cuentan las recibidas, rechazadas, canceladas ni revertidas.
+    - Una tarjeta o un contador sin su permiso no se consulta.
 22. La plantilla produce HTML y texto con el asunto «Stock bajo mínimo: 1 artículo» cuando N es 1 y «… N artículos» en otro caso. Agrupa por nombre de bodega sin mostrar su clave, muestra la clave del artículo, respeta el tope de 50 renglones y escapa el texto de los artículos.
-23. Las pantallas de operación, reportes y «Mi cuenta» se usan sin desplazamiento horizontal de página a 375 px, y toda acción de §6.3 pide confirmación.
+23. **A 375 px y en escritorio:**
+    - Las pantallas de operación, reportes, catálogos y usuarios, y el apartado «Preferencias» del perfil, se usan sin desplazamiento horizontal de la página.
+    - El menú de la barra superior se abre, se cierra con Escape, con su botón o tocando el fondo, y devuelve el foco como dice §6.1.
+    - Toda acción de §6.3 pide confirmación en el diálogo y se maneja con teclado.
 
 El cierre funcional exige las pruebas 1 a 22 contra PostgreSQL real, siguiendo el patrón de [`reportes.test.ts`](../../src/lib/reportes/reportes.test.ts), y la revisión 23 en el navegador. En Sevalla, el proceso cron se ejecuta a mano una vez antes de dejarlo programado, y el webhook de Resend se prueba con un evento de ejemplo desde su panel.
 
 ## 9. Decisiones tomadas al construir
 
-Se registrarán al construir la fase.
+### Entrega 1: migración y preferencia privada
+
+- **Migración.** `20261107120000_correo_y_preferencia`, con el SQL a mano en [`997-correo-y-preferencia.sql`](../../prisma/sql/despues/997-correo-y-preferencia.sql). El índice de correo de `Usuario` se reemplaza creando primero el nuevo (`lower(btrim(correo))`) y después borrando el anterior, así que la unicidad nunca falta.
+- **La preferencia se oculta por decisión, no por ser un dato sensible.** Mostrarla mañana en una pantalla o una exportación es un cambio aceptable. Lo que no cambia es que nadie modifique la de otro, por ninguna puerta: eso lo cierra `BG712` en la base.
+- **Personas con sesión y tablas de correo.** Ninguna persona con sesión escribe en `EvaluacionCorreos`, `LoteCorreos`, `RegistroCorreos` ni `EventoCorreo`, tampoco el Superadmin: la escritura falla con `BG706`, aunque además declare un origen. Solo escriben sus dos orígenes de sistema y el dueño de la base.
+- **Qué hace cada origen:**
+
+  | Origen | Inserta en | Actualiza |
+  |---|---|---|
+  | `resumen-diario` | `EvaluacionCorreos`, `LoteCorreos`, `RegistroCorreos` | `LoteCorreos`, `RegistroCorreos` |
+  | `resend-webhook` | `EventoCorreo` | `LoteCorreos`, `RegistroCorreos` |
+
+- **Candado del día.** `candado_correos_del_dia(fecha)` es el `pg_advisory_xact_lock` del paso 1 de §3.4. Lo llama la reserva como primera sentencia, y las altas de lotes, registros y evaluaciones lo vuelven a tomar.
+- **Integrantes cerrados.** Un lote o un registro no se inserta si su fecha ya tiene evaluación. La evaluación debe cuadrar con lo reservado: tantos lotes y destinatarios como filas existan para su fecha, y `lotes = ⌈destinatarios / 100⌉` en `CON_ENVIO`.
+- **Restricciones en la base:**
+  - `ENVIADO` si y solo si hay identificador de Resend.
+  - La llave de un lote es `resumen-<fecha>-<numero>`.
+  - `RegistroCorreos (loteId, fecha)` apunta a `LoteCorreos (id, fecha)`, así que la fecha del registro es la de su lote.
+  - Lotes y registros nacen `PENDIENTE`. Los intentos suben de uno en uno, y solo un lote `PENDIENTE` o `ACEPTADO` se vuelve a intentar.
+  - Un evento está asociado a un registro o lleva una anomalía, nunca las dos cosas ni ninguna.
+- **Las transiciones obligan también al dueño.** El dueño puede escribir en las tablas, pero no saltarse las transiciones ni la inmutabilidad.
+- **Tipo de evento como texto.** Un tipo nuevo de Resend se guarda en lugar de fallar, para que no provoque reintentos.
+- **«Preferencias» en el perfil, sin pantalla propia.** La preferencia vive en un apartado del modal de perfil de Clerk (`UserButton.UserProfilePage`), junto a «Perfil» y «Seguridad», en lugar de una pantalla `/cuenta` con su enlace en la barra lateral. Sin dirección propia, el correo ya no enlaza a la preferencia (§3.3). El layout manda la lectura como promesa y el apartado la resuelve al abrirse; al guardar, la acción refresca el layout para que el modal muestre el valor nuevo.
+- **El apartado en esta entrega:** muestra la preferencia, el correo y el horario. El último aviso, su estado y los avisos de §3.11 llegan en la entrega 2, junto con la reserva y el webhook que los producen.
+- **La acción recibe una decisión explícita** (`activar` o `desactivar`), no una casilla, para que un campo ausente no apague la alerta. Solo lee ese campo, y el usuario sale siempre de la sesión.
+- **Correo de los usuarios nuevos.** El §2 decía que el webhook de Clerk sincroniza usuarios nuevos, pero el webhook solo actualiza correo y bajas. Las altas las hacen el Superadmin y el arranque. No cambia nada, porque la preferencia nace apagada.
+
+### Entrega 2: alerta diaria, webhook y «Preferencias»
+
+**Frontera del código**
+
+- **El SQL de la alerta vive en un solo archivo.** [`consultas.ts`](../../src/lib/correo/consultas.ts) recibe el cliente de la transacción, y solo lo importan `db.ts` y las pruebas. Una regla de ESLint lo impide desde cualquier otro archivo, también con `import()` o `require()`. `db.ts` le da a cada origen (`resumen-diario` y `resend-webhook`) un cliente con solo sus funciones, sin `$queryRaw`.
+- **Aislamiento y topes por transacción.** `escrituraDeSistema()` acepta el nivel de aislamiento y un tope de tiempo, que también fija `statement_timeout` y `lock_timeout` dentro de la base. La reserva corre en `READ COMMITTED` (§3.4).
+- **Sin migración nueva para «Preferencias».** El usuario de la aplicación ya podía leer las tablas de correo desde la entrega 1.
+
+**Resend**
+
+- **Dependencias.** `resend` 6.35.0 envía los lotes y verifica las firmas. `react-email` 6.11.3 y `@react-email/render` 2.1.1 arman la plantilla, que se previsualiza en local con `npm run correo:muestra`.
+- **Secretos con prefijo.** `RESEND_API_KEY` tiene que empezar con `re_`, y `RESEND_WEBHOOK_SECRET`, con `whsec_`. Si falta uno o no lleva su prefijo, el error nombra la variable, nunca su valor.
+- **El webhook también exige `RESEND_API_KEY`.** El SDK la pide para crear el cliente que verifica la firma. Si falta cualquiera de los dos secretos, el webhook responde 500 para que Resend reintente, y deja una línea de error.
+- **Lo que llega al webhook se acota.** El cuerpo se lee hasta 64 KiB; si es mayor, responde 413 sin verificarlo. Los identificadores y códigos de Resend solo se aceptan con forma controlada (letras, números, `_` y `-`): un identificador con otra forma cuenta como ausente, y un código con otra forma se guarda como `OTRO`.
+- **Un evento con etiqueta y sin `email_id` es `ID_DISTINTO`.** Sin un identificador válido no se puede probar que el evento sea de ese correo. También lo es un evento cuyo identificador choca con el del registro al conciliar.
+- **El registro del servidor solo lleva la clase y el código del error**, con forma controlada ([`diagnostico.ts`](../../src/lib/correo/diagnostico.ts)), nunca el mensaje. Los mensajes de Prisma y de Resend pueden traer direcciones.
+
+**Corrida y cron**
+
+- **Cadena de tiempos.** Cada eslabón deja margen al siguiente, así que la ruta siempre alcanza a responder:
+
+  | Eslabón | Tope |
+  |---|---|
+  | Espera de Resend por lote | 30 s |
+  | Plazo de la ruta (§3.9) | 120 s |
+  | Script del cron | 150 s |
+  | Cloudflare de Sevalla | 185 s |
+  | `active_deadline_seconds` del cron | 240 s |
+
+  Las transacciones esperan una conexión hasta 2 s. La reserva dura como máximo 15 s y las demás 5 s ([`plazos.ts`](../../src/lib/correo/plazos.ts)).
+- **El script del cron no tiene dependencias.** [`disparar-resumen.mjs`](../../scripts/disparar-resumen.mjs) es JavaScript plano, porque la imagen no trae `curl` ni `tsx`. Exige `https`, salvo `localhost` fuera de producción, y no sigue redirecciones. Nunca registra el secreto, los encabezados ni la URL. Termina con uno de estos códigos de salida:
+
+  | Código | Cuándo |
+  |---|---|
+  | 0 | La corrida terminó |
+  | 1 | Falta `URL_APLICACION` o `CRON_SECRET`, o la URL no usa `https` |
+  | 2 | La ruta respondió con error o sin un resumen válido |
+  | 3 | Falla de red o sin respuesta en 150 s |
+  | 4 | El día no quedó sano en la última corrida de la ventana (11:45) |
+  | 5 | Incidente operativo (§3.5) |
+
+  Cualquier código distinto de 0 deja la corrida como fallida en Sevalla, que la reintenta una vez.
+- **Configuración del cron en Sevalla:** zona `America/Mexico_City` (por omisión es UTC), `concurrency_policy` Forbid y `active_deadline_seconds` de 240 s. Se da de alta al cerrar la fase (§7).
+- **Sin monitor externo en `v0.9.0`.** Se aprobó un latido externo (Healthchecks.io), pero se aplaza a `v1.0.0`. Mientras tanto, la vigilancia es pasiva: las corridas fallidas en Sevalla y el registro del servidor.
+
+**Exclusión y «Preferencias»**
+
+- **Un solo criterio de exclusión.** [`exclusion.ts`](../../src/lib/correo/exclusion.ts) lo comparte la reserva, que deja fuera la dirección, con «Preferencias», que lo explica. Así las dos nunca discrepan.
+- **Qué causa se explica.** Si una dirección tiene varias, se explica primero la queja, luego el rebote duro y al final la supresión, porque la supresión suele ser consecuencia de las otras dos.
+- **Último aviso.** Es el registro más reciente del usuario con fecha de hoy o anterior, sin importar a qué dirección se envió. Se muestra aunque la preferencia esté apagada.
+- **El aviso de dirección excluida se muestra aunque la preferencia esté apagada.** Así el usuario sabe, antes de encenderla, que no le llegaría.
+- **Avisos del día.** «Hoy no hubo artículos bajo mínimo» aparece aunque la dirección esté excluida, porque describe el día. «Empieza mañana» no aparece si lo está, porque mañana tampoco empezaría.
+- **Scripts de desarrollo.** `npm run correo:estados` recorre en la base local lo que muestra «Preferencias», y `npm run correo:borrar-estados` borra lo que creó. Cómo se usan está en el [README](../../README.md#ver-los-estados-de-preferencias).
+
+### Entrega 3: tablero y barra lateral
+
+- **Cuántas filas.** `FILAS`, en [`tablero/repo.ts`](../../src/lib/tablero/repo.ts), fija las filas de todas las tarjetas. La prueba 21 lo lee de ahí y siembra más registros que `FILAS` en cada lista.
+- **Consultas propias del tablero.** `salidasEnCurso` y `borradoresMasAntiguos` viven junto a los listados, en `salidas/repo.ts` y `entradas/repo.ts`, y comparten su `select`: solo cambian el filtro y el orden.
+- **Los contadores viven en un solo archivo.** [`contadores.ts`](../../src/lib/navegacion/contadores.ts) declara cada uno con su ruta, sus permisos y su consulta. El layout manda la lectura como promesa, como en «Preferencias», y cada contador la resuelve con `Suspense`.
+- **Sin migración ni permisos nuevos.**
+
+### Entrega 4: acabado de la interfaz
+
+- **Diálogo nativo.** [`dialogo.tsx`](../../src/components/ui/dialogo.tsx) usa `<dialog>` con `showModal()`, sin dependencias: el navegador atrapa el foco y maneja Escape. Se abre al montarse y se cierra al desmontarse. Va en un portal porque la hoja de conteo ya es un formulario, y corta la propagación del envío para que la hoja no se guarde al confirmar o descartar.
+- **El `digest` distingue la negativa.** En producción, Next oculta el mensaje de un error del servidor, pero conserva el `digest` que el error ya trae. `SinAcceso` y `SinPermiso` llevan uno propio (`bodegasosur:sin-sesion`, `bodegasosur:sin-acceso` y `bodegasosur:sin-permiso`), y `error.tsx` lo lee. No se usa `forbidden()`, porque en Next 16 exige la bandera experimental `authInterrupts`.
+- **`SinAcceso` sabe su motivo:** sin sesión de Clerk, o con sesión pero sin un usuario activo. `mensajeDeNegativa`, en [`db.ts`](../../src/lib/db.ts), traduce las dos negativas para todas las acciones.
+- **El fallo de red se atrapa en el cliente.** `llamarAlServidor` y `conConexion`, en [`conexion.ts`](../../src/lib/conexion.ts), envuelven las llamadas de los componentes y la acción de cada `useActionState`. Dejan pasar las redirecciones de Next (`unstable_rethrow`).
+- **El menú móvil envuelve el contenido.** `Navegacion` dibuja también el `main`, para dejarlo `inert` mientras el menú está abierto.
+- **Revisión 23.** Se recorrieron 41 pantallas en un marco de 375 px, midiendo lo que desborda la página fuera de un contenedor con desplazamiento. Se revisaron a la vista las capturas, la hoja de conteo, el selector buscable, el diálogo y «Preferencias».
+- **Sin migración, permisos, variables ni dependencias nuevas.**

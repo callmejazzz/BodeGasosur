@@ -199,6 +199,8 @@ describe("lo mismo que la pantalla", () => {
     ];
     como("SUPERADMIN");
     const archivos = await libro("/exportar/usuarios");
+    // La preferencia de alertas no se exporta
+    expect(datos(archivos["xl/worksheets/sheet1.xml"]).encabezado).toEqual(["Correo", "Rol", "Puede autorizar", "Activo"]);
     const sinAcceso = datos(archivos["xl/worksheets/sheet2.xml"]);
     expect(sinAcceso.encabezado).toEqual(["Correo", "Nombre"]);
     expect(sinAcceso.filas).toEqual([[`sin.${sufijo}@prueba.test`, "Pendiente"]]);

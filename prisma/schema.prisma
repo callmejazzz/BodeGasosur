@@ -186,6 +186,8 @@ model Usuario {
   puedeAutorizar Boolean @default(false)
   personaId      String? @unique @db.Uuid
   activo         Boolean @default(true)
+  /// Alerta diaria de stock mínimo. Solo la cambia el propio usuario (BG712).
+  alertasCorreo  Boolean @default(false)
 
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
@@ -194,16 +196,17 @@ model Usuario {
 
   bitacora               Bitacora[]
   eventosAcceso          EventoAcceso[]
-  movimientosCreados     Movimiento[]   @relation("Creador")
-  movimientosConfirmados Movimiento[]   @relation("Confirmador")
-  movimientosAutorizados Movimiento[]   @relation("Autorizador")
-  movimientosRechazados  Movimiento[]   @relation("Rechazador")
-  movimientosEntregados  Movimiento[]   @relation("Entregador")
-  movimientosRecibidos   Movimiento[]   @relation("Receptor")
-  movimientosCancelados  Movimiento[]   @relation("Cancelador")
-  conteosCreados         HojaConteo[]   @relation("CreadorConteo")
-  conteosConfirmados     HojaConteo[]   @relation("ConfirmadorConteo")
-  conteosCancelados      HojaConteo[]   @relation("CanceladorConteo")
+  movimientosCreados     Movimiento[]      @relation("Creador")
+  movimientosConfirmados Movimiento[]      @relation("Confirmador")
+  movimientosAutorizados Movimiento[]      @relation("Autorizador")
+  movimientosRechazados  Movimiento[]      @relation("Rechazador")
+  movimientosEntregados  Movimiento[]      @relation("Entregador")
+  movimientosRecibidos   Movimiento[]      @relation("Receptor")
+  movimientosCancelados  Movimiento[]      @relation("Cancelador")
+  conteosCreados         HojaConteo[]      @relation("CreadorConteo")
+  conteosConfirmados     HojaConteo[]      @relation("ConfirmadorConteo")
+  conteosCancelados      HojaConteo[]      @relation("CanceladorConteo")
+  registrosCorreo        RegistroCorreos[]
 
   @@schema("public")
 }
@@ -735,5 +738,148 @@ model Folio {
   prefijo   String
   siguiente Int            @default(1)
 
+  @@schema("public")
+}
+
+// ───────────────────────── Alerta diaria por correo ──────────────────────────
+//
+// Contrato de la fase 9, §3.4 a §3.11. Ninguna entra en la bitácora: ellas son
+// el registro. Solo las escriben sus orígenes de sistema, y las transiciones
+// las vigila prisma/sql/despues/997-correo-y-preferencia.sql.
+
+enum ResultadoEvaluacion {
+  CON_ENVIO
+  SIN_BAJO_MINIMO
+  SIN_DESTINATARIOS
+
+  @@schema("public")
+}
+
+enum EstadoLote {
+  PENDIENTE
+  ACEPTADO
+  RECHAZADO
+  VENCIDO
+  SIN_CONFIRMAR
+
+  @@schema("public")
+}
+
+enum EstadoRegistroCorreo {
+  PENDIENTE
+  ENVIADO
+  FALLIDO
+  SIN_CONFIRMAR
+
+  @@schema("public")
+}
+
+enum ClaseRebote {
+  PERMANENTE
+  TRANSITORIO
+  INDETERMINADO
+
+  @@schema("public")
+}
+
+enum AnomaliaCorreo {
+  ETIQUETA_DESCONOCIDA
+  SIN_ETIQUETA
+  ETIQUETA_E_ID_DISCREPAN
+  DESTINATARIO_DISTINTO
+  ID_DISTINTO
+
+  @@schema("public")
+}
+
+/// Un día evaluado, haya o no envío. Solo inserción.
+model EvaluacionCorreos {
+  id            String              @id @default(uuid(7)) @db.Uuid
+  fecha         DateTime            @unique @db.Date
+  resultado     ResultadoEvaluacion
+  /// N: artículos distintos bajo mínimo.
+  articulos     Int
+  renglones     Int
+  destinatarios Int
+  lotes         Int
+  evaluadoEn    DateTime            @default(now()) @db.Timestamptz(3)
+
+  @@schema("public")
+}
+
+/// Una petición a Resend con hasta 100 destinatarios. El contenido y la llave
+/// no cambian desde el alta: un reintento manda el mismo cuerpo.
+model LoteCorreos {
+  id              String     @id @default(uuid(7)) @db.Uuid
+  fecha           DateTime   @db.Date
+  numero          Int
+  /// resumen-<fecha>-<numero>
+  llave           String     @unique
+  remitente       String
+  asunto          String
+  html            String
+  texto           String
+  articulos       Int
+  estado          EstadoLote @default(PENDIENTE)
+  intentos        Int        @default(0)
+  ultimoIntentoEn DateTime?  @db.Timestamptz(3)
+  arrendadoHasta  DateTime?  @db.Timestamptz(3)
+  motivo          String?
+  creadoEn        DateTime   @default(now()) @db.Timestamptz(3)
+  resueltoEn      DateTime?  @db.Timestamptz(3)
+
+  registros RegistroCorreos[]
+
+  @@unique([fecha, numero])
+  // Destino de la llave compuesta de RegistroCorreos: lote y fecha coinciden.
+  @@unique([id, fecha])
+  @@schema("public")
+}
+
+/// Un destinatario de un lote. ENVIADO = aceptado por Resend, con su identificador.
+model RegistroCorreos {
+  id        String               @id @default(uuid(7)) @db.Uuid
+  loteId    String               @db.Uuid
+  /// 0 a 99: la posición i del lote es la posición i de la respuesta.
+  posicion  Int
+  fecha     DateTime             @db.Date
+  usuarioId String               @db.Uuid
+  /// La dirección usada al reservar, no la actual del usuario.
+  correo    String
+  estado    EstadoRegistroCorreo @default(PENDIENTE)
+  resendId  String?              @unique
+  motivo    String?
+  creadoEn  DateTime             @default(now()) @db.Timestamptz(3)
+
+  lote    LoteCorreos    @relation(fields: [loteId, fecha], references: [id, fecha])
+  usuario Usuario        @relation(fields: [usuarioId], references: [id])
+  eventos EventoCorreo[]
+
+  @@unique([fecha, usuarioId])
+  @@unique([loteId, posicion])
+  @@schema("public")
+}
+
+/// Lo que avisa el webhook de Resend. Solo inserción; no guarda direcciones.
+model EventoCorreo {
+  id               String          @id @default(uuid(7)) @db.Uuid
+  svixId           String          @unique
+  /// Texto y no enum: un tipo nuevo de Resend se guarda en vez de fallar.
+  tipo             String
+  resendId         String?
+  /// Asociado: el registro. Anómalo: la anomalía y la etiqueta recibida.
+  registroId       String?         @db.Uuid
+  anomalia         AnomaliaCorreo?
+  etiquetaRecibida String?
+  rebote           ClaseRebote?
+  subtipoRebote    String?
+  motivoFallo      String?
+  tipoSupresion    String?
+  ocurridoEn       DateTime        @db.Timestamptz(3)
+  recibidoEn       DateTime        @default(now()) @db.Timestamptz(3)
+
+  registro RegistroCorreos? @relation(fields: [registroId], references: [id], onDelete: Restrict)
+
+  @@index([registroId])
   @@schema("public")
 }

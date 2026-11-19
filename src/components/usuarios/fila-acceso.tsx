@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox, Select } from "@/components/ui/campos";
 import { ESTADO_INICIAL, type EstadoAcceso } from "@/lib/usuarios/formulario";
 import { cn } from "@/lib/utils";
+import { conConexion } from "@/lib/conexion";
 
 const ROLES: { valor: Rol; etiqueta: string; descripcion: string }[] = [
   { valor: "SUPERADMIN", etiqueta: "Superadmin", descripcion: "Todo, incluidos empresas y estaciones" },
@@ -34,7 +35,7 @@ export function FilaAcceso({
   modo: "con-acceso" | "sin-acceso";
   accion: (estado: EstadoAcceso, formData: FormData) => Promise<EstadoAcceso>;
 }) {
-  const [estado, enviar, enviando] = useActionState(accion, ESTADO_INICIAL);
+  const [estado, enviar, enviando] = useActionState(conConexion(accion, (previo, mensaje) => ({ ...previo, mensaje, tono: "error" as const })), ESTADO_INICIAL);
 
   return (
     <form

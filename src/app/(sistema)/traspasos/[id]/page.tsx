@@ -31,7 +31,7 @@ export default async function PaginaTraspaso({ params, searchParams }: PageProps
       borrador={{
         confirmar: confirmarTraspaso,
         descartar: descartarTraspaso,
-        aviso: "¿Confirmas que el material ya se movió? Se consume por PEPS en origen, entra a destino y se asigna folio. Después no se edita.",
+        aviso: "Confirma que el material ya se movió: se consume por PEPS en origen, entra a destino y se asigna folio. Después no se edita.",
         texto: "Confirmar traspaso",
       }}
       revertir={revertirMovimiento}

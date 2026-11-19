@@ -6,6 +6,7 @@ import { Button, ButtonLink } from "@/components/ui/button";
 import { Campo, Select, Textarea } from "@/components/ui/campos";
 import { ESTADO_INICIAL, type EstadoFormulario } from "@/lib/inventario/formulario";
 import type { OpcionesCaptura } from "@/lib/inventario/pantallas";
+import { conConexion } from "@/lib/conexion";
 
 export type ValoresTraspaso = { bodegaOrigenId: string; bodegaDestinoId: string; observaciones: string; partidas: ValoresPartida[] };
 
@@ -25,7 +26,7 @@ export function FormularioTraspaso({
   textoGuardar: string;
   cancelarHref: string;
 }) {
-  const [estado, enviar, enviando] = useActionState(accion, ESTADO_INICIAL);
+  const [estado, enviar, enviando] = useActionState(conConexion(accion, (previo, mensaje) => ({ ...previo, errores: {}, mensaje })), ESTADO_INICIAL);
   const [origen, setOrigen] = useState(valores?.bodegaOrigenId ?? "");
   const [destino, setDestino] = useState(valores?.bodegaDestinoId ?? "");
   const iniciales = valores?.partidas.length ? valores.partidas : [PARTIDA_VACIA];

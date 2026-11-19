@@ -5,8 +5,6 @@ import { acotarPagina, POR_PAGINA, saltoDe, type Pagina } from "@/lib/paginacion
 import { usuarioTienePermiso, type Permiso, type SujetoDePermisos } from "@/lib/permisos";
 import type { EstatusSalida } from "./servicio";
 
-// Lecturas de salidas. Recibe el cliente: solo consultar() lo entrega.
-
 type Db = Prisma.TransactionClient;
 
 const RESUMEN = {
@@ -32,17 +30,10 @@ export type SalidaResumen = Prisma.MovimientoGetPayload<{ select: typeof RESUMEN
 
 export type FiltroSalidas = {
   estatus: EstatusSalida | "todas";
-  /** Folio, clave de bodega o número de estación (tolerante); nombre de bodega, alias, solicitante o quién retiró. */
   busqueda: string;
   soloPrestamos?: boolean;
 };
 
-/**
- * Lo que sigue en curso primero (solicitadas y autorizadas, sin folio todavía);
- * luego las retiradas o recibidas por folio, del más alto al más bajo; al
- * final rechazadas y canceladas, la más nueva arriba. El id desempata, así
- * que las páginas no se enciman.
- */
 export async function listarSalidas(db: Db, filtro: FiltroSalidas, pedida = 1, tamano = POR_PAGINA): Promise<{ filas: SalidaResumen[]; pagina: Pagina }> {
   const filtros = [];
   if (filtro.estatus !== "todas") filtros.push(sql`m.estatus = ${filtro.estatus}::"EstatusMovimiento"`);
@@ -93,7 +84,7 @@ const DETALLE = {
       cantidad: true,
       observaciones: true,
       articulo: { select: { clave: true, descripcion: true, piezasPorCaja: true, activo: true, unidad: { select: { clave: true } } } },
-      // PEPS: de qué capa salió cada pieza y a qué costo, en el orden en que se consumió.
+      // PEPS: de qué capa salió cada pieza y a qué costo, en el orden en que se consumió
       consumos: {
         select: {
           cantidad: true,
@@ -116,11 +107,6 @@ export async function obtenerSalida(db: Db, id: string): Promise<SalidaDetalle |
 
 export type Valuacion = { importe: string | null; importeConIva: string | null; piezasSinCosto: number };
 
-/**
- * Valor de una salida retirada: suma de sus consumos, redondeada por renglón
- * en PostgreSQL. No hay costo unitario único cuando una partida tocó capas de
- * costos distintos; las piezas de capas sin costo se cuentan aparte.
- */
 export async function valuarSalida(db: Db, id: string): Promise<Valuacion> {
   const [v] = await db.$queryRaw<Valuacion[]>`
     SELECT sum(importe_renglon(c.cantidad, c."costoUnitario"))::text        AS "importe",
@@ -135,7 +121,6 @@ export async function valuarSalida(db: Db, id: string): Promise<Valuacion> {
 
 // ──────────────────────────────── Bandeja ────────────────────────────────────
 
-/** Cada sección espera a quien tiene su permiso: autorizar, retirar o confirmar recepción. */
 export const SECCIONES = [
   { clave: "porAutorizar", estatus: "SOLICITADA", permiso: "salidas:autorizar" },
   { clave: "porRetirar", estatus: "AUTORIZADA", permiso: "salidas:retirar" },
@@ -145,7 +130,6 @@ export const SECCIONES = [
 export type ClaveSeccion = (typeof SECCIONES)[number]["clave"];
 export type SeccionBandeja = { clave: ClaveSeccion; estatus: EstatusSalida; filas: SalidaResumen[]; pagina: Pagina };
 
-/** Las secciones de la bandeja en las que el usuario puede actuar. */
 export const seccionesDe = (usuario: SujetoDePermisos) => SECCIONES.filter((s) => usuarioTienePermiso(usuario, s.permiso));
 
 function ordenDeBandeja(estatus: EstatusSalida): Prisma.MovimientoOrderByWithRelationInput[] {
@@ -154,18 +138,13 @@ function ordenDeBandeja(estatus: EstatusSalida): Prisma.MovimientoOrderByWithRel
   return [{ entregadoEn: "asc" }, { id: "asc" }];
 }
 
-/**
- * Lo que espera al usuario, la más antigua primero, cada sección en su página.
- * Las secciones en las que no puede actuar no se consultan.
- */
 export async function bandejaDeSalidas(db: Db, usuario: SujetoDePermisos, paginas: Partial<Record<ClaveSeccion, number>> = {}, tamano = POR_PAGINA): Promise<SeccionBandeja[]> {
   const bandeja: SeccionBandeja[] = [];
-  // Secuencial a propósito: dentro de una transacción hay una sola conexión.
+  // Secuencial a propósito: dentro de una transacción hay una sola conexión
   for (const { clave, estatus } of seccionesDe(usuario)) bandeja.push({ clave, estatus, ...(await seccionDeBandeja(db, estatus, paginas[clave] ?? 1, tamano)) });
   return bandeja;
 }
 
-/** Una página de una sección de la bandeja, la más antigua primero. */
 export async function seccionDeBandeja(db: Db, estatus: EstatusSalida, pedida = 1, tamano = POR_PAGINA): Promise<{ filas: SalidaResumen[]; pagina: Pagina }> {
   const pagina = acotarPagina(pedida, await db.movimiento.count({ where: { tipo: "SALIDA", estatus } }), tamano);
   const filas = await db.movimiento.findMany({
@@ -178,7 +157,15 @@ export async function seccionDeBandeja(db: Db, estatus: EstatusSalida, pedida = 
   return { filas, pagina };
 }
 
-/** Cuántas salidas esperan al usuario; null si no puede actuar en ninguna sección. */
+export function salidasEnCurso(db: Db, tamano: number): Promise<SalidaResumen[]> {
+  return db.movimiento.findMany({
+    where: { tipo: "SALIDA", estatus: { in: ["SOLICITADA", "AUTORIZADA"] } },
+    select: RESUMEN,
+    orderBy: [{ fecha: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+    take: tamano,
+  });
+}
+
 export async function contarPendientes(db: Db, usuario: SujetoDePermisos): Promise<number | null> {
   const secciones = seccionesDe(usuario);
   if (secciones.length === 0) return null;
@@ -186,9 +173,7 @@ export async function contarPendientes(db: Db, usuario: SujetoDePermisos): Promi
 }
 
 // ─────────────────────────────── Existencias ─────────────────────────────────
-// Informativas: el retiro las vuelve a comprobar bajo candado.
 
-/** Existencia en la bodega de origen de cada artículo de la salida. */
 export async function existenciasDeSalida(db: Db, id: string): Promise<Record<string, number>> {
   const filas = await db.$queryRaw<{ articuloId: string; cantidad: number }[]>`
     SELECT p."articuloId", coalesce(e.cantidad, 0) AS cantidad
@@ -199,7 +184,6 @@ export async function existenciasDeSalida(db: Db, id: string): Promise<Record<st
   return Object.fromEntries(filas.map((f) => [f.articuloId, f.cantidad]));
 }
 
-/** bodegaId → articuloId → cantidad, solo catálogo activo y solo lo que hay. */
 async function existenciasActivas(db: Db): Promise<Record<string, Record<string, number>>> {
   const filas = await db.existencia.findMany({
     where: { cantidad: { gt: 0 }, bodega: { activa: true }, articulo: { activo: true } },
@@ -220,11 +204,9 @@ export type OpcionesCaptura = {
   areas: Opcion[];
   personas: Opcion[];
   articulos: OpcionArticulo[];
-  /** bodegaId → articuloId → cantidad; lo ausente es cero. */
   existencias: Record<string, Record<string, number>>;
 };
 
-/** Solo catálogo activo: una solicitud no se edita, así que no hay asignaciones previas que conservar. */
 export async function cargarOpcionesDeCaptura(db: Db): Promise<OpcionesCaptura> {
   const bodegas = await db.bodega.findMany({ where: { activa: true }, select: { id: true, clave: true, nombre: true }, orderBy: { nombre: "asc" } });
   const estaciones = await db.estacion.findMany({ where: { activa: true }, select: { id: true, numero: true, alias: true }, orderBy: { numero: "asc" } });

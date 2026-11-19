@@ -10,6 +10,7 @@ import { crearCliente } from "../../../../prisma/comun";
 import { URL_PRUEBAS } from "../../../../pruebas/base-de-pruebas";
 import { formDataEspia } from "../../../../pruebas/formulario-espia";
 import { sembrarEntorno, type Entorno } from "../../../../pruebas/semilla-entradas";
+import { SIN_SESION } from "@/lib/mensajes";
 import { ESTADO_INICIAL } from "@/lib/usuarios/formulario";
 
 const sesion = vi.hoisted(() => ({ userId: null as string | null, token: undefined as ((userId: string) => string | null) | undefined }));
@@ -47,7 +48,7 @@ function acceso(clerkUserId: string, rol: string) {
 describe("guardarAcceso", () => {
   it("sin sesión o sin permiso, ni se abre el FormData ni se consulta a Clerk", async () => {
     const casos = [
-      { rol: null, mensaje: "No tienes acceso al sistema." },
+      { rol: null, mensaje: SIN_SESION },
       { rol: "COMPRAS", mensaje: "No tienes permiso para administrar usuarios." },
       { rol: "JEFE", mensaje: "No tienes permiso para administrar usuarios." },
     ] as const;

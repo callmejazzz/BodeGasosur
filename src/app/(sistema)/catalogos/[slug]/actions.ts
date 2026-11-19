@@ -11,7 +11,8 @@ import {
 import type { EstadoFormulario, ValoresFormulario } from "@/lib/catalogos/formulario";
 import { REPOS } from "@/lib/catalogos/repos";
 import type { Prisma } from "@prisma/client";
-import { accionProtegida, SinAcceso, SinPermiso, type UsuarioSesion } from "@/lib/db";
+import { accionProtegida, mensajeDeNegativa, type UsuarioSesion } from "@/lib/db";
+import { FALLO_DEL_SERVIDOR, SIN_PERMISO } from "@/lib/mensajes";
 
 /** Traduce las violaciones de índice único a un mensaje que se entienda. */
 function mensajeDeError(error: unknown, singular: string): string {
@@ -25,7 +26,7 @@ function mensajeDeError(error: unknown, singular: string): string {
     }
   }
   console.error(error);
-  return "No se pudo guardar. Revisa los datos e inténtalo de nuevo.";
+  return FALLO_DEL_SERVIDOR;
 }
 
 /** Un slug que ninguna definición reconoce. */
@@ -97,9 +98,8 @@ export async function guardarCatalogo(
     await escribirCatalogo(slug, id, formData);
   } catch (error) {
     const def = catalogoPorSlug(slug);
-    if (error instanceof SinAcceso || error instanceof SinPermiso) {
-      return { errores: {}, mensaje: def ? `No tienes permiso para modificar ${def.titulo.toLowerCase()}.` : "No tienes permiso para esta operación." };
-    }
+    const negativa = mensajeDeNegativa(error, def ? `No tienes permiso para modificar ${def.titulo.toLowerCase()}.` : SIN_PERMISO);
+    if (negativa) return { errores: {}, mensaje: negativa };
     if (!def || error instanceof CatalogoDesconocido) return { errores: {}, mensaje: "Catálogo desconocido." };
     // Aquí la sesión y el permiso ya se comprobaron: se puede leer lo capturado.
     const valores = valoresEnviados(def, id, formData);

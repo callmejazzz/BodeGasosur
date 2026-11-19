@@ -4,7 +4,8 @@ import type { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { z } from "zod";
-import { accionProtegida, SinAcceso, SinPermiso, type UsuarioSesion } from "@/lib/db";
+import { accionProtegida, mensajeDeNegativa, type UsuarioSesion } from "@/lib/db";
+import { FALLO_DEL_SERVIDOR } from "@/lib/mensajes";
 import { erroresDe, type ErroresFormulario } from "@/lib/movimientos/formulario";
 import type { Permiso } from "@/lib/permisos";
 import { ErrorDeDominio, traducida } from "@/lib/salidas/errores";
@@ -68,13 +69,14 @@ const recibir = protegida("salidas:recibir", esquemaId, (tx, u, d) => servicio.c
 export type ResultadoAccion = { ok: true } | { ok: false; mensaje: string };
 
 function mensajeSeguro(error: unknown): string {
-  if (error instanceof SinAcceso || error instanceof SinPermiso) return "No tienes permiso para esta operación.";
+  const negativa = mensajeDeNegativa(error);
+  if (negativa) return negativa;
   if (error instanceof DatosInvalidos) {
     return error.errores.id ? "La salida no existe." : (Object.values(error.errores)[0] ?? "Datos inválidos.");
   }
   if (error instanceof ErrorDeDominio) return error.message;
   console.error("[salidas]", error);
-  return "No se pudo completar la operación. Inténtalo de nuevo.";
+  return FALLO_DEL_SERVIDOR;
 }
 
 function refrescar(id: string) {

@@ -5,32 +5,35 @@ import { Tabla, Td, Th, Tr } from "@/components/ui/tabla";
 import { formatearInstante } from "@/lib/fechas";
 import type { ClaveSeccion, SalidaResumen, SeccionBandeja } from "@/lib/salidas/repo";
 
-const SECCION: Record<ClaveSeccion, { titulo: string; descripcion: string; desde: (s: SalidaResumen) => Date | null }> = {
+const SECCION: Record<ClaveSeccion, { titulo: string; descripcion: string; vacio: string; desde: (s: SalidaResumen) => Date | null }> = {
   porAutorizar: {
     titulo: "Por autorizar",
     descripcion: "Solicitudes que esperan que alguien facultado las autorice o las rechace.",
+    vacio: "Ninguna solicitud espera autorización.",
     desde: (s) => s.createdAt,
   },
   porRetirar: {
     titulo: "Por retirar",
     descripcion: "Autorizadas: falta registrar la salida física de la bodega.",
+    vacio: "Ninguna salida autorizada espera su retiro.",
     desde: (s) => s.autorizadoEn,
   },
   porRecibir: {
     titulo: "Por confirmar recepción",
     descripcion: "Retiradas: falta confirmar que la estación recibió el material.",
+    vacio: "Ninguna salida retirada espera la confirmación de recepción.",
     desde: (s) => s.entregadoEn,
   },
 };
 
 /** `parametros` son las páginas de todas las secciones: pasar de página en una no reinicia las otras. */
 export function SeccionPendientes({ seccion, parametros }: { seccion: SeccionBandeja; parametros: URLSearchParams }) {
-  const { titulo, descripcion, desde } = SECCION[seccion.clave];
+  const { titulo, descripcion, vacio, desde } = SECCION[seccion.clave];
   return (
     <Card>
       <CardHeader titulo={`${titulo} (${seccion.pagina.total})`} descripcion={descripcion} />
       {seccion.filas.length === 0 ? (
-        <p className="px-5 py-4 text-sm text-muted">Nada pendiente.</p>
+        <p className="px-5 py-4 text-sm text-muted">{vacio}</p>
       ) : (
         <>
           <Tabla>

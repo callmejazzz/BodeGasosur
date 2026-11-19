@@ -305,6 +305,32 @@ describe("las escrituras sin sesión de usuario", () => {
     await expect(prisma.usuario.findUniqueOrThrow({ where: { id: u.id } })).resolves.toMatchObject({ rol: "COMPRAS" });
   });
 
+  it("el resumen diario y el webhook de Resend escriben sus tablas por la puerta, y no los usuarios", async () => {
+    const u = await prisma.usuario.create({
+      data: { clerkUserId: `user_rd_${randomUUID().slice(0, 8)}`, correo: `rd.${randomUUID().slice(0, 8)}@prueba.test`, rol: "JEFE" },
+    });
+    const fecha = new Date("2032-03-04T00:00:00Z");
+    const registro = await escrituraDeSistema("resumen-diario", async (db) => {
+      await db.candadoDelDia(fecha);
+      const lote = await db.loteCorreos.create({
+        data: { fecha, numero: 1, llave: "resumen-2032-03-04-1", remitente: "avisos@avisos.prueba.test", asunto: "Stock bajo mínimo: 1 artículo", html: "<p>x</p>", texto: "x", articulos: 1 },
+      });
+      const r = await db.registroCorreos.create({ data: { loteId: lote.id, fecha, posicion: 0, usuarioId: u.id, correo: u.correo } });
+      await db.evaluacionCorreos.create({ data: { fecha, resultado: "CON_ENVIO", articulos: 1, renglones: 1, destinatarios: 1, lotes: 1 } });
+      return r;
+    });
+    await escrituraDeSistema("resend-webhook", async (db) => {
+      await db.registroCorreos.update({ where: { id: registro.id }, data: { estado: "ENVIADO", resendId: `re_${randomUUID()}` } });
+      await db.eventoCorreo.create({ data: { svixId: `msg_${randomUUID()}`, tipo: "email.sent", registroId: registro.id, ocurridoEn: new Date() } });
+    });
+    await expect(prisma.registroCorreos.findUniqueOrThrow({ where: { id: registro.id } })).resolves.toMatchObject({ estado: "ENVIADO" });
+
+    // El resumen ya no recibe el modelo de usuarios: los lee con leerDestinatarios().
+    // Que la base rechace escribirlos con su origen lo prueba correo-y-preferencia.test.ts.
+    await expect(escrituraDeSistema("resumen-diario", async (db) => "usuario" in db)).resolves.toBe(false);
+    await expect(escrituraDeSistema("resumen-diario", (db) => db.leerDestinatarios())).resolves.toEqual(expect.any(Array));
+  });
+
   it("el acceso denegado se registra con la identidad del token, y el de un usuario activo no", async () => {
     const errores = vi.spyOn(console, "error").mockImplementation(() => undefined);
     try {

@@ -68,7 +68,7 @@ export default async function PaginaUsuarios({ searchParams }: PageProps<"/usuar
           descripcion="Los cambios surten efecto en la siguiente petición: el rol y la bandera se leen de la base en cada una."
         />
         {usuarios.length === 0 ? (
-          <EstadoVacio titulo="Todavía nadie tiene acceso" />
+          <EstadoVacio titulo="Todavía nadie tiene acceso" descripcion="Concede el acceso a una identidad de la lista de abajo." />
         ) : (
           accesos.filas.map((u) => (
             <FilaAcceso

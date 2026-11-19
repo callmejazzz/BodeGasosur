@@ -8,6 +8,7 @@ import { SelectorBuscable } from "@/components/ui/selector-buscable";
 import { ESTADO_INICIAL, type EstadoFormulario } from "@/lib/inventario/formulario";
 import type { OpcionesCaptura, PaginaDeSalidas, SalidaDelFormulario } from "@/lib/inventario/pantallas";
 import type { SalidaDevolvible } from "@/lib/inventario/repo";
+import { conConexion } from "@/lib/conexion";
 
 export type ValoresDevolucion = { estacionId: string; bodegaDestinoId: string; observaciones: string; partidas: ValoresPartida[] };
 
@@ -41,7 +42,7 @@ export function FormularioDevolucion({
   textoGuardar: string;
   cancelarHref: string;
 }) {
-  const [estado, enviar, enviando] = useActionState(accion, ESTADO_INICIAL);
+  const [estado, enviar, enviando] = useActionState(conConexion(accion, (previo, mensaje) => ({ ...previo, errores: {}, mensaje })), ESTADO_INICIAL);
   const [estacionId, setEstacionId] = useState(valores?.estacionId ?? "");
   const [salida, setSalida] = useState<SalidaDevolvible | null>(vinculada?.salida ?? null);
   const [aviso, setAviso] = useState<string | null>(vinculada?.aviso ?? null);

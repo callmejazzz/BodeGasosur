@@ -31,7 +31,15 @@ export default async function PaginaAjustes({ searchParams }: PageProps<"/ajuste
       <Card>
         <FiltrosMovimientos filtros={filtros} total={pagina.total} sustantivo={["ajuste", "ajustes"]} />
         {filas.length === 0 ? (
-          <EstadoVacio titulo={hayFiltros(filtros) ? "Sin coincidencias" : "Todavía no hay ajustes"} />
+          hayFiltros(filtros) ? (
+            <EstadoVacio titulo="Sin coincidencias" descripcion="Prueba con otra búsqueda o cambia el filtro." />
+          ) : (
+            <EstadoVacio
+              titulo="Todavía no hay ajustes"
+              descripcion="Nacen al confirmar una hoja de conteo con diferencias o al revertir un movimiento."
+              accion={<ButtonLink href="/conteos" variante="secundario" tamano="sm">Ver hojas de conteo</ButtonLink>}
+            />
+          )
         ) : (
           <TablaMovimientos ruta="/ajustes" filas={filas} columnas={["origen", "destino", "detalle"]} />
         )}

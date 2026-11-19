@@ -19,6 +19,7 @@ import { articuloNuevo } from "../../../pruebas/semilla-entradas";
 import { sembrarCapa, sinDefensas } from "../../../pruebas/semilla-inventario";
 import { como as comoEnServicio, sembrarOperacion } from "../../../pruebas/semilla-operacion";
 import type { EntornoSalidas } from "../../../pruebas/semilla-salidas";
+import { SIN_ACCESO, SIN_PERMISO, SIN_SESION } from "../mensajes";
 import { autorizarSalida, retirarSalida, solicitarSalida } from "../salidas/servicio";
 import { ESTADO_INICIAL } from "./formulario";
 
@@ -45,9 +46,9 @@ const prisma = crearCliente(URL_PRUEBAS);
 let e: EntornoSalidas;
 let articuloId: string;
 
-const SIN_PERMISO = "No tienes permiso para esta operación.";
-const NEGADO = { ok: false, mensaje: SIN_PERMISO };
-const NEGADO_FORMULARIO = { errores: {}, mensaje: SIN_PERMISO };
+const negado = (mensaje: string = SIN_PERMISO) => ({ ok: false, mensaje });
+const negadoFormulario = (mensaje: string = SIN_PERMISO) => ({ errores: {}, mensaje });
+const NEGADO = negado();
 
 beforeAll(async () => {
   e = await sembrarOperacion(prisma);
@@ -184,21 +185,21 @@ describe("acceso directo sin permiso", () => {
     const [borrador, confirmado, hoja] = [await traspasoBorrador(), await traspasoConfirmado(), await hojaAbierta()];
     const antes = await Promise.all([borrador, confirmado].map(leer));
     const hojaAntes = await prisma.hojaConteo.findUniqueOrThrow({ where: { id: hoja.id } });
-    return async () => {
-      await expect(traspasos.crearTraspaso(ESTADO_INICIAL, formularioTraspaso(randomUUID())), etiqueta).resolves.toEqual(NEGADO_FORMULARIO);
-      await expect(traspasos.guardarTraspaso(borrador, ESTADO_INICIAL, formularioTraspaso(randomUUID())), etiqueta).resolves.toEqual(NEGADO_FORMULARIO);
-      await expect(traspasos.descartarTraspaso(borrador, "No"), etiqueta).resolves.toEqual(NEGADO);
-      await expect(traspasos.confirmarTraspaso(borrador), etiqueta).resolves.toEqual(NEGADO);
-      await expect(devoluciones.crearDevolucion(ESTADO_INICIAL, formularioDevolucion(randomUUID())), etiqueta).resolves.toEqual(NEGADO_FORMULARIO);
-      await expect(devoluciones.confirmarDevolucion(borrador), etiqueta).resolves.toEqual(NEGADO);
-      await expect(conteos.abrirHoja(ESTADO_INICIAL, formularioHoja(randomUUID(), e.bodegaId)), etiqueta).resolves.toEqual(NEGADO_FORMULARIO);
-      await expect(conteos.guardarConteo(hoja.id, ESTADO_INICIAL, new FormData()), etiqueta).resolves.toEqual(NEGADO_FORMULARIO);
-      await expect(conteos.actualizarHoja(hoja.id, 1), etiqueta).resolves.toEqual(NEGADO);
-      await expect(conteos.confirmarConteo(hoja.id, 1), etiqueta).resolves.toEqual(NEGADO);
-      await expect(conteos.descartarHoja(hoja.id, "No"), etiqueta).resolves.toEqual(NEGADO);
-      await expect(reversas.revertirMovimiento(confirmado, "No"), etiqueta).resolves.toEqual(NEGADO);
+    return async (mensaje: string = SIN_PERMISO) => {
+      await expect(traspasos.crearTraspaso(ESTADO_INICIAL, formularioTraspaso(randomUUID())), etiqueta).resolves.toEqual(negadoFormulario(mensaje));
+      await expect(traspasos.guardarTraspaso(borrador, ESTADO_INICIAL, formularioTraspaso(randomUUID())), etiqueta).resolves.toEqual(negadoFormulario(mensaje));
+      await expect(traspasos.descartarTraspaso(borrador, "No"), etiqueta).resolves.toEqual(negado(mensaje));
+      await expect(traspasos.confirmarTraspaso(borrador), etiqueta).resolves.toEqual(negado(mensaje));
+      await expect(devoluciones.crearDevolucion(ESTADO_INICIAL, formularioDevolucion(randomUUID())), etiqueta).resolves.toEqual(negadoFormulario(mensaje));
+      await expect(devoluciones.confirmarDevolucion(borrador), etiqueta).resolves.toEqual(negado(mensaje));
+      await expect(conteos.abrirHoja(ESTADO_INICIAL, formularioHoja(randomUUID(), e.bodegaId)), etiqueta).resolves.toEqual(negadoFormulario(mensaje));
+      await expect(conteos.guardarConteo(hoja.id, ESTADO_INICIAL, new FormData()), etiqueta).resolves.toEqual(negadoFormulario(mensaje));
+      await expect(conteos.actualizarHoja(hoja.id, 1), etiqueta).resolves.toEqual(negado(mensaje));
+      await expect(conteos.confirmarConteo(hoja.id, 1), etiqueta).resolves.toEqual(negado(mensaje));
+      await expect(conteos.descartarHoja(hoja.id, "No"), etiqueta).resolves.toEqual(negado(mensaje));
+      await expect(reversas.revertirMovimiento(confirmado, "No"), etiqueta).resolves.toEqual(negado(mensaje));
       // La búsqueda del formulario solo lee, pero tampoco responde sin sesión ni permiso de captura.
-      await expect(consultasDeDevolucion.buscarSalidas({ estacionId: e.estacionId, texto: "", pagina: 1 }), etiqueta).resolves.toMatchObject({ salidas: [], aviso: SIN_PERMISO });
+      await expect(consultasDeDevolucion.buscarSalidas({ estacionId: e.estacionId, texto: "", pagina: 1 }), etiqueta).resolves.toMatchObject({ salidas: [], aviso: mensaje });
       await expect(Promise.all([borrador, confirmado].map(leer)), etiqueta).resolves.toEqual(antes);
       await expect(prisma.hojaConteo.findUniqueOrThrow({ where: { id: hoja.id } }), etiqueta).resolves.toEqual(hojaAntes);
       await expect(prisma.movimiento.count({ where: { cancelaAId: confirmado } }), etiqueta).resolves.toBe(0);
@@ -207,9 +208,9 @@ describe("acceso directo sin permiso", () => {
 
   it("sin sesión o con una identidad que no existe en el sistema", async () => {
     const probar = await todasNegadas("sin sesión");
-    for (const userId of [null, "user_desconocido"]) {
+    for (const [userId, mensaje] of [[null, SIN_SESION], ["user_desconocido", SIN_ACCESO]] as const) {
       sesion.userId = userId;
-      await probar();
+      await probar(mensaje);
     }
   });
 
@@ -220,7 +221,7 @@ describe("acceso directo sin permiso", () => {
         data: { clerkUserId: `user_baja_${randomUUID().slice(0, 8)}`, correo: `baja.${randomUUID().slice(0, 8)}@prueba.test`, rol, puedeAutorizar: true, activo: false },
       });
       await como(baja);
-      await probar();
+      await probar(SIN_ACCESO);
     }
   });
 
@@ -238,7 +239,7 @@ describe("acceso directo sin permiso", () => {
   });
 
   it("sin sesión o sin permiso, el FormData ni siquiera se abre", async () => {
-    for (const usuario of [null, e.usuarios.JEFE]) {
+    for (const [usuario, mensaje] of [[null, SIN_SESION], [e.usuarios.JEFE, SIN_PERMISO]] as const) {
       await como(usuario);
       for (const [fd, accion] of [
         [formularioTraspaso(randomUUID()), (f: FormData) => traspasos.crearTraspaso(ESTADO_INICIAL, f)],
@@ -246,7 +247,7 @@ describe("acceso directo sin permiso", () => {
         [formularioHoja(randomUUID(), e.bodegaId), (f: FormData) => conteos.abrirHoja(ESTADO_INICIAL, f)],
       ] as const) {
         const espia = formDataEspia(fd);
-        await expect(accion(espia.formData)).resolves.toEqual(NEGADO_FORMULARIO);
+        await expect(accion(espia.formData)).resolves.toEqual(negadoFormulario(mensaje));
         expect(espia.lecturas).toEqual([]);
       }
     }

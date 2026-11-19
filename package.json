@@ -1,6 +1,6 @@
 {
   "name": "bodegasosur",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "private": true,
   "engines": {
     "node": ">=24"
@@ -25,7 +25,10 @@
     "datos:migrar": "tsx prisma/migracion-datos/migrar.ts",
     "acceso:arranque": "tsx scripts/arranque-superadmin.ts",
     "prod:bootstrap": "tsx scripts/bootstrap-produccion.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "correo:muestra": "tsx scripts/muestra-correo.tsx",
+    "correo:estados": "tsx scripts/mostrar-estados-correo.ts",
+    "correo:borrar-estados": "tsx scripts/borrar-estados-correo.ts"
   },
   "dependencies": {
     "@clerk/backend": "^3.16.13",
@@ -42,7 +45,9 @@
     "pg": "^8.23.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "react-email": "6.11.3",
     "react-hook-form": "^7.85.0",
+    "resend": "6.35.0",
     "server-only": "^0.0.1",
     "tailwind-merge": "^3.6.0",
     "zod": "^4.6.7"
@@ -68,5 +73,8 @@
     "@prisma/engines@7.9.1": true,
     "esbuild@0.28.2": true,
     "unrs-resolver@1.12.2": true
+  },
+  "overrides": {
+    "@react-email/render": "2.1.1"
   }
 }

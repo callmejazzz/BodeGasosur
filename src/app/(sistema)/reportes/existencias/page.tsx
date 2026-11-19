@@ -28,12 +28,16 @@ export default async function PaginaExistencias({ searchParams }: PageProps<"/re
         <ContextoReporte
           filtros={[d.descripcion[0]]}
           generado={new Date()}
-          aviso={total.bajoMinimo > 0 && <Badge tono="aviso">{`${cantidad(total.bajoMinimo)} bajo mínimo`}</Badge>}
+          aviso={
+            total.articulosBajoMinimo > 0 && (
+              <Badge tono="aviso">{`${cantidad(total.articulosBajoMinimo)} ${total.articulosBajoMinimo === 1 ? "artículo" : "artículos"} bajo mínimo`}</Badge>
+            )
+          }
         />
         {d.lista.filas.length === 0 ? (
           <EstadoVacio
             titulo={d.filtros.bajoMinimo ? "Nada está bajo su mínimo" : "Sin existencias que mostrar"}
-            descripcion="Prueba con otra bodega u otra búsqueda. Un artículo sin existencia ni mínimo se encuentra buscándolo."
+            descripcion="Prueba con otra bodega u otra búsqueda"
           />
         ) : (
           <TablaReporte columnas={columnasExistencias(d.hoy)} filas={d.lista.filas} />

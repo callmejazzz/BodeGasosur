@@ -17,6 +17,7 @@ import { bloqueadaPor, conexion } from "../../../../pruebas/concurrencia";
 import { formDataEspia } from "../../../../pruebas/formulario-espia";
 import { sembrarCapa, sinDefensas } from "../../../../pruebas/semilla-inventario";
 import { ESTADO_INICIAL } from "@/lib/entradas/formulario";
+import { SIN_ACCESO, SIN_PERMISO, SIN_SESION } from "@/lib/mensajes";
 
 const sesion = vi.hoisted(() => ({ userId: null as string | null, token: undefined as ((userId: string) => string | null) | undefined }));
 
@@ -62,7 +63,6 @@ function formulario(llave: string) {
   return fd;
 }
 
-const SIN_PERMISO = "No tienes permiso para esta operación.";
 
 async function borradorDeCompras() {
   sesion.userId = await clerkId("COMPRAS");
@@ -132,10 +132,10 @@ describe("13. el usuario sin permiso, sobre la Server Action real", () => {
 
   it("sin sesión o con un usuario que no existe en el sistema, lo mismo", async () => {
     const { id } = await borradorDeCompras();
-    for (const userId of [null, "user_desconocido"]) {
+    for (const [userId, mensaje] of [[null, SIN_SESION], ["user_desconocido", SIN_ACCESO]] as const) {
       sesion.userId = userId;
-      await expect(crearEntrada(ESTADO_INICIAL, formulario(randomUUID()))).resolves.toEqual({ errores: {}, mensaje: SIN_PERMISO });
-      await expect(confirmarRecepcion(id)).resolves.toEqual({ ok: false, mensaje: SIN_PERMISO });
+      await expect(crearEntrada(ESTADO_INICIAL, formulario(randomUUID()))).resolves.toEqual({ errores: {}, mensaje });
+      await expect(confirmarRecepcion(id)).resolves.toEqual({ ok: false, mensaje });
     }
     await expect(prisma.movimiento.findUniqueOrThrow({ where: { id } })).resolves.toMatchObject({ estatus: "BORRADOR", folio: null });
   });
@@ -144,23 +144,23 @@ describe("13. el usuario sin permiso, sobre la Server Action real", () => {
     const { id } = await borradorDeCompras();
     const altaInvalida = formulario("no-soy-uuid");
     altaInvalida.set("encabezado.fecha", "2099-01-01");
-    for (const userId of [null, await clerkId("JEFE")]) {
+    for (const [userId, mensaje] of [[null, SIN_SESION], [await clerkId("JEFE"), SIN_PERMISO]] as const) {
       sesion.userId = userId;
-      await expect(crearEntrada(ESTADO_INICIAL, altaInvalida)).resolves.toEqual({ errores: {}, mensaje: SIN_PERMISO });
-      await expect(guardarEntrada("no-soy-uuid", ESTADO_INICIAL, formulario(randomUUID()))).resolves.toEqual({ errores: {}, mensaje: SIN_PERMISO });
-      await expect(guardarEntrada(id, ESTADO_INICIAL, altaInvalida)).resolves.toEqual({ errores: {}, mensaje: SIN_PERMISO });
-      await expect(descartarEntrada("no-soy-uuid", "")).resolves.toEqual({ ok: false, mensaje: SIN_PERMISO });
-      await expect(confirmarRecepcion("no-soy-uuid")).resolves.toEqual({ ok: false, mensaje: SIN_PERMISO });
+      await expect(crearEntrada(ESTADO_INICIAL, altaInvalida)).resolves.toEqual({ errores: {}, mensaje });
+      await expect(guardarEntrada("no-soy-uuid", ESTADO_INICIAL, formulario(randomUUID()))).resolves.toEqual({ errores: {}, mensaje });
+      await expect(guardarEntrada(id, ESTADO_INICIAL, altaInvalida)).resolves.toEqual({ errores: {}, mensaje });
+      await expect(descartarEntrada("no-soy-uuid", "")).resolves.toEqual({ ok: false, mensaje });
+      await expect(confirmarRecepcion("no-soy-uuid")).resolves.toEqual({ ok: false, mensaje });
     }
   });
 
   it("sin sesión o sin permiso, el FormData ni siquiera se abre", async () => {
     const { id } = await borradorDeCompras();
-    for (const userId of [null, await clerkId("JEFE")]) {
+    for (const [userId, mensaje] of [[null, SIN_SESION], [await clerkId("JEFE"), SIN_PERMISO]] as const) {
       sesion.userId = userId;
       const [alta, guardado] = [formDataEspia(formulario(randomUUID())), formDataEspia(formulario(randomUUID()))];
-      await expect(crearEntrada(ESTADO_INICIAL, alta.formData)).resolves.toEqual({ errores: {}, mensaje: SIN_PERMISO });
-      await expect(guardarEntrada(id, ESTADO_INICIAL, guardado.formData)).resolves.toEqual({ errores: {}, mensaje: SIN_PERMISO });
+      await expect(crearEntrada(ESTADO_INICIAL, alta.formData)).resolves.toEqual({ errores: {}, mensaje });
+      await expect(guardarEntrada(id, ESTADO_INICIAL, guardado.formData)).resolves.toEqual({ errores: {}, mensaje });
       expect([...alta.lecturas, ...guardado.lecturas]).toEqual([]);
     }
     // Con permiso sí se lee: el espía funciona.
@@ -191,7 +191,7 @@ describe("13. el usuario sin permiso, sobre la Server Action real", () => {
       data: { clerkUserId: `user_baja_${randomUUID().slice(0, 8)}`, correo: `baja.${randomUUID().slice(0, 8)}@prueba.test`, rol: "COMPRAS", activo: false },
     });
     sesion.userId = baja.clerkUserId;
-    await expect(confirmarRecepcion(id)).resolves.toEqual({ ok: false, mensaje: SIN_PERMISO });
+    await expect(confirmarRecepcion(id)).resolves.toEqual({ ok: false, mensaje: SIN_ACCESO });
     await expect(prisma.movimiento.findUniqueOrThrow({ where: { id } })).resolves.toMatchObject({ estatus: "BORRADOR" });
   });
 });
@@ -212,7 +212,7 @@ describe("la puerta vuelve a exigir el permiso antes de confirmar", () => {
       await bloqueadaPor(observador, candado.pid);
       await prisma.usuario.update({ where: { id: u.id }, data: { activo: false } });
       await candado.query("ROLLBACK");
-      await expect(accion).resolves.toEqual({ ok: false, mensaje: SIN_PERMISO });
+      await expect(accion).resolves.toEqual({ ok: false, mensaje: SIN_ACCESO });
     } finally {
       await candado.end();
       await observador.end();

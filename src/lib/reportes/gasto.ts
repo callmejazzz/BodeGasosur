@@ -115,6 +115,20 @@ export function gastoPorEstacion(db: Db, f: FiltrosGasto, pedida = 1, tamano = P
   return paginaDe<FilaGastoEstacion>(db, consultaEstaciones(f), sql`"numeroEstacion", id`, pedida, tamano);
 }
 
+/**
+ * Las de mayor gasto para el tablero (contrato fase 9, §4): importe conocido sin IVA, de mayor a
+ * menor, y el número desempata. Sin gasto (importe ≤ 0 y ninguna pieza sin costo) no aparece.
+ */
+export function estacionesDeMayorGasto(db: Db, f: FiltrosGasto, tope: number) {
+  return paginaDe<FilaGastoEstacion>(
+    db,
+    sql`SELECT * FROM (${consultaEstaciones(f)}) e WHERE coalesce(e.importe::numeric, 0) > 0 OR e."articulosSinCosto" > 0`,
+    sql`coalesce(importe::numeric, 0) DESC, "numeroEstacion", id`,
+    1,
+    tope,
+  );
+}
+
 export async function totalGasto(db: Db, f: FiltrosGasto): Promise<TotalGasto> {
   const [t] = await db.$queryRaw<TotalGasto[]>`
     SELECT sum(importe)::text AS importe, sum("importeConIva")::text AS "importeConIva", bool_or("sinCosto" <> 0) IS TRUE AS "conPiezasSinCosto"

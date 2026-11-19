@@ -44,7 +44,7 @@ describe("frontera de salidas", () => {
       const codigo = readFileSync(ruta, "utf8");
       for (const [, nombres] of codigo.matchAll(/import \{([^}]+)\} from "@\/lib\/db"/g)) {
         for (const nombre of nombres.split(",").map((n) => n.trim().replace(/^type /, "")).filter(Boolean)) {
-          expect(["consultar", "accionProtegida", "SinAcceso", "SinPermiso", "UsuarioSesion"], `${relativa(ruta)} importa ${nombre}`).toContain(nombre);
+          expect(["consultar", "accionProtegida", "mensajeDeNegativa", "SinAcceso", "SinPermiso", "UsuarioSesion"], `${relativa(ruta)} importa ${nombre}`).toContain(nombre);
         }
       }
     }

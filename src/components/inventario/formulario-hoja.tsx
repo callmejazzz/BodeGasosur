@@ -5,10 +5,11 @@ import { Button, ButtonLink } from "@/components/ui/button";
 import { Campo, Input, Select, Textarea } from "@/components/ui/campos";
 import { ESTADO_INICIAL, type EstadoFormulario } from "@/lib/inventario/formulario";
 import type { Opcion } from "@/lib/inventario/repo";
+import { conConexion } from "@/lib/conexion";
 
 /** Abrir una hoja: bodega y motivo. Los renglones y la existencia esperada los pone el servidor. */
 export function FormularioHoja({ bodegas, llaveIdempotencia, accion }: { bodegas: Opcion[]; llaveIdempotencia: string; accion: (e: EstadoFormulario, f: FormData) => Promise<EstadoFormulario> }) {
-  const [estado, enviar, enviando] = useActionState(accion, ESTADO_INICIAL);
+  const [estado, enviar, enviando] = useActionState(conConexion(accion, (previo, mensaje) => ({ ...previo, errores: {}, mensaje })), ESTADO_INICIAL);
   const error = (ruta: string) => estado.errores[ruta] ?? estado.errores[`datos.${ruta}`];
   return (
     <form
