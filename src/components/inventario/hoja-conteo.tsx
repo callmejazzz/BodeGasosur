@@ -115,6 +115,13 @@ export function HojaConteo({
             </tr>
           </thead>
           <tbody>
+            {renglones.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-5 py-10 text-center text-sm text-muted">
+                  {editable ? "La bodega no tenía existencias al abrir la hoja. Agrega abajo los artículos que cuentes." : "La hoja no tiene artículos."}
+                </td>
+              </tr>
+            )}
             {renglones.map((r, i) => {
               const contada = /^\d{1,9}$/.test(r.contada.trim()) ? Number(r.contada) : null;
               const diferencia = contada !== null && r.esperada !== null ? contada - r.esperada : null;

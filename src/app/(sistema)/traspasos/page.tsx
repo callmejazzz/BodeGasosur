@@ -35,7 +35,13 @@ export default async function PaginaTraspasos({ searchParams }: PageProps<"/tras
         {filas.length === 0 ? (
           <EstadoVacio
             titulo={filtrando ? "Sin coincidencias" : "Todavía no hay traspasos"}
-            descripcion={filtrando ? "Prueba con otra búsqueda o cambia el filtro." : undefined}
+            descripcion={
+              filtrando
+                ? "Prueba con otra búsqueda o cambia el filtro."
+                : puedeCapturar
+                  ? "Registra el primer movimiento de material entre bodegas."
+                  : "Nadie ha capturado ninguno todavía."
+            }
             accion={!filtrando && puedeCapturar ? <ButtonLink href="/traspasos/nuevo" tamano="sm" prefetch={false}>Nuevo traspaso</ButtonLink> : undefined}
           />
         ) : (

@@ -8,7 +8,7 @@ import { Card, EncabezadoPagina, EstadoVacio } from "@/components/ui/superficies
 import { Tabla, Td, Th, Tr } from "@/components/ui/tabla";
 import { consultar } from "@/lib/db";
 import { formatearInstante } from "@/lib/fechas";
-import { aParametros } from "@/lib/inventario/filtros";
+import { aParametros, hayFiltros } from "@/lib/inventario/filtros";
 import { datosDeListaHojas } from "@/lib/inventario/pantallas";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +34,17 @@ export default async function PaginaConteos({ searchParams }: PageProps<"/conteo
       <Card>
         <FiltrosMovimientos filtros={filtros} total={pagina.total} sustantivo={["hoja", "hojas"]} busqueda={false} fechas />
         {filas.length === 0 ? (
-          <EstadoVacio titulo="No hay hojas de conteo en esta vista" />
+          <EstadoVacio
+            titulo={hayFiltros(filtros) ? "Sin coincidencias" : "Todavía no hay hojas de conteo"}
+            descripcion={
+              hayFiltros(filtros)
+                ? "Prueba con otras fechas o cambia el filtro."
+                : puedeCapturar
+                  ? "Abre una hoja para contar lo que hay en una bodega."
+                  : "Nadie ha abierto ninguna todavía."
+            }
+            accion={!hayFiltros(filtros) && puedeCapturar ? <ButtonLink href="/conteos/nuevo" tamano="sm" prefetch={false}>Nueva hoja</ButtonLink> : undefined}
+          />
         ) : (
           <Tabla>
             <thead>
