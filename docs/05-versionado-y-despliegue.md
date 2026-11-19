@@ -140,15 +140,16 @@ Aquí sí aparece una rama larga, y la justifica **desacoplar «ya lo mezclé» 
 lo está usando»**, no mantener versiones viejas en paralelo, que no es un caso de este
 proyecto.
 
-## 8. Despliegue: Sevalla + Supabase *(en prueba)*
+## 8. Despliegue: Sevalla + Supabase
 
-**Decisión (2026-10-10):** la aplicación en **Sevalla** y la base en **Supabase**, en proveedores separados. Cierra el hallazgo **D1** de la [auditoría](cimientos-word/04-auditoria-arquitectura.docx): un contenedor con `node server.js` en lugar de funciones serverless. Sevalla queda **a prueba una semana**; si no pasa la lista del final, el plan B es Render en Virginia con la misma base.
+**Decisión (2026-10-10):** la aplicación en **Sevalla** y la base en **Supabase**, en proveedores separados. Cierra el hallazgo **D1** de la [auditoría](cimientos-word/04-auditoria-arquitectura.docx): un contenedor con `node server.js` en lugar de funciones serverless. **Sevalla se confirmó el 2026-11-19**, con dominio propio. Si alguna vez hiciera falta cambiar, el plan B es Render en Virginia con la misma base.
 
 Mientras dure el desarrollo el sistema sigue siendo local ([01-arquitectura.md](01-arquitectura.md) §5). Producción con datos reales llega en `v1.0.0`.
 
 | Pieza | Elección |
 |---|---|
 | Aplicación | Sevalla Application Hosting, **Ashburn** (`us-east4`, después `us-ashburn-1` en OCI), con el [`Dockerfile`](../Dockerfile), un pod S1 y una instancia |
+| Dominio | **`bode.gasosurnet.com`**: un `CNAME` a `to.sevalla.app` en el DNS de Cloudflare de `gasosurnet.com`, sin proxy |
 | Base | Supabase Pro, **`us-east-1`** (Virginia del Norte) |
 | Conexión de la aplicación | **Directa** (`db.<proyecto>.supabase.co`), con el complemento IPv4. Supavisor en modo sesión (5432) solo como alternativa; nunca el modo transacción (6543) |
 | Conexión del dueño | **Directa**, desde una terminal |
@@ -256,12 +257,20 @@ en su rol —la base enseña la hora de México—, así que los scripts que esc
   `email.complained`, `email.failed` y `email.suppressed`. Su secreto de firma es
   `RESEND_WEBHOOK_SECRET`. El plan gratuito de Resend admite un solo webhook: es el de
   esta aplicación ([fase 9](contratos-otros/07-fase-9-acabado.md) §3.7).
-- **El proceso cron** de la alerta diaria vive en la misma aplicación: comando
+- **El proceso cron** de la alerta diaria, `correo-existencias-diario`, vive en la misma aplicación: comando
   `node scripts/disparar-resumen.mjs`, horario `*/15 8-11 * * *` en la zona
   `America/Mexico_City` (por omisión Sevalla usa UTC), `concurrency_policy` Forbid y
   `active_deadline_seconds` de 240. Sevalla reintenta una vez una corrida que sale con un
   código distinto de 0. La ruta que llama rechaza las corridas fuera de 8:00 a 12:00, así
   que un cron en UTC se nota en vez de pasar en silencio ([fase 9](contratos-otros/07-fase-9-acabado.md) §3.9).
+- **Dominio propio sin proxy.** `bode.gasosurnet.com` es el dominio principal, y el de
+  `sevalla.app` sigue activo. Su `CNAME` va en **DNS only** en Cloudflare: Sevalla ya pone
+  su propio Cloudflare delante, con DDoS y firewall, y el proxy de la cuenta propia sumaría
+  otra capa cuyo *Bot Fight Mode* podría desafiar al webhook de Resend y al cron.
+- **Desplegar código nuevo es desplegar la rama.** Cambiar variables o procesos y aplicarlos
+  vuelve a montar la **misma imagen**; para llevar un commit nuevo, «Deploy now» sobre
+  `main`, y revisar que el despliegue muestre ese commit. Un proceso nuevo, como el cron, no
+  corre hasta el siguiente despliegue.
 - **Al publicar algo que cambie la alerta,** el cron se ejecuta a mano una vez antes de
   dejarlo programado, y el webhook se prueba con un evento de ejemplo desde el panel de
   Resend.
@@ -279,7 +288,7 @@ distinto al arrancar lo pisaría.
 
 ### Migraciones y primer arranque
 
-**Las migraciones son parte del despliegue, no del build.** Durante la prueba se corren a
+**Las migraciones son parte del despliegue, no del build.** Se corren a
 mano desde una terminal, con `DATABASE_URL_MIGRACIONES` por la conexión directa:
 `npm run db:migrar-remota -- .env.supabase`, nunca `migrate dev`, que es interactivo y puede
 resetear. Corre `prisma migrate deploy` dentro de un contenedor Linux: en macOS, el motor de
@@ -318,9 +327,10 @@ anterior y hayan transcurrido al menos 60 segundos desde su último uso posible,
 puede desactivarla con `npm run db:llaves-clerk -- --desactivar <kid>`. El monitor no
 carga ni desactiva llaves por su cuenta.
 
-### La prueba de una semana
+### Revisión pendiente antes de `v1.0.0`
 
-Sevalla se queda si pasa todo esto:
+Sevalla se confirmó sin correr esta lista. Se revisa antes de `v1.0.0`, cuando entren los
+datos reales:
 
 1. La aplicación está en Ashburn, y se sabe si la cuenta ya está en OCI o cuándo le toca
    (la ola 1, apps sin disco, empezó el 2026-10-07). **Producción no va sobre GCP:** ahí la
@@ -333,7 +343,7 @@ Sevalla se queda si pasa todo esto:
 6. Las preview apps no heredan las variables de producción (o se quedan apagadas).
 7. Soporte confirma el SLA y la fecha de migración de la cuenta.
 
-**Al cerrar la prueba, si Sevalla se queda:** una segunda aplicación, `bodegasosur-ops`,
+**También antes de `v1.0.0`:** una segunda aplicación, `bodegasosur-ops`,
 con la credencial del dueño y nada más, que corra `migrate deploy` antes de cada despliegue
 y un `pg_dump` cifrado cada hora hacia un tercer proveedor, con un ensayo de restauración
 al mes. Sin PITR, el respaldo diario de Supabase puede perder un día de capturas.
