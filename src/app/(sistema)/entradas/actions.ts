@@ -4,7 +4,8 @@ import type { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { z } from "zod";
-import { accionProtegida, SinAcceso, SinPermiso, type UsuarioSesion } from "@/lib/db";
+import { accionProtegida, mensajeDeNegativa, type UsuarioSesion } from "@/lib/db";
+import { FALLO_DEL_SERVIDOR } from "@/lib/mensajes";
 import { ErrorDeDominio, traducida } from "@/lib/entradas/errores";
 import {
   erroresDe,
@@ -70,13 +71,14 @@ const confirmar = protegida("entradas:confirmar", esquemaId, (tx, u, d) => servi
 export type ResultadoAccion = { ok: true } | { ok: false; mensaje: string };
 
 function mensajeSeguro(error: unknown): string {
-  if (error instanceof SinAcceso || error instanceof SinPermiso) return "No tienes permiso para esta operación.";
+  const negativa = mensajeDeNegativa(error);
+  if (negativa) return negativa;
   if (error instanceof DatosInvalidos) {
     return error.errores.id ? "La entrada no existe." : (Object.values(error.errores)[0] ?? "Datos inválidos.");
   }
   if (error instanceof ErrorDeDominio) return error.message;
   console.error("[entradas]", error);
-  return "No se pudo completar la operación. Inténtalo de nuevo.";
+  return FALLO_DEL_SERVIDOR;
 }
 
 /** Para los formularios: los campos inválidos van marcados; un id inválido es una entrada que no existe. */

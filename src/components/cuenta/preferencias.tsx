@@ -8,6 +8,7 @@ import type { EstadoDelAviso } from "@/lib/correo/entrega";
 import { ESTADO_INICIAL, HORARIO_DE_ALERTA, type AvisoDelDia, type EstadoCuenta, type MiCuenta } from "@/lib/cuenta/formulario";
 import { formatearFecha } from "@/lib/fechas";
 import { cn } from "@/lib/utils";
+import { conConexion } from "@/lib/conexion";
 
 /* Contenido del apartado «Preferencias» del perfil de Clerk */
 
@@ -53,7 +54,7 @@ export function Preferencias({
   accion: (estado: EstadoCuenta, formData: FormData) => Promise<EstadoCuenta>;
 }) {
   const datos = use(cuenta);
-  const [estado, enviar, enviando] = useActionState(accion, ESTADO_INICIAL);
+  const [estado, enviar, enviando] = useActionState(conConexion(accion, (previo, mensaje) => ({ ...previo, mensaje, tono: "error" as const })), ESTADO_INICIAL);
 
   return (
     <div className="flex flex-col">

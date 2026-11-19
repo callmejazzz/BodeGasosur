@@ -6,6 +6,7 @@ import type { ResultadoAccion } from "@/app/(sistema)/salidas/actions";
 import { Button } from "@/components/ui/button";
 import { DialogoConfirmacion } from "@/components/ui/dialogo";
 import type { Facultades } from "@/lib/salidas/pantallas";
+import { llamarAlServidor, resultadoSinConexion } from "@/lib/conexion";
 
 /*
   Las transiciones de una salida. Solo viaja el id (y el motivo o quién se lo
@@ -71,7 +72,7 @@ export function AccionesSalida({ id, puede, acciones }: { id: string; puede: Fac
   const ejecutar = (fn: () => Promise<ResultadoAccion>) =>
     iniciar(async () => {
       setMensaje(null);
-      const r = await fn();
+      const r = await llamarAlServidor(fn, resultadoSinConexion);
       if (r.ok) setDialogo(null);
       else setMensaje(r.mensaje);
       // También tras un error: si otro usuario ya la movió, la pantalla muestra dónde quedó.

@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { DialogoConfirmacion } from "@/components/ui/dialogo";
 import type { ResultadoAccion } from "@/lib/inventario/acciones";
+import { llamarAlServidor, resultadoSinConexion } from "@/lib/conexion";
 
 /*
   La reversa de un movimiento cerrado. Solo se dibuja para el Superadmin y la
@@ -31,7 +32,7 @@ export function RevertirMovimiento({ id, folio, revertir }: { id: string; folio:
   const registrar = () =>
     iniciar(async () => {
       setMensaje(null);
-      const r = await revertir(id, motivo);
+      const r = await llamarAlServidor(() => revertir(id, motivo), resultadoSinConexion);
       if (!r.ok) {
         setMensaje(r.mensaje);
         router.refresh();

@@ -14,6 +14,7 @@ import { ESTADO_INICIAL, type EstadoFormulario } from "@/lib/inventario/formular
 import type { OpcionArticulo } from "@/lib/inventario/repo";
 import { paginasConError } from "@/lib/paginacion";
 import { cantidad, cn } from "@/lib/utils";
+import { llamarAlServidor, resultadoSinConexion } from "@/lib/conexion";
 
 export type RenglonHoja = { articuloId: string; clave: string; descripcion: string; unidad: string; esperada: number | null; contada: string; observaciones: string };
 
@@ -49,7 +50,8 @@ export function HojaConteo({
   const [cambios, setCambios] = useState(SIN_CAMBIOS);
   const sucio = haySinGuardar(cambios);
   const [estado, enviar, guardando] = useActionState(async (previo: EstadoFormulario, { formData, enviadas }: { formData: FormData; enviadas: number }) => {
-    const r = await guardar(previo, formData);
+    // Sin revision, un fallo de red no da la hoja por guardada
+    const r = await llamarAlServidor(() => guardar(previo, formData), (mensaje) => ({ ...previo, errores: {}, mensaje, revision: undefined }));
     // Solo una revisión guardada limpia la marca: con un rechazo, confirmar seguiría bloqueado.
     if (r.revision !== undefined) setCambios((c) => guardado(c, enviadas));
     return r;
@@ -69,7 +71,7 @@ export function HojaConteo({
   const ejecutar = (fn: () => Promise<ResultadoAccion>) =>
     iniciar(async () => {
       setMensaje(null);
-      const r = await fn();
+      const r = await llamarAlServidor(fn, resultadoSinConexion);
       if (r.ok) setDialogo(null);
       else setMensaje(r.mensaje);
       router.refresh();

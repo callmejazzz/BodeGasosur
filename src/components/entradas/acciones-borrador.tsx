@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { DialogoConfirmacion } from "@/components/ui/dialogo";
 import type { ResultadoAccion } from "@/app/(sistema)/entradas/actions";
+import { llamarAlServidor, resultadoSinConexion } from "@/lib/conexion";
 
 /*
   Confirmar recepción y descartar. Quien ejecuta sale de la sesión en el
@@ -31,7 +32,7 @@ export function AccionesBorrador({
 
   const ejecutar = (fn: () => Promise<ResultadoAccion>) =>
     iniciar(async () => {
-      const r = await fn();
+      const r = await llamarAlServidor(fn, resultadoSinConexion);
       if (r.ok) {
         setMensaje(null);
         setDialogo(null);

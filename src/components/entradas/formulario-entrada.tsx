@@ -15,6 +15,7 @@ import {
 import type { OpcionesCaptura } from "@/lib/entradas/repo";
 import { paginasConError } from "@/lib/paginacion";
 import { cn } from "@/lib/utils";
+import { conConexion } from "@/lib/conexion";
 
 const TASAS = [
   { valor: "0.16", etiqueta: "16 %" },
@@ -40,7 +41,7 @@ export function FormularioEntrada({
   textoGuardar: string;
   cancelarHref: string;
 }) {
-  const [estado, enviar, enviando] = useActionState(accion, ESTADO_INICIAL);
+  const [estado, enviar, enviando] = useActionState(conConexion(accion, (previo, mensaje) => ({ ...previo, errores: {}, mensaje })), ESTADO_INICIAL);
   const [encabezado, setEncabezado] = useState(valores.encabezado);
   // Las filas se identifican por un contador propio para que React no recicle
   // una fila en otra al quitar una intermedia; el name usa la posición, que es

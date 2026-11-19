@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { accionProtegida, comprobarPermiso, SinAcceso, SinPermiso } from "@/lib/db";
+import { accionProtegida, comprobarPermiso, mensajeDeNegativa } from "@/lib/db";
+import { FALLO_DEL_SERVIDOR } from "@/lib/mensajes";
 import { obtenerIdentidad } from "@/lib/usuarios/clerk";
 import type { EstadoAcceso } from "@/lib/usuarios/formulario";
 import {
@@ -83,9 +84,8 @@ const guardar = accionProtegida(
 );
 
 function negativa(error: unknown): EstadoAcceso | null {
-  if (error instanceof SinPermiso) return { mensaje: "No tienes permiso para administrar usuarios.", tono: "error" };
-  if (error instanceof SinAcceso) return { mensaje: "No tienes acceso al sistema.", tono: "error" };
-  return null;
+  const mensaje = mensajeDeNegativa(error, "No tienes permiso para administrar usuarios.");
+  return mensaje ? { mensaje, tono: "error" } : null;
 }
 
 export async function guardarAcceso(
@@ -130,7 +130,7 @@ export async function guardarAcceso(
       };
     }
     console.error("Fallo al guardar el acceso:", error);
-    return { mensaje: "No se pudo guardar. Inténtalo de nuevo.", tono: "error" };
+    return { mensaje: FALLO_DEL_SERVIDOR, tono: "error" };
   }
 
   revalidatePath("/usuarios");

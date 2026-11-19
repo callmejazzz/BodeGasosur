@@ -10,6 +10,7 @@ import { URL_PRUEBAS } from "../../../../pruebas/base-de-pruebas";
 import { formDataEspia } from "../../../../pruebas/formulario-espia";
 import { sembrarEntorno, type Entorno } from "../../../../pruebas/semilla-entradas";
 import { ESTADO_INICIAL } from "@/lib/cuenta/formulario";
+import { SIN_SESION } from "@/lib/mensajes";
 
 const sesion = vi.hoisted(() => ({ userId: null as string | null, token: undefined as ((userId: string) => string | null) | undefined }));
 
@@ -49,7 +50,7 @@ describe("guardarPreferencia", () => {
   it("sin sesión, la negativa llega antes de abrir el FormData", async () => {
     await como(null);
     const espia = formulario({ alertasCorreo: "activar" });
-    await expect(guardarPreferencia(ESTADO_INICIAL, espia.formData)).resolves.toEqual({ mensaje: "No tienes acceso al sistema", tono: "error" });
+    await expect(guardarPreferencia(ESTADO_INICIAL, espia.formData)).resolves.toEqual({ mensaje: SIN_SESION, tono: "error" });
     expect(espia.lecturas).toEqual([]);
   });
 

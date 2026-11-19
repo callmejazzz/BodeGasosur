@@ -14,6 +14,7 @@ import {
   type ValoresFormulario,
 } from "@/lib/catalogos/formulario";
 import type { Opcion } from "@/lib/catalogos/repos";
+import { conConexion } from "@/lib/conexion";
 
 export function FormularioCatalogo({
   def,
@@ -30,7 +31,7 @@ export function FormularioCatalogo({
   accion: (estado: EstadoFormulario, formData: FormData) => Promise<EstadoFormulario>;
   textoGuardar: string;
 }) {
-  const [estado, enviar, enviando] = useActionState(accion, ESTADO_INICIAL);
+  const [estado, enviar, enviando] = useActionState(conConexion(accion, (previo, mensaje) => ({ ...previo, errores: {}, mensaje })), ESTADO_INICIAL);
 
   // Tras un error, lo recién capturado gana sobre lo que había guardado — pero
   // se mezcla, no se reemplaza. Los campos que no se capturan (la clave

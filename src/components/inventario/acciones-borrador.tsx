@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { DialogoConfirmacion } from "@/components/ui/dialogo";
 import type { ResultadoAccion } from "@/lib/inventario/acciones";
+import { llamarAlServidor, resultadoSinConexion } from "@/lib/conexion";
 
 /*
   Confirmar y descartar un borrador. Solo viaja el id (y el motivo): el actor
@@ -37,7 +38,7 @@ export function AccionesBorrador({
   const ejecutar = (fn: () => Promise<ResultadoAccion>) =>
     iniciar(async () => {
       setMensaje(null);
-      const r = await fn();
+      const r = await llamarAlServidor(fn, resultadoSinConexion);
       if (r.ok) setDialogo(null);
       else setMensaje(r.mensaje);
       // También tras un error: si otro ya lo movió, la pantalla muestra dónde quedó.
