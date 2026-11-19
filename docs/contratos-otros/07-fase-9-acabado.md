@@ -4,7 +4,7 @@
 
 ## 1. Resultado y límites
 
-Cada usuario puede elegir si recibe, una vez al día, un correo con los artículos que están por debajo de su mínimo. Al entrar al sistema, el tablero muestra lo que pide atención: artículos bajo mínimo, préstamos abiertos, salidas por autorizar y por retirar, entradas en borrador y las estaciones con más gasto del mes. La navegación avisa cuántos artículos están bajo mínimo. Las pantallas funcionan en celular y escritorio. Los estados vacíos y los errores se explican, y toda acción irreversible pide confirmación.
+Cada usuario puede elegir si recibe, una vez al día, un correo con los artículos que están por debajo de su mínimo. Al entrar al sistema, el tablero muestra lo que pide atención: artículos bajo mínimo, salidas solicitadas y autorizadas, préstamos abiertos, entradas en borrador y las estaciones con más gasto del mes. La barra lateral muestra cuántos pendientes tiene cada módulo de operación y cuántos artículos están bajo mínimo. Las pantallas funcionan en celular y escritorio. Los estados vacíos y los errores se explican, y toda acción irreversible pide confirmación.
 
 Quedan fuera:
 - La búsqueda global de artículo.
@@ -48,7 +48,7 @@ El dominio del remitente, `gasosurnet.com`, ya está verificado en Resend (§3.8
 
 Es la misma regla del reporte de existencias (§3.2 del [contrato de reportes](06-fase-8-reportes.md)): artículo activo, bodega activa y `Existencia.cantidad < Articulo.stockMinimo`, comparado en cada bodega. Mínimo cero nunca es bajo mínimo. Se lee la existencia actual al momento de la reserva (§3.4), en una sola sentencia sobre la consulta base del reporte; no se escribe una segunda versión de la regla. Como los usuarios no tienen alcance por bodega, todos los destinatarios reciben la misma lista.
 
-**Cuántos artículos (N).** N es el número de **artículos distintos** bajo mínimo en al menos una bodega activa: un artículo que falta en dos bodegas cuenta una vez, aunque ocupe dos renglones de la tabla. Se calcula en la misma instantánea que los renglones, sobre la misma consulta, y no se acota con el tope de §3.3. El asunto del correo, el tablero (§4) y la navegación (§5) usan esta misma N.
+**Cuántos artículos (N).** N es el número de **artículos distintos** bajo mínimo en al menos una bodega activa: un artículo que falta en dos bodegas cuenta una vez, aunque ocupe dos renglones de la tabla. Se calcula en la misma instantánea que los renglones, sobre la misma consulta, y no se acota con el tope de §3.3. El asunto del correo, el aviso del reporte de existencias y la barra lateral (§5) usan esta misma N.
 
 ### 3.2 Cuándo y a quién
 
@@ -352,27 +352,51 @@ Además del estado, el apartado «Preferencias» puede mostrar avisos que no son
 
 ## 4. Tablero de inicio
 
-El tablero sustituye el inicio demostrativo actual (avance de fases y artículos de muestra). Lee en una sola instantánea y reutiliza las consultas de los listados y reportes, sin calcular cifras por su cuenta.
+El tablero sustituye el inicio demostrativo (avance de fases y artículos de muestra). Lee en una sola instantánea y reutiliza las consultas de los listados y reportes, sin calcular cifras por su cuenta.
 
-**Todos ven lo mismo.** Superadmin, Compras y Jefe ven las mismas tarjetas con las mismas cifras. Ninguna depende de un permiso de acción (capturar, confirmar, autorizar, retirar) ni de la facultad `puedeAutorizar`: cada tarjeta exige solo el permiso de **lectura** de la pantalla a la que remite, y los tres roles ya los tienen todos. El servidor sigue comprobando ese permiso; si un rol futuro no lo tuviera, su tarjeta no se consultaría ni aparecería.
+**Todos ven lo mismo.** Superadmin, Compras y Jefe ven las mismas tarjetas con las mismas filas. Ninguna depende de un permiso de acción (capturar, confirmar, autorizar, retirar) ni de la facultad `puedeAutorizar`: cada tarjeta exige solo el permiso de **lectura** de la pantalla a la que remite, y los tres roles ya los tienen todos. El servidor sigue comprobando ese permiso; si un rol futuro no lo tuviera, su tarjeta no se consultaría ni aparecería.
 
-| Tarjeta | Qué muestra | De dónde sale | Permiso |
-|---|---|---|---|
-| Bajo mínimo | N (§3.1) y los primeros 10 renglones, en el orden del reporte | La consulta del reporte de existencias con el filtro de bajo mínimo (`filasExistencias` y el conteo de artículos distintos) | `reportes:leer` |
-| Préstamos abiertos | Número de préstamos abiertos y los más antiguos | `listarPrestamos(db, "abiertos", …)` | `devoluciones:leer` y `salidas:leer`, como el listado |
-| Salidas por autorizar y por retirar | Número de salidas solicitadas y de autorizadas, y las más antiguas de cada una | `seccionDeBandeja(db, "SOLICITADA", …)` y `seccionDeBandeja(db, "AUTORIZADA", …)`, que no filtran por usuario | `salidas:leer` |
-| Entradas en borrador | Número de borradores y los más recientes | `listarEntradas` con el filtro de estatus borrador | `entradas:leer` |
-| Gasto del mes por estación | Las **5 estaciones de mayor gasto** del día 1 del mes a hoy | `gastoPorEstacion` y `totalGasto` con ese rango | `reportes:leer` |
+Cada tarjeta es una tabla de hasta **5 filas** con encabezado de columnas, sin cifra de conteo: cuántos pendientes hay lo dice la barra lateral (§5). En la esquina lleva un botón «Ver …» que abre la pantalla de la que sale, con los mismos filtros.
 
-- **Salidas.** El tablero no usa `bandejaDeSalidas`, porque esa función solo devuelve las secciones en que el usuario puede actuar: sin `puedeAutorizar` no saldría «por autorizar», y el Jefe, que no retira, nunca vería «por retirar». Las cifras enlazan al listado de salidas filtrado por estatus (`/salidas?estatus=solicitadas` y `?estatus=autorizadas`), que cualquiera con `salidas:leer` consulta completo. No enlazan a «Salidas pendientes», que sigue mostrando solo lo que cada usuario puede atender.
-- Las 5 estaciones se ordenan por importe conocido sin IVA, de mayor a menor, con el número de estación como desempate. Las estaciones sin gasto en el mes no aparecen. Con piezas sin costo, el importe se rotula «valor conocido», como en el reporte.
-- Cada tarjeta enlaza a su pantalla con los mismos filtros. La cifra del tablero y la de esa pantalla deben coincidir. En bajo mínimo, N se compara con los artículos distintos del reporte filtrado, no con su número de renglones.
-- Una tarjeta en cero dice que no hay nada pendiente; no se presenta como error.
+| Tarjeta | Columnas | Filas | De dónde sale | Botón | Permiso |
+|---|---|---|---|---|---|
+| Existencias | Artículo, Bodega y Existencia («N de M» con la unidad del artículo) | Renglones bajo mínimo, en el orden del reporte | `filasExistencias` con el filtro de bajo mínimo | «Ver existencias»: el reporte filtrado | `reportes:leer` |
+| Salidas | Fecha, Bodega / Estación y Estatus | Solicitadas y autorizadas juntas, la de fecha más antigua primero | `salidasEnCurso`, que no filtra por usuario | «Ver salidas»: el listado sin filtro | `salidas:leer` |
+| Préstamos | Fecha, Bodega / Estación y Estatus («Abierto» o «Devuelto parcial») | Préstamos abiertos, en el orden de su listado: el retiro más antiguo primero | `listarPrestamos(db, "abiertos", …)` | «Ver préstamos»: el listado de abiertos | `devoluciones:leer` y `salidas:leer`, como el listado |
+| Entradas | Fecha, Bodega y Estatus | Borradores, el de fecha más antigua primero | `borradoresMasAntiguos` | «Ver entradas»: el listado de borradores | `entradas:leer` |
+| Gasto mensual por estación | Fecha (del día 1 del mes a hoy), Estación y Total sin IVA | Las estaciones de mayor gasto del mes | `estacionesDeMayorGasto`, sobre la consulta de `gastoPorEstacion` | «Ver gastos»: el reporte con ese rango | `reportes:leer` |
 
-## 5. Alertas en pantalla
+- **Nombres sin claves.** Artículos, bodegas y estaciones se muestran por su nombre (o alias), sin clave ni número. En salidas, préstamos y entradas, la fecha abre el detalle del movimiento.
+- **Salidas.** El tablero no usa `bandejaDeSalidas`, porque esa función solo devuelve las secciones en que el usuario puede actuar: sin `puedeAutorizar` no saldrían las solicitadas, y el Jefe, que no retira, nunca vería las autorizadas.
+- **Orden por fecha.** Salidas y entradas tienen consultas propias, porque sus listados muestran primero lo más nuevo. Sus filas pertenecen a la misma lista que su pantalla, pero no son sus primeras filas. Existencias no tiene fecha y sigue el orden del reporte.
+- **Gasto.** Se ordena por importe conocido sin IVA, de mayor a menor, con el número de estación como desempate. No aparecen las estaciones con importe cero o menor y sin piezas sin costo. Si una estación tiene piezas sin costo, su importe lleva debajo «Hay piezas sin costo». En escritorio la tarjeta ocupa el ancho de dos tarjetas.
+- **Tarjeta sin filas.** Muestra un texto centrado que dice que no hay nada pendiente; no se presenta como error:
 
-- La navegación muestra N (§3.1), el número de artículos distintos bajo mínimo, junto a «Existencias». La ve quien tiene `reportes:leer`, hoy los tres roles, y desaparece cuando N es cero.
-- El indicador «Bajo mínimo», en reportes y tablero, combina color, ícono y texto: no depende solo del color.
+  | Tarjeta | Texto |
+  |---|---|
+  | Existencias | «Aún no hay artículos bajo mínimo» |
+  | Salidas | «Aún no hay salidas por revisar» |
+  | Préstamos | «Aún no hay préstamos abiertos» |
+  | Entradas | «No hay entradas en borrador» |
+  | Gasto mensual por estación | «Todavía no hay movimientos este mes» |
+
+## 5. Barra lateral y alertas en pantalla
+
+- **Contadores.** Junto a cada módulo, la barra lateral muestra cuántos pendientes tiene, solo con la cifra. Un lector de pantalla oye además qué cuenta, por ejemplo «4 salidas sin cerrar». Un contador en cero no se muestra. Cada uno pide el permiso de lectura de su pantalla; sin él, no se consulta.
+
+  | Módulo | Qué cuenta | Permiso |
+  |---|---|---|
+  | Entradas | Borradores | `entradas:leer` |
+  | Salidas | Las que no están cerradas: solicitadas, autorizadas y retiradas. No cuentan las recibidas, rechazadas, canceladas ni las retiradas revertidas | `salidas:leer` |
+  | Traspasos | Borradores | `traspasos:leer` |
+  | Devoluciones | Borradores | `devoluciones:leer` |
+  | Préstamos | Abiertos, los mismos del listado de abiertos | `devoluciones:leer` y `salidas:leer` |
+  | Conteo físico | Hojas en borrador | `ajustes:leer` |
+  | Existencias, en Reportes | N (§3.1), los artículos distintos bajo mínimo | `reportes:leer` |
+
+- **Cuándo se actualizan.** Se leen juntos, en una transacción, al cargar el layout y sin detener el dibujo de la barra. Se vuelven a leer al recargar o al volver a la pestaña. Navegar entre pantallas no los actualiza, porque Next.js no vuelve a ejecutar el layout.
+- **Secciones.** OPERACIÓN y ADMINISTRACIÓN siempre están abiertas. REPORTES y CATÁLOGOS se abren y se cierran desde su encabezado, y solo una puede estar abierta: abrir una cierra la otra. Entrar a una pantalla de una de ellas la abre. Mientras REPORTES está cerrada, la N de bajo mínimo aparece junto a su encabezado.
+- **Indicador de bajo mínimo.** En el reporte de existencias, la insignia «Bajo mínimo» de cada renglón y el aviso «N artículos bajo mínimo» combinan color y texto: no dependen solo del color.
 
 ## 6. Acabado de la interfaz
 
@@ -406,7 +430,7 @@ El diálogo dice qué va a pasar y usa un botón con verbo explícito («Confirm
 
 ## 7. Permisos, secretos y variables
 
-- **Permiso nuevo:** `cuenta:editar`, para Superadmin, Compras y Jefe. Lo acompaña el cambio de la guarda de `Usuario` en la base (§2). El tablero no necesita permisos nuevos: sus tarjetas piden `reportes:leer`, `salidas:leer`, `devoluciones:leer` y `entradas:leer`, que los tres roles ya tienen.
+- **Permiso nuevo:** `cuenta:editar`, para Superadmin, Compras y Jefe. Lo acompaña el cambio de la guarda de `Usuario` en la base (§2). El tablero y la barra lateral no necesitan permisos nuevos: piden `reportes:leer`, `salidas:leer`, `devoluciones:leer`, `entradas:leer`, `traspasos:leer` y `ajustes:leer`, que los tres roles ya tienen.
 - **Código de error nuevo:** `BG712`, para un cambio de `alertasCorreo` que no hace el propio usuario.
 - **Variables de entorno nuevas:**
   - `RESEND_API_KEY`
@@ -509,7 +533,12 @@ Las pruebas simulan Resend con un doble que respeta su idempotencia: misma llave
     - El usuario de la aplicación no puede borrar filas de `EvaluacionCorreos`, `LoteCorreos`, `RegistroCorreos` ni `EventoCorreo`, ni modificar las de `EvaluacionCorreos`.
     - No puede cambiar el contenido, la llave, los integrantes ni su posición.
     - No puede sacar de `ENVIADO` o de `ACEPTADO`, ni reemplazar un identificador de Resend.
-21. Las cifras de cada tarjeta del tablero coinciden con su pantalla de origen. Superadmin, Compras, un Jefe con `puedeAutorizar` y uno sin ella ven las mismas cifras, también en salidas por autorizar y por retirar. El gasto devuelve como máximo 5 estaciones en el orden de §4, y una tarjeta sin permiso no se consulta.
+21. **Tablero y barra lateral:**
+    - Las filas de cada tarjeta salen de su pantalla de origen, leída con los filtros de su botón, en el orden de §4 y como máximo 5. Salidas y entradas van por fecha, no por estatus ni por orden de captura.
+    - El gasto sigue el orden de §4, y una estación sin gasto no aparece.
+    - Superadmin, Compras, un Jefe con `puedeAutorizar` y uno sin ella ven las mismas filas.
+    - Cada contador de la barra lateral es el total de su pantalla con su filtro. En salidas no cuentan las recibidas, rechazadas, canceladas ni revertidas.
+    - Una tarjeta o un contador sin su permiso no se consulta.
 22. La plantilla produce HTML y texto con el asunto «Stock bajo mínimo: 1 artículo» cuando N es 1 y «… N artículos» en otro caso. Agrupa por nombre de bodega sin mostrar su clave, muestra la clave del artículo, respeta el tope de 50 renglones y escapa el texto de los artículos.
 23. Las pantallas de operación y reportes, y el apartado «Preferencias» del perfil, se usan sin desplazamiento horizontal de página a 375 px, y toda acción de §6.3 pide confirmación.
 
@@ -597,3 +626,10 @@ El cierre funcional exige las pruebas 1 a 22 contra PostgreSQL real, siguiendo e
 - **El aviso de dirección excluida se muestra aunque la preferencia esté apagada.** Así el usuario sabe, antes de encenderla, que no le llegaría.
 - **Avisos del día.** «Hoy no hubo artículos bajo mínimo» aparece aunque la dirección esté excluida, porque describe el día. «Empieza mañana» no aparece si lo está, porque mañana tampoco empezaría.
 - **Scripts de desarrollo.** `npm run correo:estados` recorre en la base local lo que muestra «Preferencias», y `npm run correo:borrar-estados` borra lo que creó. Cómo se usan está en el [README](../../README.md#ver-los-estados-de-preferencias).
+
+### Entrega 3: tablero y barra lateral
+
+- **Cuántas filas.** `FILAS`, en [`tablero/repo.ts`](../../src/lib/tablero/repo.ts), fija las filas de todas las tarjetas. La prueba 21 lo lee de ahí y siembra más registros que `FILAS` en cada lista.
+- **Consultas propias del tablero.** `salidasEnCurso` y `borradoresMasAntiguos` viven junto a los listados, en `salidas/repo.ts` y `entradas/repo.ts`, y comparten su `select`: solo cambian el filtro y el orden.
+- **Los contadores viven en un solo archivo.** [`contadores.ts`](../../src/lib/navegacion/contadores.ts) declara cada uno con su ruta, sus permisos y su consulta. El layout manda la lectura como promesa, como en «Preferencias», y cada contador la resuelve con `Suspense`.
+- **Sin migración ni permisos nuevos.**

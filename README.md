@@ -93,7 +93,7 @@ El script junta `prisma/sql/antes/`, el DDL que genera Prisma desde `schema.pris
 - **Salidas completas en el trabajo local** — solicitud, autorización, rechazo, cancelación, retiro PEPS y recepción, con lista filtrable y paginada, bandeja de pendientes, captura y detalle. Las Server Actions, la conciliación SQL y las pruebas protegen el flujo.
 - **Actor verificable en desarrollo** — cada escritura protegida de un usuario liga en PostgreSQL un JWT RS256 de Clerk a su transacción. La bitácora y las columnas de actor usan esa identidad; las escrituras ordinarias sin liga se rechazan. Producción se desplegará al cerrar los entregables.
 - **Traspasos, devoluciones y conteo** — traspasos que conservan fecha original y costo, devoluciones ligadas a su salida con saldo de préstamo, hojas de conteo que se vuelven ajustes y reversas por asiento inverso sobre las capas exactas. Una conciliación diferida en PostgreSQL impide que el libro quede distinto de sus partidas.
-- **Tablero** con el avance por fases y los datos base cargados.
+- **Tablero de inicio** con los artículos bajo mínimo, las salidas, préstamos y entradas pendientes y el gasto del mes por estación. La barra lateral muestra cuántos pendientes tiene cada módulo.
 
 El [contrato de la fase 6](docs/contratos-otros/04-fase-6-salidas.md) documenta el flujo de salidas y el [de la fase 7](docs/contratos-otros/05-fase-7-traspasos-devoluciones-conteo.md), el de traspasos, devoluciones, conteo y reversas.
 

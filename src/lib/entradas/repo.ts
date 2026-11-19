@@ -4,8 +4,6 @@ import type { FiltroEntradas, FiltroEstatus } from "@/lib/entradas/filtros";
 import { enOrden, idsDeLista, sql } from "@/lib/movimientos/lista";
 import { POR_PAGINA, type Pagina } from "@/lib/paginacion";
 
-// Lecturas de entradas. Recibe el cliente: solo consultar() lo entrega.
-
 type Db = Prisma.TransactionClient;
 
 const ESTATUS_POR_FILTRO: Record<FiltroEstatus, EstatusMovimiento[]> = {
@@ -33,12 +31,6 @@ const RESUMEN = {
 
 export type EntradaResumen = Prisma.MovimientoGetPayload<{ select: typeof RESUMEN }>;
 
-/**
- * Borradores primero, del más recientemente tocado al más viejo; luego las
- * confirmadas por folio, del más alto al más bajo; al final las descartadas,
- * la más nueva arriba. Folio y clave de bodega se buscan como clave; la
- * referencia, el proveedor y el nombre de la bodega, sin acentos.
- */
 export async function listarEntradas(db: Db, filtro: FiltroEntradas, pedida = 1, tamano = POR_PAGINA): Promise<{ filas: EntradaResumen[]; pagina: Pagina }> {
   const filtros = [sql`m.estatus::text = ANY(${ESTATUS_POR_FILTRO[filtro.estatus]}::text[])`];
   if (filtro.referencia === "con") filtros.push(sql`m.referencia IS NOT NULL`);
@@ -59,6 +51,15 @@ export async function listarEntradas(db: Db, filtro: FiltroEntradas, pedida = 1,
   });
   const filas = await db.movimiento.findMany({ where: { id: { in: ids } }, select: RESUMEN });
   return { filas: enOrden(ids, filas), pagina };
+}
+
+export function borradoresMasAntiguos(db: Db, tamano: number): Promise<EntradaResumen[]> {
+  return db.movimiento.findMany({
+    where: { tipo: "ENTRADA", estatus: "BORRADOR" },
+    select: RESUMEN,
+    orderBy: [{ fecha: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+    take: tamano,
+  });
 }
 
 const DETALLE = {
@@ -111,7 +112,6 @@ export async function obtenerEntrada(db: Db, id: string): Promise<EntradaDetalle
   return db.movimiento.findFirst({ where: { id, tipo: "ENTRADA" }, select: DETALLE });
 }
 
-/** Otras recepciones del mismo proveedor y referencia (11 §7): se muestran, no se descuentan. */
 export function entradasRelacionadas(db: Db, entrada: Pick<EntradaDetalle, "id" | "proveedorId" | "referencia">) {
   if (!entrada.referencia || !entrada.proveedorId) return Promise.resolve([] as EntradaResumen[]);
   return db.movimiento.findMany({
@@ -128,11 +128,6 @@ export type OpcionesCaptura = {
   articulos: OpcionArticulo[];
 };
 
-/**
- * Catálogos activos para el formulario. `conservar` mantiene en la lista lo
- * que el borrador ya tiene asignado aunque esté dado de baja, para que la
- * edición no lo pierda en silencio; la confirmación lo rechazará con motivo.
- */
 export async function cargarOpcionesDeCaptura(
   db: Db,
   conservar: { proveedorId?: string | null; bodegaId?: string | null; articuloIds?: string[] } = {},

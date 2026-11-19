@@ -29,14 +29,14 @@ La fase se divide en cuatro entregas. Cada una se integra a `feat/fase-9` con su
    - Un webhook firmado de Resend registra la entrega, los rebotes (duro, suave e indeterminado) y las quejas, y concilia los envíos con la misma regla que la respuesta del lote.
    - El webhook solo asocia un evento a un envío si etiqueta, identificador y destinatario concuerdan. Si no, lo guarda como anomalía, sin efecto en entregas ni exclusiones.
    - Un rebote duro, una supresión o una queja excluyen esa **dirección** de las evaluaciones siguientes, la use quien la use, sin tocar la preferencia.
-3. **Tablero de inicio.** Sustituir el inicio demostrativo por cinco tarjetas:
-   - Bajo mínimo.
-   - Préstamos abiertos.
-   - Salidas por autorizar y por retirar.
-   - Entradas en borrador.
-   - Las 5 estaciones de mayor gasto del mes.
+3. **Tablero de inicio y barra lateral.** Sustituir el inicio demostrativo por cinco tarjetas, cada una con hasta 5 filas y un botón a su pantalla:
+   - Existencias: los renglones bajo mínimo.
+   - Salidas: solicitadas y autorizadas.
+   - Préstamos: los abiertos.
+   - Entradas: los borradores.
+   - Gasto mensual por estación: las estaciones de mayor gasto del mes.
 
-   También mostrar en la navegación cuántos artículos están bajo mínimo.
+   En la barra lateral, mostrar cuántos pendientes tiene cada módulo de operación y cuántos artículos están bajo mínimo. REPORTES y CATÁLOGOS se despliegan, una a la vez.
 4. **Acabado de la interfaz.**
    - Que las pantallas funcionen en celular y escritorio.
    - Estados vacíos y mensajes de error claros.
@@ -45,12 +45,11 @@ La fase se divide en cuatro entregas. Cada una se integra a `feat/fase-9` con su
 
 ## Base ya disponible
 
-- La regla de bajo mínimo y su consulta ya están en el reporte de existencias ([`existencias.ts`](../../src/lib/reportes/existencias.ts)). La alerta, el tablero y la navegación la reutilizan.
-- El tablero lee las consultas que ya existen:
-  - El gasto por estación de la fase 8.
-  - Los préstamos de la fase 7.
-  - La bandeja de salidas pendientes.
-  - El listado de entradas.
+- La regla de bajo mínimo y su consulta ya están en el reporte de existencias ([`existencias.ts`](../../src/lib/reportes/existencias.ts)). La alerta, el tablero y la barra lateral la reutilizan.
+- El tablero y los contadores de la barra lateral leen las consultas que ya existen:
+  - El reporte de existencias y el gasto por estación de la fase 8.
+  - Los préstamos, traspasos, devoluciones y hojas de conteo de la fase 7.
+  - Las salidas y las entradas, con el mismo `select` de sus listados.
 - `escrituraDeSistema()` en [`db.ts`](../../src/lib/db.ts) ya sirve de puerta para un proceso sin usuario. La fase solo le agrega dos orígenes.
 - La bitácora ya registra la fila completa de `Usuario` antes y después de cada cambio, y se queda así. La preferencia aparece ahí y solo ahí fuera del apartado «Preferencias» (§2 del contrato).
 - Ya existen los componentes de la interfaz: tablas, tarjetas, `EstadoVacio` y botones. Esta fase los ajusta para celular, en lugar de rehacerlos.
@@ -70,7 +69,7 @@ La fase se divide en cuatro entregas. Cada una se integra a `feat/fase-9` con su
 - Ningún lote queda `PENDIENTE` después de su día, y cada día se evalúa una sola vez.
 - Ningún rebote ni entrega se atribuye a un envío con el que no concuerda.
 - La preferencia de cada usuario solo la ven y la cambian ellos mismos.
-- Las cifras del tablero coinciden con las pantallas a las que remite.
+- Las filas del tablero y los contadores de la barra lateral coinciden con las pantallas a las que remiten.
 - Las pantallas se usan en celular y escritorio.
 - Toda acción irreversible pide confirmación.
 - Las pruebas del §8 del contrato pasan contra PostgreSQL real.

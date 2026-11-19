@@ -33,10 +33,14 @@ export function ControlesSesion({ rol, miCuenta }: { rol: Rol; miCuenta: Promise
     <div className="mt-4 border-t border-white/10 px-3 pt-4">
       <UserButton
         showName
+        // Clerk pone sus estilos fuera de las capas de Tailwind: sin «!» ganan los suyos
         appearance={{
           elements: {
-            userButtonBox: "flex-row-reverse gap-2",
-            userButtonOuterIdentifier: "text-sm text-white/80",
+            rootBox: "w-full!",
+            userButtonTrigger: "w-full!",
+            userButtonBox: "w-full! justify-between!",
+            userButtonOuterIdentifier: "min-w-0! truncate! pl-1! text-sm! text-white!",
+            userButtonAvatarBox: "shrink-0!",
           },
         }}
       >

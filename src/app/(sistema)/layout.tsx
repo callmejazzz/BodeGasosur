@@ -4,7 +4,8 @@ import { Navegacion } from "@/components/navegacion";
 import { RefrescarAlEnfocar } from "@/components/refrescar-al-enfocar";
 import { ControlesSesion } from "@/components/sesion";
 import { consultarMiCuenta } from "@/lib/cuenta/consultas";
-import { registrarAccesoDenegado, sesionActual } from "@/lib/db";
+import { consultar, registrarAccesoDenegado, sesionActual } from "@/lib/db";
+import { leerContadores } from "@/lib/navegacion/contadores";
 import { usuarioTienePermiso } from "@/lib/permisos";
 
 /**
@@ -39,6 +40,14 @@ export default async function LayoutSistema({ children }: { children: ReactNode 
       })
     : null;
 
+  // Se actualizan al recargar o al volver a la pestaña: el layout no se vuelve a ejecutar al navegar
+  const contadores = usuarioTienePermiso(sesion.usuario, "catalogos:leer")
+    ? consultar("catalogos:leer", (db, yo) => leerContadores(db, (permiso) => usuarioTienePermiso(yo, permiso))).catch((error: unknown) => {
+        console.error("Fallo al contar lo pendiente de la barra lateral:", error);
+        return {};
+      })
+    : null;
+
   return (
     <>
       <RefrescarAlEnfocar />
@@ -57,6 +66,7 @@ export default async function LayoutSistema({ children }: { children: ReactNode 
           usuarios: usuarioTienePermiso(sesion.usuario, "usuarios:administrar"),
         }}
         sesion={<ControlesSesion rol={sesion.usuario.rol} miCuenta={miCuenta} />}
+        contadores={contadores}
       />
       <main className="min-w-0 flex-1 px-8 py-7">{children}</main>
     </>
