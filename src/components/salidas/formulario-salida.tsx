@@ -8,6 +8,7 @@ import { paginasConError } from "@/lib/paginacion";
 import { ESTADO_INICIAL, type EstadoSalida } from "@/lib/salidas/formulario";
 import type { OpcionesCaptura } from "@/lib/salidas/repo";
 import { cantidad, cn } from "@/lib/utils";
+import { conConexion } from "@/lib/conexion";
 
 type ValoresPartida = { articuloId: string; presentacion: "UNIDAD" | "CAJA"; cantidadCapturada: string; observaciones: string };
 type Fila = { clave: number; valores: ValoresPartida };
@@ -25,7 +26,7 @@ export function FormularioSalida({
   llaveIdempotencia: string;
   accion: (estado: EstadoSalida, formData: FormData) => Promise<EstadoSalida>;
 }) {
-  const [estado, enviar, enviando] = useActionState(accion, ESTADO_INICIAL);
+  const [estado, enviar, enviando] = useActionState(conConexion(accion, (previo, mensaje) => ({ ...previo, errores: {}, mensaje })), ESTADO_INICIAL);
   const [bodegaId, setBodegaId] = useState("");
   // Contador propio para que React no recicle una fila en otra al quitar una
   // intermedia; el name usa la posición, que es como el servidor numera los errores.

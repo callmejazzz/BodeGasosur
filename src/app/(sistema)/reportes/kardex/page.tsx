@@ -47,7 +47,7 @@ export default async function PaginaKardex({ searchParams }: PageProps<"/reporte
         <Card id="bodegas" className="mt-6 scroll-mt-4">
           <CardHeader titulo="Saldos por bodega" descripcion="Saldo antes del periodo, lo que entró y salió en él y el saldo al final. Cada bodega con historia del artículo." />
           {d.resumen.filas.length === 0 ? (
-            <EstadoVacio titulo="El artículo no tiene movimientos hasta esta fecha" />
+            <EstadoVacio titulo="El artículo no tiene movimientos hasta esta fecha" descripcion="Aparecerá aquí en cuanto entre a alguna bodega." />
           ) : (
             <TablaReporte columnas={columnasResumenKardex} filas={d.resumen.filas} />
           )}

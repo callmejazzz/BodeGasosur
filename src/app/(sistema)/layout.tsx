@@ -67,8 +67,9 @@ export default async function LayoutSistema({ children }: { children: ReactNode 
         }}
         sesion={<ControlesSesion rol={sesion.usuario.rol} miCuenta={miCuenta} />}
         contadores={contadores}
-      />
-      <main className="min-w-0 flex-1 px-8 py-7">{children}</main>
+      >
+        {children}
+      </Navegacion>
     </>
   );
 }

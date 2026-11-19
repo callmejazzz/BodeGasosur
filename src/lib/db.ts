@@ -16,6 +16,7 @@ import {
 } from "@/lib/correo/consultas";
 
 export type { LoteArrendado, LoteBloqueado } from "@/lib/correo/consultas";
+import { DIGEST, SIN_ACCESO, SIN_PERMISO, SIN_SESION } from "@/lib/mensajes";
 import { detalleDePostgres, esErrorDePrisma } from "@/lib/movimientos/errores";
 import { usuarioTienePermiso, type Permiso, type SujetoDePermisos } from "@/lib/permisos";
 import type { ExistenciasBajoMinimo } from "@/lib/reportes/existencias";
@@ -68,10 +69,17 @@ export const sesionActual = cache(async (): Promise<Sesion> => {
   };
 });
 
+/** Sin sesión de Clerk, o con sesión pero sin un usuario activo en el sistema. */
+export type MotivoSinAcceso = "sin-sesion" | "sin-acceso";
+
 export class SinAcceso extends Error {
-  constructor(opciones?: ErrorOptions) {
+  readonly motivo: MotivoSinAcceso;
+  readonly digest: string;
+  constructor({ motivo = "sin-acceso", ...opciones }: ErrorOptions & { motivo?: MotivoSinAcceso } = {}) {
     super("Sin acceso: la sesión no tiene un usuario activo en el sistema.", opciones);
     this.name = "SinAcceso";
+    this.motivo = motivo;
+    this.digest = motivo === "sin-sesion" ? DIGEST.sinSesion : DIGEST.sinAcceso;
   }
 }
 
@@ -90,11 +98,19 @@ export class SinPermiso extends Error {
     super(`Sin permiso: se requiere ${permiso}.`, opciones);
     this.name = "SinPermiso";
   }
+  readonly digest = DIGEST.sinPermiso;
+}
+
+/** El mensaje de una negativa de acceso; null si el error es de otra clase. */
+export function mensajeDeNegativa(error: unknown, sinPermiso: string = SIN_PERMISO): string | null {
+  if (error instanceof SinAcceso) return error.motivo === "sin-sesion" ? SIN_SESION : SIN_ACCESO;
+  if (error instanceof SinPermiso) return sinPermiso;
+  return null;
 }
 
 async function exigir(permiso: Permiso): Promise<UsuarioSesion> {
   const sesion = await sesionActual();
-  if (sesion.estado !== "activa") throw new SinAcceso();
+  if (sesion.estado !== "activa") throw new SinAcceso({ motivo: sesion.estado });
   if (!usuarioTienePermiso(sesion.usuario, permiso)) throw new SinPermiso(permiso);
   return sesion.usuario;
 }
@@ -118,7 +134,7 @@ const PLANTILLA_DE_ACTOR = "bodegasosur-db";
 async function tokenDeActor(): Promise<string> {
   const { getToken } = await auth();
   const token = await getToken({ template: PLANTILLA_DE_ACTOR });
-  if (!token) throw new SinAcceso();
+  if (!token) throw new SinAcceso({ motivo: "sin-sesion" });
   return token;
 }
 

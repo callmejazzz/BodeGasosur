@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { startTransition, useActionState, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
+import { DialogoConfirmacion } from "@/components/ui/dialogo";
 import { Input, Select } from "@/components/ui/campos";
 import { PaginacionLocal, usePaginaLocal } from "@/components/ui/paginacion-local";
 import { Badge } from "@/components/ui/superficies";
@@ -13,6 +14,7 @@ import { ESTADO_INICIAL, type EstadoFormulario } from "@/lib/inventario/formular
 import type { OpcionArticulo } from "@/lib/inventario/repo";
 import { paginasConError } from "@/lib/paginacion";
 import { cantidad, cn } from "@/lib/utils";
+import { llamarAlServidor, resultadoSinConexion } from "@/lib/conexion";
 
 export type RenglonHoja = { articuloId: string; clave: string; descripcion: string; unidad: string; esperada: number | null; contada: string; observaciones: string };
 
@@ -48,7 +50,8 @@ export function HojaConteo({
   const [cambios, setCambios] = useState(SIN_CAMBIOS);
   const sucio = haySinGuardar(cambios);
   const [estado, enviar, guardando] = useActionState(async (previo: EstadoFormulario, { formData, enviadas }: { formData: FormData; enviadas: number }) => {
-    const r = await guardar(previo, formData);
+    // Sin revision, un fallo de red no da la hoja por guardada
+    const r = await llamarAlServidor(() => guardar(previo, formData), (mensaje) => ({ ...previo, errores: {}, mensaje, revision: undefined }));
     // Solo una revisión guardada limpia la marca: con un rechazo, confirmar seguiría bloqueado.
     if (r.revision !== undefined) setCambios((c) => guardado(c, enviadas));
     return r;
@@ -58,7 +61,7 @@ export function HojaConteo({
   const { contenedor, pagina, irA, visible, alFinal } = usePaginaLocal(renglones.length);
   const [nuevo, setNuevo] = useState("");
   const [mensaje, setMensaje] = useState<string | null>(null);
-  const [descartando, setDescartando] = useState(false);
+  const [dialogo, setDialogo] = useState<"confirmar" | "descartar" | null>(null);
   const [motivo, setMotivo] = useState("");
 
   const cambiar = (i: number, cambio: Partial<RenglonHoja>) => {
@@ -68,21 +71,23 @@ export function HojaConteo({
   const ejecutar = (fn: () => Promise<ResultadoAccion>) =>
     iniciar(async () => {
       setMensaje(null);
-      const r = await fn();
-      if (!r.ok) setMensaje(r.mensaje);
+      const r = await llamarAlServidor(fn, resultadoSinConexion);
+      if (r.ok) setDialogo(null);
+      else setMensaje(r.mensaje);
       router.refresh();
     });
-  const abrirDescarte = () => {
+  const abrir = (d: "confirmar" | "descartar") => {
     setMotivo("");
     setMensaje(null);
-    setDescartando(true);
+    setDialogo(d);
   };
   const volver = () => {
     setMensaje(null);
-    setDescartando(false);
+    setDialogo(null);
   };
   const disponibles = (articulos ?? []).filter((a) => !renglones.some((r) => r.articuloId === a.id));
-  const aviso = mensaje ?? estado.mensaje;
+  // Con un diálogo abierto, su aviso va dentro del diálogo
+  const aviso = (dialogo ? null : mensaje) ?? estado.mensaje;
 
   return (
     <form
@@ -110,13 +115,20 @@ export function HojaConteo({
             </tr>
           </thead>
           <tbody>
+            {renglones.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-5 py-10 text-center text-sm text-muted">
+                  {editable ? "La bodega no tenía existencias al abrir la hoja. Agrega abajo los artículos que cuentes." : "La hoja no tiene artículos."}
+                </td>
+              </tr>
+            )}
             {renglones.map((r, i) => {
               const contada = /^\d{1,9}$/.test(r.contada.trim()) ? Number(r.contada) : null;
               const diferencia = contada !== null && r.esperada !== null ? contada - r.esperada : null;
               const error = estado.errores[`partidas.${i}.cantidadContada`];
               return (
                 <Tr key={r.articuloId} data-fila={i} hidden={!visible(i)}>
-                  <Td className="whitespace-nowrap">
+                  <Td className="min-w-40 sm:whitespace-nowrap">
                     <input type="hidden" name={`partidas.${i}.articuloId`} value={r.articuloId} />
                     <span className="font-medium">{r.clave}</span> <span className="text-muted">{r.descripcion}</span>
                   </Td>
@@ -163,7 +175,7 @@ export function HojaConteo({
       {editable && (
         <div className="flex flex-col gap-4 border-t border-border px-5 py-4">
           <div className="flex flex-wrap items-center gap-2">
-            <Select value={nuevo} onChange={(ev) => setNuevo(ev.target.value)} className="h-8 w-80" aria-label="Artículo encontrado en la bodega">
+            <Select value={nuevo} onChange={(ev) => setNuevo(ev.target.value)} className="h-8 w-full sm:w-80" aria-label="Artículo encontrado en la bodega">
               <option value="">Agregar un artículo que no está en la hoja…</option>
               {disponibles.map((a) => (
                 <option key={a.id} value={a.id}>{a.clave} · {a.descripcion}</option>
@@ -188,45 +200,51 @@ export function HojaConteo({
             <span className="text-xs text-muted">Déjalo vacío si no se contó: solo lo contado genera ajuste.</span>
           </div>
 
-          {descartando ? (
-            <div className="flex flex-wrap items-end gap-2">
-              <label className="flex min-w-64 flex-1 flex-col gap-1.5 text-sm font-medium text-muted-strong">
-                ¿Por qué se descarta la hoja?
-                <Input value={motivo} onChange={(ev) => setMotivo(ev.target.value)} maxLength={300} autoFocus />
-              </label>
-              <Button type="button" variante="peligro" disabled={pendiente || !motivo.trim()} onClick={() => ejecutar(() => descartar(id, motivo))}>
-                Descartar hoja
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="flex gap-2">
+              <Button type="button" variante="sutil" onClick={() => abrir("descartar")} disabled={pendiente || guardando}>Descartar</Button>
+              <Button type="button" variante="secundario" onClick={() => ejecutar(() => actualizar(id, revision))} disabled={pendiente || guardando || sucio}>
+                Actualizar existencias
               </Button>
-              <Button type="button" variante="secundario" onClick={volver}>Volver</Button>
-            </div>
-          ) : (
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="flex gap-2">
-                <Button type="button" variante="sutil" onClick={abrirDescarte} disabled={pendiente || guardando}>Descartar</Button>
-                <Button type="button" variante="secundario" onClick={() => ejecutar(() => actualizar(id, revision))} disabled={pendiente || guardando || sucio}>
-                  Actualizar existencias
+            </span>
+            <span className="flex items-center gap-2">
+              {sucio && <span className="text-xs text-warning">Hay cambios sin guardar.</span>}
+              <Button type="submit" variante={puedeConfirmar ? "secundario" : "primario"} disabled={guardando || pendiente}>
+                {guardando ? "Guardando…" : "Guardar conteo"}
+              </Button>
+              {puedeConfirmar && (
+                <Button type="button" disabled={pendiente || guardando || sucio} onClick={() => abrir("confirmar")}>
+                  Confirmar conteo
                 </Button>
-              </span>
-              <span className="flex items-center gap-2">
-                {sucio && <span className="text-xs text-warning">Hay cambios sin guardar.</span>}
-                <Button type="submit" variante={puedeConfirmar ? "secundario" : "primario"} disabled={guardando || pendiente}>
-                  {guardando ? "Guardando…" : "Guardar conteo"}
-                </Button>
-                {puedeConfirmar && (
-                  <Button
-                    type="button"
-                    disabled={pendiente || guardando || sucio}
-                    onClick={() => {
-                      if (window.confirm("¿Confirmas el conteo? Las diferencias se vuelven ajustes con folio y la existencia queda en lo contado. Después no se edita.")) {
-                        ejecutar(() => confirmar(id, revision));
-                      }
-                    }}
-                  >
-                    {pendiente ? "Confirmando…" : "Confirmar conteo"}
-                  </Button>
-                )}
-              </span>
-            </div>
+              )}
+            </span>
+          </div>
+
+          {dialogo === "confirmar" && puedeConfirmar && (
+            <DialogoConfirmacion
+              titulo="¿Confirmar el conteo?"
+              descripcion="Las diferencias se vuelven ajustes con folio y la existencia queda en lo contado. Después no se edita."
+              confirmar="Confirmar conteo"
+              enCurso="Confirmando…"
+              pendiente={pendiente}
+              mensaje={mensaje}
+              alConfirmar={() => ejecutar(() => confirmar(id, revision))}
+              alCerrar={volver}
+            />
+          )}
+          {dialogo === "descartar" && (
+            <DialogoConfirmacion
+              titulo="¿Descartar la hoja?"
+              descripcion="La hoja queda descartada y no deja ningún ajuste en el inventario. No se puede deshacer."
+              campo={{ etiqueta: "¿Por qué se descarta la hoja?", valor: motivo, alCambiar: setMotivo, max: 300 }}
+              confirmar="Descartar hoja"
+              enCurso="Descartando…"
+              peligro
+              pendiente={pendiente}
+              mensaje={mensaje}
+              alConfirmar={() => ejecutar(() => descartar(id, motivo))}
+              alCerrar={volver}
+            />
           )}
         </div>
       )}

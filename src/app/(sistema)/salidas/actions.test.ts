@@ -17,6 +17,7 @@ import { bloqueadaPor, conexion } from "../../../../pruebas/concurrencia";
 import { formDataEspia } from "../../../../pruebas/formulario-espia";
 import { sembrarCapa, sinDefensas } from "../../../../pruebas/semilla-inventario";
 import { sembrarSalidas, type EntornoSalidas } from "../../../../pruebas/semilla-salidas";
+import { SIN_ACCESO, SIN_PERMISO, SIN_SESION } from "@/lib/mensajes";
 import { ESTADO_INICIAL } from "@/lib/salidas/formulario";
 
 const sesion = vi.hoisted(() => ({ userId: null as string | null, token: undefined as ((userId: string) => string | null) | undefined }));
@@ -43,8 +44,8 @@ const prisma = crearCliente(URL_PRUEBAS);
 let e: EntornoSalidas;
 let articuloId: string;
 
-const SIN_PERMISO = "No tienes permiso para esta operación.";
-const NEGADO = { ok: false, mensaje: SIN_PERMISO };
+const negado = (mensaje: string = SIN_PERMISO) => ({ ok: false, mensaje });
+const NEGADO = negado();
 
 beforeAll(async () => {
   e = await sembrarSalidas(prisma);
@@ -92,15 +93,15 @@ async function todasNegadas(etiqueta: string) {
   const antes = await Promise.all([solicitada, autorizada, retirada].map(leer));
   return {
     antes,
-    probar: async () => {
+    probar: async (mensaje: string = SIN_PERMISO) => {
       const llave = randomUUID();
-      await expect(crearSalida(ESTADO_INICIAL, formulario(llave)), etiqueta).resolves.toEqual({ errores: {}, mensaje: SIN_PERMISO });
+      await expect(crearSalida(ESTADO_INICIAL, formulario(llave)), etiqueta).resolves.toEqual({ errores: {}, mensaje });
       await expect(prisma.movimiento.findUnique({ where: { llaveIdempotencia: llave } }), etiqueta).resolves.toBeNull();
-      await expect(autorizarSalida(solicitada), etiqueta).resolves.toEqual(NEGADO);
-      await expect(rechazarSalida(solicitada, "No procede"), etiqueta).resolves.toEqual(NEGADO);
-      await expect(cancelarSalida(autorizada, "Ya no"), etiqueta).resolves.toEqual(NEGADO);
-      await expect(retirarSalida(autorizada, "Mensajero"), etiqueta).resolves.toEqual(NEGADO);
-      await expect(confirmarRecepcion(retirada), etiqueta).resolves.toEqual(NEGADO);
+      await expect(autorizarSalida(solicitada), etiqueta).resolves.toEqual(negado(mensaje));
+      await expect(rechazarSalida(solicitada, "No procede"), etiqueta).resolves.toEqual(negado(mensaje));
+      await expect(cancelarSalida(autorizada, "Ya no"), etiqueta).resolves.toEqual(negado(mensaje));
+      await expect(retirarSalida(autorizada, "Mensajero"), etiqueta).resolves.toEqual(negado(mensaje));
+      await expect(confirmarRecepcion(retirada), etiqueta).resolves.toEqual(negado(mensaje));
       await expect(Promise.all([solicitada, autorizada, retirada].map(leer)), etiqueta).resolves.toEqual(antes);
     },
   };
@@ -161,9 +162,9 @@ describe("con permiso, la acción real llega a la base con el actor de la sesió
 describe("criterio 10: acceso directo sin permiso", () => {
   it("sin sesión o con una identidad que no existe en el sistema", async () => {
     const { probar } = await todasNegadas("sin sesión");
-    for (const userId of [null, "user_desconocido"]) {
+    for (const [userId, mensaje] of [[null, SIN_SESION], ["user_desconocido", SIN_ACCESO]] as const) {
       sesion.userId = userId;
-      await probar();
+      await probar(mensaje);
     }
   });
 
@@ -180,7 +181,7 @@ describe("criterio 10: acceso directo sin permiso", () => {
         },
       });
       await como(baja);
-      await probar();
+      await probar(SIN_ACCESO);
     }
   });
 
@@ -233,25 +234,25 @@ describe("primero la sesión y el permiso, después los datos", () => {
     invalido.set("encabezado.estacionId", "no-soy-uuid");
     invalido.set("partidas.0.cantidadCapturada", "1.5");
 
-    for (const [etiqueta, usuario] of [["sin sesión", null], ["JEFE sin bandera", e.usuarios.JEFE]] as const) {
+    for (const [etiqueta, usuario, mensaje] of [["sin sesión", null, SIN_SESION], ["JEFE sin bandera", e.usuarios.JEFE, SIN_PERMISO]] as const) {
       await como(usuario);
-      await expect(crearSalida(ESTADO_INICIAL, invalido), etiqueta).resolves.toEqual({ errores: {}, mensaje: SIN_PERMISO });
+      await expect(crearSalida(ESTADO_INICIAL, invalido), etiqueta).resolves.toEqual({ errores: {}, mensaje });
       for (const falso of ["S-000001", "", null, 123]) {
-        await expect(autorizarSalida(falso as string), etiqueta).resolves.toEqual(NEGADO);
-        await expect(confirmarRecepcion(falso as string), etiqueta).resolves.toEqual(NEGADO);
+        await expect(autorizarSalida(falso as string), etiqueta).resolves.toEqual(negado(mensaje));
+        await expect(confirmarRecepcion(falso as string), etiqueta).resolves.toEqual(negado(mensaje));
       }
-      await expect(rechazarSalida("x", ""), etiqueta).resolves.toEqual(NEGADO);
-      await expect(cancelarSalida(id, "x".repeat(400)), etiqueta).resolves.toEqual(NEGADO);
-      await expect(retirarSalida(id, "   "), etiqueta).resolves.toEqual(NEGADO);
+      await expect(rechazarSalida("x", ""), etiqueta).resolves.toEqual(negado(mensaje));
+      await expect(cancelarSalida(id, "x".repeat(400)), etiqueta).resolves.toEqual(negado(mensaje));
+      await expect(retirarSalida(id, "   "), etiqueta).resolves.toEqual(negado(mensaje));
     }
     await expect(leer(id)).resolves.toEqual(antes);
   });
 
   it("sin sesión o sin permiso, el FormData ni siquiera se abre", async () => {
-    for (const usuario of [null, e.usuarios.JEFE]) {
+    for (const [usuario, mensaje] of [[null, SIN_SESION], [e.usuarios.JEFE, SIN_PERMISO]] as const) {
       await como(usuario);
       const alta = formDataEspia(formulario(randomUUID()));
-      await expect(crearSalida(ESTADO_INICIAL, alta.formData)).resolves.toEqual({ errores: {}, mensaje: SIN_PERMISO });
+      await expect(crearSalida(ESTADO_INICIAL, alta.formData)).resolves.toEqual({ errores: {}, mensaje });
       expect(alta.lecturas).toEqual([]);
     }
     // Con permiso sí se lee: el espía funciona.

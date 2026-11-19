@@ -38,10 +38,11 @@ La fase se divide en cuatro entregas. Cada una se integra a `feat/fase-9` con su
 
    En la barra lateral, mostrar cuántos pendientes tiene cada módulo de operación y cuántos artículos están bajo mínimo. REPORTES y CATÁLOGOS se despliegan, una a la vez.
 4. **Acabado de la interfaz.**
-   - Que las pantallas funcionen en celular y escritorio.
-   - Estados vacíos y mensajes de error claros.
-   - Páginas de error y 404 propias.
-   - Un diálogo propio de confirmación para toda acción irreversible.
+   - Por debajo de 1024 px, una barra superior con menú en lugar de la barra lateral, y márgenes según el ancho de la pantalla.
+   - Todas las pantallas usables a 375 px, con las tablas desplazándose dentro de su tarjeta.
+   - Un diálogo propio de confirmación para toda acción irreversible, que pide ahí mismo el motivo cuando hace falta.
+   - Mensajes que distinguen sesión terminada, usuario sin acceso, falta de permiso, regla de negocio y fallo del servidor o de la red.
+   - Páginas propias de error y 404, y listas vacías que explican por qué y ofrecen la acción que las llena.
 
 ## Base ya disponible
 

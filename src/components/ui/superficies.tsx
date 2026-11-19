@@ -45,7 +45,7 @@ export function EncabezadoPagina({
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">{titulo}</h1>
         {descripcion && <p className="mt-1 max-w-2xl text-sm text-muted">{descripcion}</p>}
       </div>
-      {acciones && <div className="flex shrink-0 items-center gap-2">{acciones}</div>}
+      {acciones && <div className="flex flex-wrap items-center gap-2">{acciones}</div>}
     </header>
   );
 }

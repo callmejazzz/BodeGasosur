@@ -19,6 +19,12 @@ const ESTADOS: { valor: EstadoPrestamo; etiqueta: string }[] = [
   { valor: "todos", etiqueta: "Todos" },
 ];
 
+const VACIO: Record<EstadoPrestamo, { titulo: string; descripcion: string }> = {
+  abiertos: { titulo: "No hay préstamos abiertos", descripcion: "Todo lo que salió como préstamo ya volvió a su bodega." },
+  cerrados: { titulo: "Todavía no hay préstamos cerrados", descripcion: "Un préstamo se cierra cuando vuelve todo lo que salió." },
+  todos: { titulo: "Todavía no hay préstamos", descripcion: "Aquí aparecen las salidas marcadas como préstamo, una vez retiradas." },
+};
+
 export default async function PaginaPrestamos({ searchParams }: PageProps<"/prestamos">) {
   const params = await searchParams;
   const estado = ESTADOS.find((e) => e.valor === params.estado)?.valor ?? "abiertos";
@@ -50,7 +56,7 @@ export default async function PaginaPrestamos({ searchParams }: PageProps<"/pres
           ))}
         </nav>
         {prestamos.length === 0 ? (
-          <EstadoVacio titulo={estado === "abiertos" ? "No hay préstamos pendientes" : "No hay préstamos en esta vista"} />
+          <EstadoVacio {...VACIO[estado]} />
         ) : (
           <Tabla>
             <thead>
