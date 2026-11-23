@@ -1,6 +1,6 @@
 # BodeGasosur - contrato de la fase 9: Acabado
 
-**Estado:** construido y publicado como `v0.9.0`. Define la alerta diaria de stock mínimo por correo y su seguimiento de entrega, la preferencia de cada usuario, el tablero de inicio, las alertas en pantalla y el acabado de la interfaz. §9 recoge las decisiones que tomó la construcción. Complementa el [expediente de la fase](../entregables-fases/09-acabado.md), el [modelo de datos](../02-modelo-de-datos.md) y el [contrato de reportes](06-fase-8-reportes.md), cuya regla de bajo mínimo se reutiliza sin cambios.
+**Estado:** construido y publicado como `v0.9.0`; el correo de §3.3 es el de su parche `v0.9.1`. Define la alerta diaria de stock mínimo por correo y su seguimiento de entrega, la preferencia de cada usuario, el tablero de inicio, las alertas en pantalla y el acabado de la interfaz. §9 recoge las decisiones que tomó la construcción. Complementa el [expediente de la fase](../entregables-fases/09-acabado.md), el [modelo de datos](../02-modelo-de-datos.md) y el [contrato de reportes](06-fase-8-reportes.md), cuya regla de bajo mínimo se reutiliza sin cambios.
 
 ## 1. Resultado y límites
 

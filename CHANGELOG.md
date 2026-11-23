@@ -8,9 +8,13 @@ puede hacer ahora que antes no se podía.
 
 ---
 
-## Por publicar
+## v0.9.1 - 2026-11-23
+
+Etiqueta `v0.9.1`, sobre el commit que la publica en `main`.
 
 Última migración incluida: `20261107120000_correo_y_preferencia`.
+
+Ajustes tras la primera semana de `v0.9.0` en producción.
 
 **Lo que cambia para quien va a usar el sistema**
 
