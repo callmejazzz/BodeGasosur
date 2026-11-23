@@ -12,6 +12,13 @@ puede hacer ahora que antes no se podía.
 
 Última migración incluida: `20261107120000_correo_y_preferencia`.
 
+**Lo que cambia para quien va a usar el sistema**
+
+- **Alerta diaria más corta.** El correo llega con el asunto «Tienes artículos con
+  existencia debajo del mínimo» y dice cuántos artículos están bajo su mínimo. Trae una
+  sola tabla con los primeros 10 renglones, cada uno con su bodega y su existencia contra
+  el mínimo («0 de 2 PZA»), y el enlace al reporte completo para ver el resto.
+
 **Por dentro**
 
 - La imagen instala OpenSSL al construir: Prisma ya no avisa en cada build ni en cada
