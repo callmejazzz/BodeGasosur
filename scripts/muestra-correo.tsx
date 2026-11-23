@@ -6,26 +6,29 @@
 import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { generarResumen } from "../src/lib/correo/plantilla";
+import { generarResumen, TOPE_RENGLONES } from "../src/lib/correo/plantilla";
 import type { RenglonBajoMinimo } from "../src/lib/reportes/existencias";
 
 const renglon = (bodega: string, clave: string, descripcion: string, unidad: string, existencia: number, minimo: number): RenglonBajoMinimo => ({
-  bodega, claveArticulo: clave, descripcion, unidad, existencia, minimo, faltante: minimo - existencia,
+  bodega, claveArticulo: clave, descripcion, unidad, existencia, minimo,
 });
 
 const renglones = [
-  renglon("Bodega Central", "ART-00012", "Aceite multigrado 15W-40, garrafa 19 L", "PZA", 2, 6),
-  renglon("Bodega Central", "ART-00031", "Filtro de diésel <dispensario> & \"manguera\"", "PZA", 0, 4),
-  renglon("Bodega Central", "ART-00102", "Papel térmico 80 × 70 mm", "CAJA", 1, 3),
-  renglon("Bodega Norte", "ART-00012", "Aceite multigrado 15W-40, garrafa 19 L", "PZA", 0, 6),
-  renglon("Bodega Norte", "ART-00250", "Guantes de nitrilo talla M", "CAJA", 3, 10),
-];
+  renglon("Bodega Central", "ART-00012", "ACEITE MULTIGRADO 15W-40 GARRAFA 19 L", "PZA", 2, 6),
+  renglon("Bodega Central", "ART-00031", "FILTRO DE DIÉSEL <DISPENSARIO> & \"MANGUERA\"", "PZA", 0, 4),
+  renglon("Bodega Central", "ART-00102", "PAPEL TÉRMICO 80 × 70 MM", "CAJA", 1, 3),
+  renglon("Bodega Central", "ART-00140", "VÁLVULA DE CORTE RECONECTABLE 3/4\" PARA MANGUERA DE DISPENSARIO DE GASOLINA", "PZA", 0, 4),
+  renglon("Bodega Central", "ART-00141", "KIT DE REPARACIÓN PARA PISTOLA DE DESPACHO DIÉSEL 1\" CON EMPAQUES, RESORTES Y TORNILLERÍA COMPLETA DE REPUESTO", "PZA", 1, 5),
+  renglon("Bodega Central", "ART-00177", "CINTA ADHESIVA", "PZA", 0, 2),
+  renglon("Bodega Norte", "ART-00012", "ACEITE MULTIGRADO 15W-40 GARRAFA 19 L", "PZA", 0, 6),
+  renglon("Bodega Norte", "ART-00205", "ADAPTADOR DE BRONCE 4\" PARA TANQUE DE ALMACENAMIENTO", "PZA", 0, 4),
+  renglon("Bodega Norte", "ART-00250", "GUANTES DE NITRILO TALLA M", "CAJA", 3, 10),
+  renglon("Bodega Norte", "ART-00312", "TRAMO DE MANGUERA 20 CM", "PZA", 1.5, 5),
+].slice(0, TOPE_RENGLONES);
 
 async function main() {
   const correo = await generarResumen({
-    fecha: "2026-11-10",
-    articulos: 4,
-    totalRenglones: renglones.length + 7,
+    articulos: 9,
     renglones,
     urlReporte: "http://localhost:3000/reportes/existencias?bajo=1",
   });

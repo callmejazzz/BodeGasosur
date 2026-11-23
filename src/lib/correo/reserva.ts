@@ -51,9 +51,7 @@ export async function evaluarYReservar(fecha: string): Promise<ResultadoReserva>
       if (destinatarios.length === 0) return evaluar("SIN_DESTINATARIOS");
 
       const { asunto, html, texto } = await generarResumen({
-        fecha,
         articulos: bajoMinimo.articulos,
-        totalRenglones: bajoMinimo.totalRenglones,
         renglones: bajoMinimo.renglones,
         urlReporte: enlaceAlReporte(urlAplicacion),
       });
