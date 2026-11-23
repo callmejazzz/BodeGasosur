@@ -48,7 +48,7 @@ El dominio del remitente, `gasosurnet.com`, ya está verificado en Resend (§3.8
 
 Es la misma regla del reporte de existencias (§3.2 del [contrato de reportes](06-fase-8-reportes.md)): artículo activo, bodega activa y `Existencia.cantidad < Articulo.stockMinimo`, comparado en cada bodega. Mínimo cero nunca es bajo mínimo. Se lee la existencia actual al momento de la reserva (§3.4), en una sola sentencia sobre la consulta base del reporte; no se escribe una segunda versión de la regla. Como los usuarios no tienen alcance por bodega, todos los destinatarios reciben la misma lista.
 
-**Cuántos artículos (N).** N es el número de **artículos distintos** bajo mínimo en al menos una bodega activa: un artículo que falta en dos bodegas cuenta una vez, aunque ocupe dos renglones de la tabla. Se calcula en la misma instantánea que los renglones, sobre la misma consulta, y no se acota con el tope de §3.3. El asunto del correo, el aviso del reporte de existencias y la barra lateral (§5) usan esta misma N.
+**Cuántos artículos (N).** N es el número de **artículos distintos** bajo mínimo en al menos una bodega activa: un artículo que falta en dos bodegas cuenta una vez, aunque ocupe dos renglones de la tabla. Se calcula en la misma instantánea que los renglones, sobre la misma consulta, y no se acota con el tope de §3.3. El cuerpo del correo, el aviso del reporte de existencias y la barra lateral (§5) usan esta misma N.
 
 ### 3.2 Cuándo y a quién
 
@@ -60,14 +60,15 @@ Es la misma regla del reporte de existencias (§3.2 del [contrato de reportes](0
 
 ### 3.3 Contenido
 
-- **Asunto:** «Stock bajo mínimo: N artículo» si N es 1 y «Stock bajo mínimo: N artículos» en otro caso, con la N de §3.1. Se arma en la reserva del día (§3.4) y es el mismo para todos los destinatarios.
+- **Asunto:** «Tienes artículos con existencia debajo del mínimo», sin N. Se arma en la reserva del día (§3.4) y es el mismo para todos los destinatarios.
 - **Cuerpo:**
-  - La fecha y N.
-  - Una tabla agrupada por bodega. Cada grupo lleva solo el **nombre** de la bodega, sin su clave (`BDG-…`). Cada renglón lleva clave del artículo, descripción, unidad, existencia, mínimo y faltante (mínimo − existencia).
-  - Orden: nombre de bodega, luego clave de artículo. El nombre de bodega es único, así que identifica cada grupo sin la clave.
-- **Tope:** 50 renglones. Si hay más, el correo dice cuántos renglones faltan («y M renglones más») y remite al reporte.
-- **Enlace:** uno al reporte de existencias con el filtro de bajo mínimo. La dirección se arma con la URL pública de la aplicación.
-- **Cómo desactivarla:** el correo dice que la alerta se desactiva desde el perfil en BodeGasosur, apartado «Preferencias». No lleva enlace para desactivarla, porque el apartado vive en el modal de Clerk y no tiene dirección propia.
+  - El título «Existencia actual de los artículos» y debajo «Hay N artículos por debajo del mínimo», o «Hay 1 artículo…», con la N de §3.1. No lleva la fecha.
+  - Una sola tabla con las columnas CLAVE, DESCRIPCIÓN, BODEGA y EXISTENCIA. La bodega va por su **nombre**, sin su clave (`BDG-…`); el nombre es único, así que la identifica. La existencia se lee «N de M PZA»: la existencia, el mínimo y la unidad, como en la tarjeta de Existencias del tablero.
+  - Orden: nombre de bodega, luego clave de artículo. Un artículo bajo mínimo en dos bodegas ocupa dos renglones.
+  - Todas las filas miden lo mismo: dos líneas. La descripción que no cabe se recorta con «…» y la completa está en el reporte. La versión de texto la lleva completa.
+- **Tope:** 10 renglones, sin distinguir bodega. No dice cuántos faltan: el enlace lleva al resto.
+- **Enlace:** «Ver el reporte completo de existencias», al reporte de existencias con el filtro de bajo mínimo. La dirección se arma con la URL pública de la aplicación.
+- **Cómo desactivarla:** el pie dice «Puedes desactivar estas notificaciones desde el apartado Preferencias de tu perfil en BodeGasosur». No lleva enlace para desactivarla, porque el apartado vive en el modal de Clerk y no tiene dirección propia.
 - **Formatos:** cada correo lleva versión HTML y versión de texto. Todo texto que venga de la base se escapa.
 - **Plantilla:** se escribe con `react-email` y puede previsualizarse en local con datos de ejemplo.
 - **Datos:** el correo no incluye importes ni costos.
@@ -556,7 +557,7 @@ Las pruebas simulan Resend con un doble que respeta su idempotencia: misma llave
     - Superadmin, Compras, un Jefe con `puedeAutorizar` y uno sin ella ven las mismas filas.
     - Cada contador de la barra lateral es el total de su pantalla con su filtro. En salidas no cuentan las recibidas, rechazadas, canceladas ni revertidas.
     - Una tarjeta o un contador sin su permiso no se consulta.
-22. La plantilla produce HTML y texto con el asunto «Stock bajo mínimo: 1 artículo» cuando N es 1 y «… N artículos» en otro caso. Agrupa por nombre de bodega sin mostrar su clave, muestra la clave del artículo, respeta el tope de 50 renglones y escapa el texto de los artículos.
+22. La plantilla produce HTML y texto con el asunto fijo y «Hay 1 artículo» cuando N es 1 y «Hay N artículos» en otro caso, sin fecha. Arma una sola tabla con el nombre de la bodega en su columna, sin su clave, y la existencia como «N de M» con la unidad. Recorta la descripción larga solo en el HTML, remite al reporte sin contar los renglones que faltan y escapa el texto de los artículos.
 23. **A 375 px y en escritorio:**
     - Las pantallas de operación, reportes, catálogos y usuarios, y el apartado «Preferencias» del perfil, se usan sin desplazamiento horizontal de la página.
     - El menú de la barra superior se abre, se cierra con Escape, con su botón o tocando el fondo, y devuelve el foco como dice §6.1.

@@ -16,7 +16,7 @@ import { afterAll, beforeAll, describe, expect, inject, it, vi } from "vitest";
 import { crearCliente } from "../../../prisma/comun";
 import { URL_PRUEBAS } from "../../../pruebas/base-de-pruebas";
 import { aFechaDeBase } from "../fechas";
-import { asuntoDelResumen } from "./plantilla";
+import { ASUNTO } from "./plantilla";
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
@@ -119,7 +119,7 @@ describe("evaluación y reserva del día", () => {
       arrendadoHasta: null,
       llave: `resumen-${fecha}-${propio.lote.numero}`,
       remitente: "BodeGasosur <avisos@avisos.prueba.test>",
-      asunto: asuntoDelResumen(evaluacion.articulos),
+      asunto: ASUNTO,
       articulos: evaluacion.articulos,
     });
     expect(propio.lote.html).toContain('href="https://bodegasosur.prueba.test/reportes/existencias?bajo=1"');

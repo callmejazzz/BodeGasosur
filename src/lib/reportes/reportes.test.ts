@@ -374,8 +374,8 @@ describe("existencias por bodega y mínimo", () => {
     const nombre = (id: string) => bodegas.find((b) => b.id === id)!.nombre;
     const activas = [nombre(e.bodegaId), nombre(e.otraBodegaId)];
     expect(alerta.renglones.filter((r) => r.claveArticulo === claves[bajo] && activas.includes(r.bodega))).toEqual([
-      { bodega: nombre(e.bodegaId), claveArticulo: claves[bajo], descripcion: `Mínimo cinco ${sufijo}`, unidad: expect.any(String), existencia: 2, minimo: 5, faltante: 3 },
-      { bodega: nombre(e.otraBodegaId), claveArticulo: claves[bajo], descripcion: `Mínimo cinco ${sufijo}`, unidad: expect.any(String), existencia: 0, minimo: 5, faltante: 5 },
+      { bodega: nombre(e.bodegaId), claveArticulo: claves[bajo], descripcion: `Mínimo cinco ${sufijo}`, unidad: expect.any(String), existencia: 2, minimo: 5 },
+      { bodega: nombre(e.otraBodegaId), claveArticulo: claves[bajo], descripcion: `Mínimo cinco ${sufijo}`, unidad: expect.any(String), existencia: 0, minimo: 5 },
     ].sort((a, b) => (a.bodega < b.bodega ? -1 : 1)));
     // Mínimo cero, artículo inactivo y bodega inactiva no aparecen.
     expect(alerta.renglones.some((r) => r.claveArticulo === claves[cero] || r.claveArticulo === claves[inactivo] || r.bodega === nombre(baja))).toBe(false);

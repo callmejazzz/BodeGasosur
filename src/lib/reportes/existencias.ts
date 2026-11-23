@@ -79,7 +79,6 @@ export type RenglonBajoMinimo = {
   unidad: string;
   existencia: number;
   minimo: number;
-  faltante: number;
 };
 
 /** N: artículos distintos bajo mínimo */
@@ -93,7 +92,7 @@ export async function existenciasBajoMinimo(db: Db, tope: number): Promise<Exist
     conteo AS (SELECT count(*)::int AS "totalRenglones", count(DISTINCT "articuloId")::int AS articulos FROM filas)
     SELECT c."totalRenglones", c.articulos, r.* FROM conteo c
     LEFT JOIN LATERAL (
-      SELECT "nombreBodega" AS bodega, "claveArticulo", descripcion, unidad, existencia, minimo, minimo - existencia AS faltante
+      SELECT "nombreBodega" AS bodega, "claveArticulo", descripcion, unidad, existencia, minimo
       FROM filas ORDER BY "nombreBodega", "claveArticulo" LIMIT ${tope}
     ) r ON true
     ORDER BY r.bodega, r."claveArticulo"`;
@@ -101,7 +100,7 @@ export async function existenciasBajoMinimo(db: Db, tope: number): Promise<Exist
   const renglones = filas.flatMap((f) =>
     f.claveArticulo === null
       ? []
-      : [{ bodega: f.bodega, claveArticulo: f.claveArticulo, descripcion: f.descripcion, unidad: f.unidad, existencia: f.existencia, minimo: f.minimo, faltante: f.faltante }],
+      : [{ bodega: f.bodega, claveArticulo: f.claveArticulo, descripcion: f.descripcion, unidad: f.unidad, existencia: f.existencia, minimo: f.minimo }],
   );
   return { renglones, totalRenglones, articulos };
 }

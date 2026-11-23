@@ -18,7 +18,7 @@ La fase se construyó en cuatro entregas, cada una con su PR hacia `feat/fase-9`
    - La guarda de `Usuario` deja que cada usuario, con cualquier rol, cambie solo su propia `alertasCorreo`; nadie más la toca (`BG712`).
    - El permiso `cuenta:editar` y el apartado «Preferencias» en el perfil de Clerk.
 2. **Alerta diaria por correo (#27 y #28).**
-   - Cada día, a partir de las 8:00 de la Ciudad de México, «Stock bajo mínimo: N artículo(s)» con los artículos bajo mínimo; N cuenta artículos distintos. Sale con Resend y una plantilla de `react-email`.
+   - Cada día, a partir de las 8:00 de la Ciudad de México, «Tienes artículos con existencia debajo del mínimo»: cuántos artículos distintos están bajo mínimo y los primeros 10 renglones, con su bodega y su existencia contra el mínimo. Sale con Resend y una plantilla de `react-email`.
    - Cada lote se reserva en la base antes de enviarse, con una llave de idempotencia estable: un reintento manda el mismo cuerpo y no duplica correos. Ninguna transacción queda abierta mientras se espera a Resend, y un arriendo corto evita que dos corridas manden el mismo lote.
    - La dispara una ruta protegida por secreto, que llama un proceso cron de Sevalla cada 15 minutos de 8:00 a 11:45. El día se evalúa una sola vez, y los lotes de días anteriores se cierran sin reenviarse.
    - Un webhook firmado de Resend registra entregas, rebotes y quejas. Solo asocia un evento a un envío si etiqueta, identificador y destinatario concuerdan; si no, lo guarda como anomalía.
