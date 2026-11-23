@@ -3,8 +3,8 @@
 | Campo | Referencia |
 |---|---|
 | Estado | Construida y publicada |
-| Versión | `v0.9.0` |
-| Commits | PR #24 y #27 a #30 en `feat/fase-9` y la rama `release/v0.9.0`, mezclados a `main` en el commit de `v0.9.0` |
+| Versión | `v0.9.0`, y su parche `v0.9.1` |
+| Commits | PR #24 y #27 a #30 en `feat/fase-9` y la rama `release/v0.9.0`, mezclados a `main` en el commit de `v0.9.0`; #32 y #33 a `main`, publicados con la rama `release/v0.9.1` |
 | Contrato | [Fase 9: Acabado](../contratos-otros/07-fase-9-acabado.md) |
 
 ## Construido

@@ -112,7 +112,9 @@ mezclar `feat-reportes` a `main` en un solo commit, que es el que lleva la etiqu
 **Fase 9:** se construyó en la rama `feat/fase-9`, con un PR por entrega (#24, #27 a #30).
 La rama `release/v0.9.0` sale de ella con `package.json` en `0.9.0`, la entrada del
 CHANGELOG y el estado de los documentos, y se mezcla a `main` en un solo commit, que lleva
-la etiqueta `v0.9.0`.
+la etiqueta `v0.9.0`. Los ajustes posteriores, con el correo de la alerta rediseñado,
+entraron a `main` por PR (#32 y #33) y se publican como `v0.9.1` desde `release/v0.9.1`,
+de la misma forma.
 
 Los mensajes de commit siguen siendo prosa en español que describe decisiones. **No se
 adopta Conventional Commits:** con este desarrollo por fases y un desarrollador, el

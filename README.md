@@ -4,9 +4,9 @@ Sistema de control de inventario para las bodegas del grupo gasolinero **Gasosur
 
 Controla la entrada y salida de material entre bodegas y estaciones, registrando hacia qué estación se envía, quién lo autoriza, quién lo entrega, cuándo, en qué cantidad, a qué costo unitario, a qué área se destina y con qué observaciones.
 
-**Última versión etiquetada: `v0.9.0`** - ver [CHANGELOG.md](CHANGELOG.md).
+**Última versión etiquetada: `v0.9.1`** - ver [CHANGELOG.md](CHANGELOG.md).
 
-**Estado:** fases 0 a 9 construidas. La fase 9 (alerta diaria de stock mínimo por correo, tablero de inicio, pendientes en la barra lateral y acabado para celular) se publica como `v0.9.0`. La fase 8 (cinco reportes, kardex y exportación a Excel de toda tabla) se publicó como `v0.8.0` (commit `58b3f75`). Antes, la fase 7 (traspasos, devoluciones, préstamos, conteo físico y reversas) se publicó como `v0.7.0` (commit `2ac6ca3`), y `v0.7.1` (commit `22c1146`) corrige lo que encontró su revisión. `main` incluye además la corrección del teclado del selector de salidas (`afcea45`), sin etiqueta nueva por decisión del proyecto. Ver [entregables por fase](docs/entregables-fases/README.md).
+**Estado:** fases 0 a 9 construidas. La fase 9 (alerta diaria de stock mínimo por correo, tablero de inicio, pendientes en la barra lateral y acabado para celular) se publicó como `v0.9.0` (commit `8722205`), y `v0.9.1` rediseña el correo de la alerta diaria. Ver [entregables por fase](docs/entregables-fases/README.md).
 
 **Entorno:** local mientras dure el desarrollo. Producción: la aplicación en Sevalla, en
 `bode.gasosurnet.com`, y la base en Supabase — ver [versionado y despliegue](docs/05-versionado-y-despliegue.md) §8.

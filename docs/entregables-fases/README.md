@@ -16,7 +16,7 @@ no se construye— junto con sus archivos, commits y versión de referencia.
 | [6 — Salidas](06-salidas.md)                                                | Construida | `v0.6.0`              | `bd3d30e`–`8fe9805` | Solicitud, retiro PEPS, recepción y pantallas completas |
 | [7 — Traspasos, devoluciones y conteo](07-traspasos-devoluciones-conteo.md) | Construida | `v0.7.0`, `v0.7.1`    | `2ac6ca3`, `22c1146` | Traspasos, devoluciones, préstamos, conteo físico y reversas   |
 | [8 — Reportes](08-reportes.md)                                              | Construida | `v0.8.0` | PR #7 a #13 | Cinco reportes, kardex y exportación a Excel de toda tabla |
-| [9 — Acabado](09-acabado.md)                                                | Construida | `v0.9.0` | PR #24, #27 a #30 | Alerta diaria por correo, tablero, barra lateral y acabado para celular |
+| [9 — Acabado](09-acabado.md)                                                | Construida | `v0.9.0`, `v0.9.1` | PR #24, #27 a #33 | Alerta diaria por correo, tablero, barra lateral y acabado para celular |
 
 ## Qué falta
 
@@ -29,11 +29,11 @@ La **fase 8** —reportes, kardex y exportación a Excel— se construyó en la 
 
 La **fase 9** —alerta diaria por correo, tablero de inicio, barra lateral con pendientes y
 acabado para celular— se construyó en la rama `feat/fase-9` con un PR por entrega (#24,
-#27 a #30) y se publica como `v0.9.0`. Después sigue `v1.0.0`: la versión que se presenta a
+#27 a #30) y se publicó como `v0.9.0`; `v0.9.1` rediseña el correo de la alerta. Después sigue `v1.0.0`: la versión que se presenta a
 Gasosur para aprobación.
 
 También permanecen tareas transversales para antes de `v1.0.0`: CI, destino de despliegue,
 política de respaldos con prueba de restauración, observabilidad —con el monitor externo de
 la alerta diaria— y cierre del registro de usuarios por invitación.
 
-> La Fase 6 tiene la etiqueta Git `v0.6.0`; la Fase 7, `v0.7.0`, y su parche, `v0.7.1`; la Fase 8, `v0.8.0`, y la Fase 9, `v0.9.0`.
+> La Fase 6 tiene la etiqueta Git `v0.6.0`; la Fase 7, `v0.7.0`, y su parche, `v0.7.1`; la Fase 8, `v0.8.0`, y la Fase 9, `v0.9.0`, y su parche, `v0.9.1`.
