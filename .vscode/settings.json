@@ -1,0 +1,5 @@
+{
+  // El editor usa el mismo TypeScript que `tsc` y `next build`, no el que trae VS Code
+  "js/ts.tsdk.path": "node_modules/typescript/lib",
+  "js/ts.tsdk.promptToUseWorkspaceVersion": true
+}

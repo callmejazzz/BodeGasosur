@@ -150,7 +150,7 @@ Mientras dure el desarrollo el sistema sigue siendo local ([01-arquitectura.md](
 
 | Pieza | Elección |
 |---|---|
-| Aplicación | Sevalla Application Hosting, **Ashburn** (`us-east4`, después `us-ashburn-1` en OCI), con el [`Dockerfile`](../Dockerfile), un pod S1 y una instancia |
+| Aplicación | Sevalla Application Hosting, **Ashburn** (`us-ashburn-1`, en OCI), con el [`Dockerfile`](../Dockerfile), un pod S1 y una instancia |
 | Dominio | **`bode.gasosurnet.com`**: un `CNAME` a `to.sevalla.app` en el DNS de Cloudflare de `gasosurnet.com`, sin proxy |
 | Base | Supabase Pro, **`us-east-1`** (Virginia del Norte) |
 | Conexión de la aplicación | **Directa** (`db.<proyecto>.supabase.co`), con el complemento IPv4. Supavisor en modo sesión (5432) solo como alternativa; nunca el modo transacción (6543) |
@@ -265,10 +265,11 @@ en su rol —la base enseña la hora de México—, así que los scripts que esc
   `active_deadline_seconds` de 240. Sevalla reintenta una vez una corrida que sale con un
   código distinto de 0. La ruta que llama rechaza las corridas fuera de 8:00 a 12:00, así
   que un cron en UTC se nota en vez de pasar en silencio ([fase 9](contratos-otros/07-fase-9-acabado.md) §3.9).
-- **Dominio propio sin proxy.** `bode.gasosurnet.com` es el dominio principal, y el de
-  `sevalla.app` sigue activo. Su `CNAME` va en **DNS only** en Cloudflare: Sevalla ya pone
-  su propio Cloudflare delante, con DDoS y firewall, y el proxy de la cuenta propia sumaría
-  otra capa cuyo *Bot Fight Mode* podría desafiar al webhook de Resend y al cron.
+- **Dominio propio sin proxy.** La aplicación responde solo en `bode.gasosurnet.com`; el
+  dominio de `sevalla.app` está desactivado. El `CNAME` va en **DNS only** en Cloudflare:
+  Sevalla ya pone su propio Cloudflare delante, con DDoS y firewall, y el proxy de la cuenta
+  propia sumaría otra capa cuyo *Bot Fight Mode* podría desafiar al webhook de Resend y al
+  cron.
 - **Desplegar código nuevo es desplegar la rama.** Cambiar variables o procesos y aplicarlos
   vuelve a montar la **misma imagen**; para llevar un commit nuevo, «Deploy now» sobre
   `main`, y revisar que el despliegue muestre ese commit. Un proceso nuevo, como el cron, no
@@ -331,19 +332,18 @@ carga ni desactiva llaves por su cuenta.
 
 ### Revisión pendiente antes de `v1.0.0`
 
-Sevalla se confirmó sin correr esta lista. Se revisa antes de `v1.0.0`, cuando entren los
-datos reales:
+La aplicación corre en Ashburn sobre OCI (verificado el 2026-11-24). **Producción no va
+sobre GCP:** ahí la IP de salida son todos los rangos regionales de Google, y la lista de
+Supabase no filtraría nada. La cuenta no tiene pipelines, así que tampoco hay preview apps
+que hereden las variables de producción.
 
-1. La aplicación está en Ashburn, y se sabe si la cuenta ya está en OCI o cuándo le toca
-   (la ola 1, apps sin disco, empezó el 2026-10-07). **Producción no va sobre GCP:** ahí la
-   IP de salida son todos los rangos regionales de Google, y la lista de Supabase no
-   filtraría nada.
-2. Cien `SELECT 1` seguidos de la aplicación a Supabase promedian menos de 3 ms.
-3. `SHOW TimeZone` como usuario de ejecución, por la URL real, responde `UTC`.
-4. `sslmode=verify-full` conecta contra el host real con el CA de `certificates/`.
-5. Desplegar con un formulario abierto recarga la página en vez de fallar al guardar.
-6. Las preview apps no heredan las variables de producción (o se quedan apagadas).
-7. Soporte confirma el SLA y la fecha de migración de la cuenta.
+Lo demás se revisa antes de `v1.0.0`, cuando entren los datos reales:
+
+1. Cien `SELECT 1` seguidos de la aplicación a Supabase promedian menos de 3 ms.
+2. `SHOW TimeZone` como usuario de ejecución, por la URL real, responde `UTC`.
+3. `sslmode=verify-full` conecta contra el host real con el CA de `certificates/`.
+4. Desplegar con un formulario abierto recarga la página en vez de fallar al guardar.
+5. Soporte confirma el SLA.
 
 **También antes de `v1.0.0`:** una segunda aplicación, `bodegasosur-ops`,
 con la credencial del dueño y nada más, que corra `migrate deploy` antes de cada despliegue

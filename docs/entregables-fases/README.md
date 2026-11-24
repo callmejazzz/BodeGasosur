@@ -20,20 +20,16 @@ no se construye— junto con sus archivos, commits y versión de referencia.
 
 ## Qué falta
 
-La **fase 7** está construida, probada, documentada y publicada: su cierre es `v0.7.0`
-(commit `2ac6ca3`), y `v0.7.1` (commit `22c1146`) corrige lo que encontró su revisión.
-El ajuste posterior del selector (`afcea45`) no lleva versión nueva.
-
-La **fase 8** —reportes, kardex y exportación a Excel— se construyó en la rama
-`feat-reportes` con un PR por entrega (#7 a #13) y se publicó como `v0.8.0`.
-
 La **fase 9** —alerta diaria por correo, tablero de inicio, barra lateral con pendientes y
 acabado para celular— se construyó en la rama `feat/fase-9` con un PR por entrega (#24,
-#27 a #30) y se publicó como `v0.9.0`; `v0.9.1` rediseña el correo de la alerta. Después sigue `v1.0.0`: la versión que se presenta a
-Gasosur para aprobación.
+#27 a #30) y se publicó como `v0.9.0`; `v0.9.1` rediseña el correo de la alerta. Después
+siguen las `v1.0.0-rc`, que se presentan a Gasosur para aprobación, y `v1.0.0`, con datos
+reales.
 
-También permanecen tareas transversales para antes de `v1.0.0`: CI, destino de despliegue,
-política de respaldos con prueba de restauración, observabilidad —con el monitor externo de
-la alerta diaria— y cierre del registro de usuarios por invitación.
+Antes de `v1.0.0` quedan tareas transversales: la revisión de Sevalla y la aplicación
+`bodegasosur-ops`, con respaldos cada hora y un ensayo de restauración al mes
+([05](../05-versionado-y-despliegue.md) §8); la instancia de producción de Clerk; el
+monitor externo de la alerta diaria, y el registro de usuarios solo por invitación. CI llega
+después de `v1.0.0`.
 
 > La Fase 6 tiene la etiqueta Git `v0.6.0`; la Fase 7, `v0.7.0`, y su parche, `v0.7.1`; la Fase 8, `v0.8.0`, y la Fase 9, `v0.9.0`, y su parche, `v0.9.1`.
